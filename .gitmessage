@@ -1,0 +1,21 @@
+# <tipo>(<escopo>): <descrição curta em letras minúsculas e no imperativo>
+# |<----  máximo 72 caracteres  -------------------------------------------->|
+
+# [Corpo opcional: explique a motivação e o "porquê" da mudança.
+#  Mantenha cada linha com no máximo 72 caracteres.]
+
+# [Rodapé opcional: Breaking Changes ou referências a Issues/Tarefas]
+# BREAKING CHANGE: <descrição>
+# Closes #<número>
+
+# ---------------------------------------------------------------------------
+# COMMITS DEVEM SER ATÔMICOS — uma única mudança lógica por commit.
+# ---------------------------------------------------------------------------
+# Tipos: feat | fix | docs | test | refactor | chore | style | perf | ci
+#
+# Escopos sugeridos:
+#   backend/core  backend/api  backend/models  backend/services
+#   backend/repositories  backend/aspects  inference-engine
+#   inference-engine/rules  frontend/api  frontend/hooks
+#   frontend/components  docs  config  scripts
+# ---------------------------------------------------------------------------
