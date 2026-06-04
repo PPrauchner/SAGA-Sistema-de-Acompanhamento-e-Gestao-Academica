@@ -213,6 +213,26 @@ tempCodeRunnerFile.py
 # PyPI configuration file
 .pypirc
 
+
 # Marimo
 marimo/_static/
-marimo
+marimo/_lsp/
+__marimo__/
+
+# -----------------------------------------------------------------------
+# Frontend (Vite + Node)
+# -----------------------------------------------------------------------
+node_modules/
+dist-ssr/
+*.local
+
+# Variáveis de ambiente locais do frontend
+.env.local
+.env.*.local
+
+# Cache do Vite
+.vite/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
