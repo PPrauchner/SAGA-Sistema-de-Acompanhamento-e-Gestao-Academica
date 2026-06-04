@@ -1,0 +1,154 @@
+{
+  "modulo": "Autenticação e Autorização — Firebase Auth + FastAPI",
+  "versao": "1.0.0-MVP",
+  "descricao": "Integração entre Firebase Authentication e FastAPI. Coordenação cria contas via convite; usuário define senha no primeiro acesso. JWT do Firebase é verificado em cada request pelo backend, que lê o custom claim 'role' para autorização.",
+
+  "arquivos_python": [
+    "backend/app/main.py",
+    "backend/app/core/firebase.py",
+    "backend/app/core/auth.py",
+    "backend/app/core/config.py",
+    "backend/app/api/v1/auth.py"
+  ],
+
+  "requisitos_fundo": [
+    "Firebase Admin SDK inicializado uma vez no lifespan do FastAPI (backend/app/core/firebase.py)",
+    "Variáveis de ambiente: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL (via .env)",
+    "Cada request autenticado envia header: Authorization: Bearer <Firebase ID Token>",
+    "Backend verifica token com firebase_admin.auth.verify_id_token(token)",
+    "Custom claims do Firebase Auth: { 'role': 'aluno'|'orientador'|'coordenacao', 'programa_id': 'prog_default' }",
+    "Frontend usa Firebase Auth SDK (client-side) para login — o ID Token é obtido via user.getIdToken()",
+    "Backend NUNCA recebe senha do usuário — autenticação de senha é responsabilidade do Firebase Auth"
+  ],
+
+  "fluxo_primeiro_acesso": {
+    "descricao": "Coordenação cria convite → token enviado por e-mail → usuário define senha e ativa conta",
+    "passos": [
+      "1. Coordenação chama POST /api/v1/auth/invite com {email, role}",
+      "2. Backend gera UUID token, persiste em invites/{token} com TTL de 48h, envia e-mail com link",
+      "3. Frontend recebe token na URL, exibe FirstAccessPage",
+      "4. Usuário informa senha (validação: >=8 chars, 1 maiúscula, 1 número)",
+      "5. Frontend chama POST /api/v1/auth/first-access com {token, senha}",
+      "6. Backend valida token (existe + não expirado + não usado)",
+      "7. Backend cria usuário no Firebase Auth via Admin SDK com email + senha",
+      "8. Backend seta custom claims: auth.set_custom_user_claims(uid, {role, programa_id})",
+      "9. Backend cria documento users/{uid} no Firestore",
+      "10. Backend marca invites/{token}.usado = true",
+      "11. Frontend faz signInWithEmailAndPassword com as credenciais fornecidas"
+    ]
+  },
+
+  "fluxo_login_normal": {
+    "passos": [
+      "1. Frontend chama Firebase Auth signInWithEmailAndPassword(email, senha)",
+      "2. Firebase retorna ID Token JWT (válido por 1h) e Refresh Token",
+      "3. Frontend inclui ID Token no header de cada chamada à API: Authorization: Bearer <token>",
+      "4. Backend verifica token com verify_id_token — lê uid, role, programa_id",
+      "5. FastAPI Dependency get_current_user() retorna objeto CurrentUser(uid, role, programa_id, email)"
+    ]
+  },
+
+  "dependencia_fastapi": {
+    "nome": "get_current_user",
+    "arquivo": "backend/app/core/auth.py",
+    "assinatura": "async def get_current_user(authorization: str = Header(...)) -> CurrentUser",
+    "comportamento": [
+      "Extrai Bearer token do header",
+      "Chama firebase_admin.auth.verify_id_token(token)",
+      "Lê decoded_token['uid'], decoded_token['role'], decoded_token['programa_id']",
+      "Retorna CurrentUser(uid, role, programa_id, email)",
+      "Lança HTTPException(401) se token inválido/expirado",
+      "Lança HTTPException(403) se custom claims ausentes (conta não ativada)"
+    ],
+    "uso_nos_endpoints": "async def endpoint(..., user: CurrentUser = Depends(get_current_user))"
+  },
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [],
+      "base_fatos_necessaria": []
+    },
+    "aop_aspectos": {
+      "join_points": [
+        "Toda função de endpoint protegida — get_current_user é a base sobre a qual @requires_role opera",
+        "POST /api/v1/auth/invite — @audit_operation registra criação de convite",
+        "POST /api/v1/auth/first-access — @audit_operation registra ativação de conta"
+      ],
+      "advice": [
+        "Before: get_current_user (Dependency FastAPI) verifica JWT em todo endpoint protegido",
+        "Before: @requires_role verifica claim 'role' após get_current_user",
+        "Around: @audit_operation em /invite e /first-access"
+      ]
+    }
+  },
+
+  "contratos_api": [
+    {
+      "path": "/api/v1/auth/invite",
+      "method": "POST",
+      "descricao": "Coordenação cria convite de primeiro acesso para novo usuário",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "request_body": {
+        "email": "string (formato e-mail válido)",
+        "role": "string ('aluno'|'orientador')",
+        "nome": "string"
+      },
+      "response_201": {
+        "message": "Convite enviado para {email}",
+        "token": "string (UUID — retornado apenas para testes; em produção apenas por e-mail)",
+        "expira_em": "string (ISO8601)"
+      },
+      "response_409": {"detail": "E-mail já possui conta ativa"}
+    },
+    {
+      "path": "/api/v1/auth/first-access",
+      "method": "POST",
+      "descricao": "Usuário convidado define sua senha e ativa a conta",
+      "papeis_autorizados": ["público — não requer JWT"],
+      "aspectos_aplicados": ["@audit_operation"],
+      "request_body": {
+        "token": "string (UUID do convite)",
+        "senha": "string (mínimo 8 chars, 1 maiúscula, 1 número)"
+      },
+      "response_200": {
+        "message": "Conta ativada com sucesso",
+        "uid": "string",
+        "role": "string",
+        "email": "string"
+      },
+      "response_400": {"detail": "Token inválido, expirado ou já utilizado"},
+      "response_422": {"detail": "Senha não atende aos requisitos mínimos"}
+    },
+    {
+      "path": "/api/v1/auth/me",
+      "method": "GET",
+      "descricao": "Retorna perfil do usuário autenticado atual",
+      "papeis_autorizados": ["aluno", "orientador", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "request_body": null,
+      "response_200": {
+        "uid": "string",
+        "email": "string",
+        "nome": "string",
+        "role": "string",
+        "programa_id": "string",
+        "ativo": "boolean",
+        "student_id": "string | null (se role='aluno')",
+        "advisor_id": "string | null (se role='orientador')"
+      }
+    },
+    {
+      "path": "/api/v1/health",
+      "method": "GET",
+      "descricao": "Health check público — verifica se API e Firebase estão acessíveis",
+      "papeis_autorizados": ["público"],
+      "request_body": null,
+      "response_200": {
+        "status": "ok",
+        "firebase": "connected | error",
+        "version": "1.0.0-MVP"
+      }
+    }
+  ]
+}

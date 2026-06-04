@@ -1,0 +1,211 @@
+{
+  "modulo": "Gestão de Discentes e Orientadores",
+  "versao": "1.0.0-MVP",
+  "descricao": "CRUD de alunos e orientadores, associação orientando↔orientador, registro manual de qualificação e proficiência. Gera os fatos base que o motor lógico usa para inferir situação acadêmica. Três aspectos aplicados: autorização, auditoria e histórico.",
+
+  "arquivos_python": [
+    "backend/app/api/v1/students.py",
+    "backend/app/api/v1/advisors.py",
+    "backend/app/services/student_service.py",
+    "backend/app/services/advisor_service.py",
+    "backend/app/models/student.py",
+    "backend/app/models/advisor.py",
+    "backend/app/repositories/student_repository.py",
+    "backend/app/repositories/advisor_repository.py"
+  ],
+
+  "requisitos_fundo": [
+    "Coordenação cria e mantém alunos e orientadores — papel obrigatório para mutations",
+    "Associação orientador-aluno registrada no documento do aluno (orientador_id)",
+    "Qualificação e proficiência são fatos booleanos registrados manualmente pela coordenação",
+    "Quando qualificacao_aprovada ou proficiencia_comprovada mudam: aspecto A03 (histórico) registra snapshot",
+    "Quando situacaoRegistrada muda: aspecto A03 registra snapshot e aspecto A02 audita",
+    "situacaoInferida é atualizada pelo InferenceService — não editável manualmente",
+    "Orientador tem acesso de leitura apenas aos próprios orientandos"
+  ],
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [
+        "Não há regras definidas neste módulo — apenas fatos são gerados",
+        "apto_defesa(A) usa fatos deste módulo como pré-condições"
+      ],
+      "base_fatos_necessaria": [
+        "proficiencia_comprovada(student_id) — inserido na FactBase quando student.proficiencia_comprovada = true",
+        "qualificacao_aprovada(student_id) — inserido quando student.qualificacao_aprovada = true",
+        "prazo_estourado(student_id) — derivado pelo InferenceService comparando prazo_final com date.today()",
+        "prazo_qualificacao_proximo(student_id) — derivado quando faltam <= 3 meses para meses_ate_qualificacao",
+        "plano_atrasado(student_id) — derivado pelo InferenceService com base no progresso do plano",
+        "qualificacao_pendente(student_id) — inserido quando qualificacao_aprovada = false"
+      ]
+    },
+    "aop_aspectos": {
+      "join_points": [
+        "StudentService.create_student()                   — @requires_role('coordenacao'), @audit_operation",
+        "StudentService.update_student()                   — @requires_role('coordenacao'), @audit_operation",
+        "StudentService.delete_student()                   — @requires_role('coordenacao'), @audit_operation",
+        "StudentService.update_qualificacao()              — @requires_role('coordenacao'), @audit_operation, @track_history",
+        "StudentService.update_proficiencia()              — @requires_role('coordenacao'), @audit_operation, @track_history",
+        "StudentService.update_situacao_registrada()       — @requires_role('coordenacao'), @audit_operation, @track_history",
+        "AdvisorService.create_advisor()                   — @requires_role('coordenacao'), @audit_operation",
+        "AdvisorService.update_advisor()                   — @requires_role('coordenacao'), @audit_operation"
+      ],
+      "advice": [
+        "Before: @requires_role verifica papel antes de qualquer mutação",
+        "Around: @audit_operation captura argumentos via inspect e persiste AuditLog após execução",
+        "Before+After: @track_history lê estado anterior e persiste snapshot em students/{id}/history/"
+      ]
+    }
+  },
+
+  "contratos_api": [
+    {
+      "path": "/api/v1/students",
+      "method": "GET",
+      "descricao": "Lista alunos. Coordenação vê todos; orientador vê apenas os próprios; aluno não acessa este endpoint.",
+      "papeis_autorizados": ["coordenacao", "orientador"],
+      "aspectos_aplicados": ["@requires_role('coordenacao','orientador')", "@check_deadlines (recalcula status de prazo na listagem)"],
+      "query_params": {
+        "status": "string (opcional — filtra por situacaoRegistrada)",
+        "orientador_id": "string (opcional)",
+        "programa_id": "string (opcional)"
+      },
+      "response_200": {
+        "items": [
+          {
+            "id": "string",
+            "nome": "string",
+            "email": "string",
+            "matricula": "string",
+            "orientador_id": "string",
+            "orientador_nome": "string",
+            "situacao_registrada": "string",
+            "situacao_inferida": "string",
+            "data_ingresso": "string (ISO8601)",
+            "prazo_final": "string (ISO8601)",
+            "proficiencia_comprovada": "boolean",
+            "qualificacao_aprovada": "boolean"
+          }
+        ],
+        "total": "int"
+      }
+    },
+    {
+      "path": "/api/v1/students/{student_id}",
+      "method": "GET",
+      "descricao": "Detalhe de um aluno. Aluno vê apenas o próprio.",
+      "papeis_autorizados": ["coordenacao", "orientador (orientandos)", "aluno (próprio)"],
+      "aspectos_aplicados": ["@requires_role('coordenacao','orientador','aluno')"],
+      "response_200": "Mesmo schema de item acima, acrescido de: programa_id, coorientador_id, qualificacao_data, proficiencia_data"
+    },
+    {
+      "path": "/api/v1/students",
+      "method": "POST",
+      "descricao": "Cria novo aluno. Cria também o convite de primeiro acesso.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "request_body": {
+        "nome": "string",
+        "email": "string",
+        "matricula": "string",
+        "orientador_id": "string",
+        "coorientador_id": "string | null",
+        "nivel": "string ('mestrado'|'doutorado')",
+        "data_ingresso": "string (ISO8601)",
+        "programa_id": "string"
+      },
+      "response_201": {
+        "id": "string",
+        "nome": "string",
+        "invite_token": "string (para repassar ao aluno)"
+      }
+    },
+    {
+      "path": "/api/v1/students/{student_id}",
+      "method": "PUT",
+      "descricao": "Atualiza dados do aluno (campos editáveis pela coordenação)",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "request_body": {
+        "nome": "string (opcional)",
+        "orientador_id": "string (opcional)",
+        "coorientador_id": "string | null (opcional)",
+        "prazo_final": "string ISO8601 (opcional)"
+      },
+      "response_200": {"id": "string", "message": "Aluno atualizado"}
+    },
+    {
+      "path": "/api/v1/students/{student_id}/qualificacao",
+      "method": "PATCH",
+      "descricao": "Registra aprovação na qualificação. Gera fato qualificacao_aprovada no motor.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history"],
+      "request_body": {
+        "aprovada": "boolean",
+        "data_qualificacao": "string (ISO8601)"
+      },
+      "response_200": {"message": "Qualificação registrada", "situacao_inferida_atualizada": "boolean"}
+    },
+    {
+      "path": "/api/v1/students/{student_id}/proficiencia",
+      "method": "PATCH",
+      "descricao": "Registra comprovação de proficiência em língua estrangeira.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history"],
+      "request_body": {
+        "comprovada": "boolean",
+        "data_proficiencia": "string (ISO8601) | null"
+      },
+      "response_200": {"message": "Proficiência registrada"}
+    },
+    {
+      "path": "/api/v1/students/{student_id}/situacao",
+      "method": "PATCH",
+      "descricao": "Atualiza situação registrada manualmente pela coordenação (ex: concluido, desligado).",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history"],
+      "request_body": {
+        "situacao_registrada": "string ('regular'|'em_prorrogacao'|'qualificado'|'fase_defesa'|'concluido'|'desligado')",
+        "observacao": "string | null"
+      },
+      "response_200": {"message": "Situação atualizada", "historico_criado": true}
+    },
+    {
+      "path": "/api/v1/advisors",
+      "method": "GET",
+      "descricao": "Lista orientadores com contagem de orientandos ativos",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')"],
+      "response_200": {
+        "items": [
+          {
+            "id": "string",
+            "nome": "string",
+            "email": "string",
+            "departamento": "string",
+            "orientandos_ativos": "int",
+            "limite_orientandos": "int"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/advisors",
+      "method": "POST",
+      "descricao": "Cria novo orientador e envia convite de primeiro acesso",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "request_body": {
+        "nome": "string",
+        "email": "string",
+        "departamento": "string",
+        "lattes": "string | null",
+        "limite_orientandos": "int (default: 5)"
+      },
+      "response_201": {
+        "id": "string",
+        "invite_token": "string"
+      }
+    }
+  ]
+}

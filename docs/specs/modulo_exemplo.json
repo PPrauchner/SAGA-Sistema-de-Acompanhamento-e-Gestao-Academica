@@ -1,0 +1,27 @@
+{
+  "modulo": "Nome do Módulo (ex: Autenticação / Motor Lógico)",
+  "versao": "1.0.0-MVP",
+  "descricao": "Objetivo principal do módulo no MVP",
+  "requisitos_fundo": [
+    "Requisito 1: O que o backend FastAPI precisa expor",
+    "Requisito 2: Como o Firebase persistirá esses dados"
+  ],
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": ["Ex: apto_defesa(X)"],
+      "base_fatos_necessaria": ["Ex: aluno(Id), qualificacao(Status)"]
+    },
+    "aop_aspectos": {
+      "join_points": ["Ex: Chamada do endpoint POST /atividades"],
+      "advice": ["Before: verificar roles", "After: disparar alerta"]
+    }
+  },
+  "contratos_api": [
+    {
+      "path": "/api/v1/exemplo",
+      "method": "POST",
+      "request_body": {},
+      "response_200": {}
+    }
+  ]
+}

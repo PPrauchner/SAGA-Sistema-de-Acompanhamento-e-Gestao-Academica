@@ -1,0 +1,441 @@
+{
+  "modulo": "Schema Firebase — Firestore + Authentication",
+  "versao": "1.0.0-MVP",
+  "descricao": "Schema completo do Firestore com todas as coleções, campos e relacionamentos. Inclui mapeamento das 17 páginas React para suas coleções, seed de fatos de configuração do motor lógico e regras de segurança.",
+  "tenant": "single-tenant com programa_id presente nas entidades relevantes",
+
+  "requisitos_fundo": [
+    "Firebase Admin SDK inicializado no lifespan do FastAPI via backend/app/core/firebase.py",
+    "Firebase Auth com custom claims: { role: 'aluno'|'orientador'|'coordenacao', programa_id: 'prog_default' }",
+    "Firestore como único banco de dados — nenhuma outra persistência no MVP",
+    "Regras de segurança do Firestore: escrita apenas via backend (Admin SDK) — frontend lê apenas as próprias notificações via onSnapshot",
+    "Comprovante de atividade: campo URL string — Firebase Storage é opcional para o MVP"
+  ],
+
+  "colecoes": {
+    "programs": {
+      "descricao": "Configuração do programa de pós-graduação. Contém os fatos de configuração do motor lógico.",
+      "documento_id": "prog_default (single-tenant)",
+      "campos": {
+        "nome": "string",
+        "instituicao": "string",
+        "duracao_meses": "int (default: 24)",
+        "creditos_grupo_basico_min": "int (default: 12)",
+        "creditos_grupo_especifico_min": "int (default: 8)",
+        "creditos_grupo_tecnologico_max": "int (default: 4)",
+        "creditos_total_min": "int (default: 24)",
+        "max_prorrogacoes": "int (default: 1)",
+        "duracao_prorrogacao_meses": "int (default: 6)",
+        "meses_ate_qualificacao": "int (default: 12)",
+        "criado_em": "Timestamp",
+        "atualizado_em": "Timestamp"
+      },
+      "sub_colecoes": {
+        "vehicle_levels": {
+          "descricao": "Nível de relevância de veículos configurável por programa. Fato do motor.",
+          "documento_id": "veiculo_id",
+          "campos": {
+            "veiculo_id": "string",
+            "nivel": "string ('A1'|'A2'|'B'|'C')",
+            "peso": "float (A1=2.0, A2=1.5, B=1.0, C=0.5)",
+            "atualizado_em": "Timestamp",
+            "atualizado_por": "string (uid)"
+          }
+        }
+      },
+      "usado_pelo_motor": "Fatos: min_creditos_basico, min_creditos_especifico, max_creditos_tecnologico, min_creditos_total, max_prorrogacoes, relevancia_peso"
+    },
+
+    "users": {
+      "descricao": "Dados de perfil de todos os usuários. Sincronizado com Firebase Auth custom claims.",
+      "documento_id": "uid (Firebase Auth)",
+      "campos": {
+        "uid": "string",
+        "email": "string",
+        "nome": "string",
+        "role": "string ('aluno'|'orientador'|'coordenacao')",
+        "programa_id": "string",
+        "ativo": "boolean",
+        "primeiro_acesso_completo": "boolean",
+        "criado_em": "Timestamp",
+        "atualizado_em": "Timestamp"
+      }
+    },
+
+    "students": {
+      "descricao": "Discentes do programa. Entidade central do sistema.",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "uid": "string (referência a users/)",
+        "matricula": "string",
+        "nome": "string",
+        "email": "string",
+        "orientador_id": "string (referência a advisors/)",
+        "coorientador_id": "string | null",
+        "programa_id": "string",
+        "nivel": "string ('mestrado'|'doutorado')",
+        "data_ingresso": "Timestamp",
+        "prazo_final": "Timestamp",
+        "situacao_registrada": "string ('regular'|'em_prorrogacao'|'em_risco'|'qualificado'|'fase_defesa'|'concluido'|'desligado')",
+        "situacao_inferida": "string (mesmo enum — atualizado pelo InferenceService)",
+        "proficiencia_comprovada": "boolean (default: false)",
+        "proficiencia_data": "Timestamp | null",
+        "qualificacao_aprovada": "boolean (default: false)",
+        "qualificacao_data": "Timestamp | null",
+        "criado_em": "Timestamp",
+        "atualizado_em": "Timestamp",
+        "atualizado_por": "string (uid)"
+      },
+      "usado_pelo_motor": "Fatos: proficiencia_comprovada(id), qualificacao_aprovada(id), prazo_estourado(id) calculado a partir de prazo_final",
+      "sub_colecoes": {
+        "work_plan": {
+          "descricao": "Plano de trabalho do aluno (tipicamente 1 por aluno no MVP)",
+          "documento_id": "auto-id",
+          "campos": {
+            "titulo": "string",
+            "data_inicio": "Timestamp",
+            "data_fim_prevista": "Timestamp",
+            "progresso_percentual": "float (0-100, calculado)",
+            "status_geral": "string ('em_andamento'|'atrasado'|'concluido')",
+            "criado_por": "string (uid orientador)",
+            "criado_em": "Timestamp",
+            "atualizado_em": "Timestamp"
+          },
+          "sub_colecoes": {
+            "stages": {
+              "descricao": "Etapas do plano",
+              "campos": {
+                "nome": "string ('revisao_bibliografica'|'definicao_problema'|'desenvolvimento'|'experimentos'|'escrita'|'qualificacao'|'defesa')",
+                "ordem": "int",
+                "data_inicio": "Timestamp",
+                "data_fim": "Timestamp",
+                "status": "string ('pendente'|'em_andamento'|'concluida')",
+                "criado_por": "string (uid orientador)"
+              },
+              "sub_colecoes": {
+                "tasks": {
+                  "descricao": "Tasks dentro de uma etapa",
+                  "campos": {
+                    "titulo": "string",
+                    "descricao": "string",
+                    "prazo": "Timestamp",
+                    "status": "string ('pendente'|'em_andamento'|'concluida'|'atrasada')",
+                    "prioridade": "string ('baixa'|'media'|'alta')",
+                    "responsavel_id": "string (uid aluno)",
+                    "criado_por": "string (uid orientador)",
+                    "criado_em": "Timestamp",
+                    "atualizado_em": "Timestamp"
+                  },
+                  "usado_pelo_motor": "Fato task_concluida(task_id, aluno_id) quando status='concluida'",
+                  "sub_colecoes": {
+                    "updates": {
+                      "descricao": "Atualizações de progresso registradas pelo aluno",
+                      "campos": {
+                        "conteudo": "string",
+                        "percentual": "float (0-100)",
+                        "autor_id": "string (uid aluno)",
+                        "criado_em": "Timestamp"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "activities": {
+          "descricao": "Atividades creditáveis registradas pelo aluno",
+          "documento_id": "auto-id",
+          "campos": {
+            "tipo_id": "string (referência a activity_types/)",
+            "aluno_id": "string",
+            "descricao": "string",
+            "data_realizacao": "Timestamp",
+            "comprovante_url": "string | null",
+            "creditos_gerados": "float (calculado a partir do tipo)",
+            "status": "string ('rascunho'|'enviado'|'aprovado'|'rejeitado')",
+            "parecer_orientador": "string | null",
+            "observacao_coordenacao": "string | null",
+            "validado_por": "string (uid) | null",
+            "validado_em": "Timestamp | null",
+            "criado_em": "Timestamp",
+            "atualizado_em": "Timestamp"
+          },
+          "usado_pelo_motor": "Fatos: dentro_periodo_curso, tem_comprovante, tipo_ativo, nao_excede_limite_categoria, producao_bibliografica_validada"
+        },
+        "productions": {
+          "descricao": "Subtipo de atividade creditável — produções bibliográficas",
+          "documento_id": "auto-id",
+          "campos": {
+            "activity_id": "string (referência a activities/ — produção é também uma atividade)",
+            "titulo": "string",
+            "doi": "string | null",
+            "veiculo_id": "string (referência a vehicles/)",
+            "tipo_producao": "string ('artigo_publicado'|'artigo_submetido'|'livro'|'capitulo')",
+            "status_publicacao": "string ('publicado'|'submetido'|'aceito')",
+            "observacao": "string | null (campo livre para impactos específicos)",
+            "autores": ["array de strings (uids)"],
+            "pontuacao_calculada": "float (calculada pelo motor RL05)",
+            "criado_em": "Timestamp"
+          },
+          "usado_pelo_motor": "Fatos: producao_veiculo(prod_id, veiculo_id), pontuacao_base(prod_id, valor)"
+        },
+        "extensions": {
+          "descricao": "Solicitações de prorrogação de prazo",
+          "documento_id": "auto-id",
+          "campos": {
+            "aluno_id": "string",
+            "motivo": "string",
+            "plano_atualizado": "string (descrição ou link)",
+            "parecer_orientador": "string | null",
+            "semestres_solicitados": "int (default: 1)",
+            "status": "string ('pendente'|'aprovada'|'rejeitada')",
+            "prazo_novo": "Timestamp | null (calculado se aprovada)",
+            "aprovado_por": "string (uid) | null",
+            "aprovado_em": "Timestamp | null",
+            "criado_em": "Timestamp"
+          }
+        },
+        "inferred_status": {
+          "descricao": "Snapshots históricos das inferências do motor para o aluno",
+          "documento_id": "auto-id",
+          "campos": {
+            "timestamp": "Timestamp",
+            "situacao_inferida": "string",
+            "apto_defesa": "boolean",
+            "creditos_validos": "boolean",
+            "em_risco": "boolean",
+            "checklist_snapshot": "map (cópia do checklist calculado)",
+            "fatos_usados": ["array de strings"]
+          }
+        },
+        "history": {
+          "descricao": "Snapshots históricos de alterações (aspecto A03). Sub-coleção presente em students/, work_plan/, activity_types/",
+          "campos": {
+            "entidade_tipo": "string",
+            "entidade_id": "string",
+            "valor_anterior": "map",
+            "valor_novo": "map",
+            "usuario_id": "string",
+            "role": "string",
+            "timestamp": "Timestamp"
+          }
+        }
+      }
+    },
+
+    "advisors": {
+      "descricao": "Orientadores do programa",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "uid": "string (referência a users/)",
+        "nome": "string",
+        "email": "string",
+        "departamento": "string",
+        "lattes": "string | null",
+        "programa_id": "string",
+        "limite_orientandos": "int (default: 5)",
+        "criado_em": "Timestamp",
+        "atualizado_em": "Timestamp"
+      }
+    },
+
+    "activity_types": {
+      "descricao": "Tipos de atividade creditável configurados pela coordenação",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "nome": "string",
+        "categoria": "string ('basico'|'especifico'|'tecnologico')",
+        "pontuacao_base": "float",
+        "limite_maximo_creditos": "float | null",
+        "exige_comprovante": "boolean",
+        "permite_multiplas": "boolean",
+        "ativo": "boolean (default: true)",
+        "programa_id": "string",
+        "criado_por": "string (uid coordenacao)",
+        "criado_em": "Timestamp",
+        "atualizado_em": "Timestamp"
+      },
+      "usado_pelo_motor": "Fatos: tipo_ativo(atividade_id), pontuacao_base(producao_id, valor)",
+      "sub_colecoes": {
+        "history": { "ref": "mesmo schema de history descrito em students/" }
+      }
+    },
+
+    "vehicles": {
+      "descricao": "Eventos e revistas onde produções são publicadas",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "nome": "string",
+        "tipo": "string ('evento'|'revista')",
+        "issn": "string | null",
+        "sigla": "string | null",
+        "programa_id": "string",
+        "criado_em": "Timestamp"
+      },
+      "nota": "Nível de relevância configurável fica em programs/{id}/vehicle_levels/{veiculo_id}"
+    },
+
+    "audit_logs": {
+      "descricao": "Logs imutáveis de auditoria gerados pelo aspecto A02. Nunca são deletados.",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "usuario_id": "string",
+        "role": "string",
+        "operacao": "string (nome da função Python)",
+        "modulo": "string (nome do módulo Python)",
+        "recurso": "string (ex: 'students/abc123')",
+        "valor_entrada": "map",
+        "resultado_status": "string ('sucesso'|'erro')",
+        "erro_mensagem": "string | null",
+        "timestamp": "Timestamp",
+        "duracao_ms": "int",
+        "programa_id": "string"
+      }
+    },
+
+    "notifications": {
+      "descricao": "Alertas gerados pelo aspecto A05. Frontend assina via onSnapshot.",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "tipo": "string ('progresso_task'|'atividade_validada'|'prorrogacao_aprovada'|'prazo_critico'|'atividade_submetida')",
+        "titulo": "string",
+        "mensagem": "string",
+        "destinatario_id": "string (uid Firebase Auth)",
+        "entidade_tipo": "string",
+        "entidade_id": "string",
+        "lida": "boolean (default: false)",
+        "timestamp": "Timestamp",
+        "programa_id": "string"
+      },
+      "indice_firestore": "compound index: (destinatario_id ASC, lida ASC, timestamp DESC)"
+    },
+
+    "invites": {
+      "descricao": "Tokens de convite para primeiro acesso. Criados pela coordenação.",
+      "documento_id": "token (UUID v4)",
+      "campos": {
+        "email": "string",
+        "role": "string",
+        "programa_id": "string",
+        "usado": "boolean (default: false)",
+        "expira_em": "Timestamp (48h após criação)",
+        "criado_por": "string (uid coordenacao)",
+        "criado_em": "Timestamp"
+      }
+    }
+  },
+
+  "mapeamento_paginas_firestore": {
+    "LoginPage": {
+      "colecoes_lidas": [],
+      "operacoes": ["Firebase Auth signInWithEmailAndPassword", "GET /api/v1/auth/me → users/{uid}"]
+    },
+    "FirstAccessPage": {
+      "colecoes_lidas": ["invites/{token}"],
+      "operacoes": ["Valida token em invites/", "Firebase Auth createUserWithEmailAndPassword", "POST /api/v1/auth/first-access → cria users/{uid} e seta custom claims"]
+    },
+    "AlunoDashboard": {
+      "colecoes_lidas": ["students/{id}", "students/{id}/activities", "students/{id}/work_plan", "notifications"],
+      "operacoes": ["GET /api/v1/dashboard/aluno/{id}", "onSnapshot notifications"]
+    },
+    "OrientadorDashboard": {
+      "colecoes_lidas": ["students (filtrado por orientador_id)", "students/*/activities", "notifications"],
+      "operacoes": ["GET /api/v1/dashboard/orientador/{id}"]
+    },
+    "CoordDashboard": {
+      "colecoes_lidas": ["students", "audit_logs (recentes)", "notifications"],
+      "operacoes": ["GET /api/v1/dashboard/coordenacao"]
+    },
+    "StudentsPage": {
+      "colecoes_lidas": ["students", "advisors"],
+      "operacoes": ["GET /api/v1/students", "POST /api/v1/students", "PUT /api/v1/students/{id}", "PATCH situacao/qualificacao/proficiencia"]
+    },
+    "AdvisorsPage": {
+      "colecoes_lidas": ["advisors", "students (contagem por orientador)"],
+      "operacoes": ["GET /api/v1/advisors", "POST /api/v1/advisors", "PUT /api/v1/advisors/{id}"]
+    },
+    "WorkPlanPage": {
+      "colecoes_lidas": ["students/{id}/work_plan", "stages", "tasks", "updates"],
+      "operacoes": ["GET /api/v1/work-plan/{student_id}", "POST stages", "POST tasks", "PATCH task status", "POST /api/v1/tasks/{id}/updates"]
+    },
+    "ActivitiesPage": {
+      "colecoes_lidas": ["students/{id}/activities", "activity_types", "vehicles"],
+      "operacoes": ["GET /api/v1/activities", "POST /api/v1/activities", "PATCH /api/v1/activities/{id}/validate"]
+    },
+    "ProductionsPage": {
+      "colecoes_lidas": ["students/{id}/productions", "vehicles", "programs/prog_default/vehicle_levels"],
+      "operacoes": ["GET /api/v1/productions", "POST /api/v1/productions", "GET /api/v1/vehicles"]
+    },
+    "ChecklistPage": {
+      "colecoes_lidas": ["students/{id} (situacao_inferida)", "students/{id}/inferred_status (último snapshot)"],
+      "operacoes": ["GET /api/v1/checklist/{student_id} → chama motor lógico"]
+    },
+    "InferencePage": {
+      "colecoes_lidas": ["students/{id}/inferred_status"],
+      "operacoes": ["GET /api/v1/inference/{student_id} → retorna fatos + conclusões do motor"]
+    },
+    "ExtensionsPage": {
+      "colecoes_lidas": ["students/{id}/extensions"],
+      "operacoes": ["GET /api/v1/extensions", "POST /api/v1/extensions", "PATCH /api/v1/extensions/{id}/approve"]
+    },
+    "ReportsPage": {
+      "colecoes_lidas": ["students", "students/*/activities", "students/*/productions"],
+      "operacoes": ["GET /api/v1/reports/students-at-risk", "GET /api/v1/reports/students-by-status", "GET /api/v1/reports/productions"]
+    },
+    "AuditPage": {
+      "colecoes_lidas": ["audit_logs"],
+      "operacoes": ["GET /api/v1/audit-logs (paginado, filtros por operação/usuário/data)"]
+    },
+    "NotificationsPage": {
+      "colecoes_lidas": ["notifications (onSnapshot)"],
+      "operacoes": ["PATCH /api/v1/notifications/{id}/read — marcar como lida"]
+    },
+    "SettingsPage": {
+      "colecoes_lidas": ["programs/prog_default", "programs/prog_default/vehicle_levels", "activity_types"],
+      "operacoes": ["PUT /api/v1/programs/config", "PUT /api/v1/vehicle-levels/{id}", "PUT /api/v1/activity-types/{id}"]
+    }
+  },
+
+  "seed_fatos_motor": {
+    "descricao": "Script de seed (backend/scripts/seed_firestore.py) que popula os fatos de configuração do motor no Firestore. Executar uma vez no setup do ambiente.",
+    "programa_default": {
+      "id": "prog_default",
+      "nome": "PPGCC — Programa de Pós-Graduação em Ciência da Computação",
+      "creditos_grupo_basico_min": 12,
+      "creditos_grupo_especifico_min": 8,
+      "creditos_grupo_tecnologico_max": 4,
+      "creditos_total_min": 24,
+      "max_prorrogacoes": 1,
+      "duracao_prorrogacao_meses": 6,
+      "meses_ate_qualificacao": 12
+    },
+    "vehicle_levels_default": [
+      {"veiculo_id": "v_placeholder_a1", "nivel": "A1", "peso": 2.0},
+      {"veiculo_id": "v_placeholder_a2", "nivel": "A2", "peso": 1.5},
+      {"veiculo_id": "v_placeholder_b",  "nivel": "B",  "peso": 1.0},
+      {"veiculo_id": "v_placeholder_c",  "nivel": "C",  "peso": 0.5}
+    ],
+    "activity_types_default": [
+      {"nome": "Artigo Publicado",    "categoria": "especifico",   "pontuacao_base": 10, "ativo": true},
+      {"nome": "Artigo Submetido",    "categoria": "especifico",   "pontuacao_base": 5,  "ativo": true},
+      {"nome": "Disciplina Cursada",  "categoria": "basico",       "pontuacao_base": 4,  "ativo": true},
+      {"nome": "Estágio Docência",    "categoria": "basico",       "pontuacao_base": 2,  "ativo": true},
+      {"nome": "Software Registrado", "categoria": "tecnologico",  "pontuacao_base": 3,  "limite_maximo_creditos": 4, "ativo": true},
+      {"nome": "Participação Banca",  "categoria": "basico",       "pontuacao_base": 1,  "ativo": true}
+    ]
+  },
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [],
+      "base_fatos_necessaria": ["programs/prog_default contém os fatos de configuração lidos pelo InferenceService"]
+    },
+    "aop_aspectos": {
+      "join_points": [],
+      "advice": ["Nenhum aspecto aplicado diretamente neste módulo — schema é infraestrutura"]
+    }
+  },
+
+  "contratos_api": []
+}

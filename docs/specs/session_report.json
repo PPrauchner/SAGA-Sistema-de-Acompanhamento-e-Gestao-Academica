@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "projeto": "SAGA — Sistema de Acompanhamento e Gestão Acadêmica",
+    "tech_lead_ia": "Claude (Anthropic)",
+    "metodologia": "SDD + Kanban + Regras de Sessão Estritas",
+    "versao_relatorio": "1.3.0",
+    "prazo_github": "2026-06-07T23:59:00",
+    "prazo_entrega_final": "2026-07-13T00:00:00"
+  },
+  "ultima_atualizacao": "2026-06-04",
+  "sprint_atual": 1,
+  "foco_mvp": "Implementar backend FastAPI + motor de inferência + 5 aspectos AOP e integrar à UI existente",
+  "progresso_geral_porcento": 22,
+  "nota_atual_estimada": "3.5 / 10 (diagnóstico inicial) — planejamento concluído, pronto para implementação",
+
+  "specs_geradas": {
+    "status": "COMPLETO",
+    "arquivos": [
+      { "arquivo": "docs/specs/01_motor_inferencia.json",    "conteudo": "5 módulos Python, 5 regras declarativas com head/body/
