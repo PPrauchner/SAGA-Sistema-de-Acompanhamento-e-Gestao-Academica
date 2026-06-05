@@ -271,6 +271,35 @@ Não acumule mudanças em áreas diferentes sem commitar. A cada etapa lógica
 concluída (ex: spec lido + modelo criado, ou endpoint implementado + teste
 passando), faça um commit seguindo `guidelines/CommitConventions.md`.
 
+**Critérios para atomicidade — um commit deve ter UMA responsabilidade lógica:**
+
+- **Uma camada por commit**: não misture mudanças em `models/`, `services/` e
+  `api/v1/` no mesmo commit, mesmo que todas sejam do mesmo domínio.
+- **Dependências e config separados do código funcional**: alterações em
+  `pyproject.toml`, `.env.example`, variáveis de ambiente ou arquivos de
+  configuração devem ser commits independentes, não agrupados com features.
+- **Scaffolding separado de implementação**: criar a estrutura de um arquivo
+  (ex: `router = APIRouter()` em stubs) é um commit; implementar a lógica
+  de um endpoint é outro commit.
+- **Um domínio por commit**: alterações que tocam `students/` e `activities/`
+  ao mesmo tempo devem ser dois commits, salvo se a mudança for exclusivamente
+  transversal (ex: renomear um campo compartilhado).
+- **Teste junto com o código que ele testa**: o teste de uma função vai no
+  mesmo commit da função, não depois.
+
+**Exemplos corretos para inicialização de um módulo backend:**
+```
+chore(backend): adiciona fastapi, pydantic-settings, firebase-admin ao pyproject.toml
+feat(backend/config): implementa Settings com pydantic-settings e cria .env.example
+feat(backend/firebase): stub de inicialização do Admin SDK
+feat(backend/core): inicializa app FastAPI com CORS, lifespan e registro de routers
+feat(backend/health): GET /api/v1/health retornando status da API e do Firebase
+```
+
+**Sinal de alerta**: se a mensagem de commit precisar de mais de uma frase no
+corpo para descrever *o que* foi feito (não *por que*), o commit provavelmente
+deve ser dividido.
+
 ### 4. Nunca quebre os testes do inference_engine
 
 O motor de inferência é isolado e tem testes obrigatórios. Após qualquer
