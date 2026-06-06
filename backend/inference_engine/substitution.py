@@ -25,7 +25,7 @@ qualquer ORM.
 """
 from __future__ import annotations
 
-from backend.inference_engine.terms import Atom, Variable, Compound, Term
+from inference_engine.terms import Atom, Variable, Compound, Term
 
 
 def apply(term: Term, subst: dict) -> Term:
