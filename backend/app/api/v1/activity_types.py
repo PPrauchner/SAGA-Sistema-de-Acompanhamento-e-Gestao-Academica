@@ -13,3 +13,7 @@ Responsabilidades:
   Aplica @requires_role('coordenacao'), @audit_operation e @track_history, pois mudança
   em ativo afeta o fato tipo_ativo do motor lógico.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

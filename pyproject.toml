@@ -1,7 +1,26 @@
 [project]
 name = "saga-sistema-de-acompanhamento-e-gestao-academica"
-version = "0.1.0"
-description = "Add your description here"
+version = "1.0.0-MVP"
+description = "Sistema de Acompanhamento e Gestão Acadêmica para programas de pós-graduação"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi[standard]>=0.115.0",
+    "firebase-admin>=6.5.0",
+    "pydantic-settings>=2.6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+testpaths = ["backend/inference_engine/tests"]
+asyncio_mode = "auto"

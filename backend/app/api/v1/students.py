@@ -17,3 +17,7 @@ Responsabilidades:
 - PATCH /api/v1/students/{student_id}/situacao: atualiza situação registrada manualmente.
   Aplica @track_history.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()
