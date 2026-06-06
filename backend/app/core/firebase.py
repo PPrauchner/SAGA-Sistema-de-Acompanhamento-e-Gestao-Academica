@@ -11,3 +11,5 @@ Responsabilidades:
   tokens e gestão de custom claims.
 - Garantir que o SDK seja encerrado corretamente no shutdown do lifespan.
 """
+
+import firebase_admin
