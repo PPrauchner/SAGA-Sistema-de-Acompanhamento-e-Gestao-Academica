@@ -10,8 +10,8 @@ Responsabilidades:
 """
 import pytest
 
-from backend.inference_engine.terms import Atom, Variable, Compound
-from backend.inference_engine.substitution import apply
+from inference_engine.terms import Atom, Variable, Compound
+from inference_engine.substitution import apply
 
 
 class TestApplyAtom:

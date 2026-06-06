@@ -12,8 +12,8 @@ Responsabilidades:
 """
 import pytest
 
-from backend.inference_engine.terms import Atom, Variable, Compound
-from backend.inference_engine.unification import unify
+from inference_engine.terms import Atom, Variable, Compound
+from inference_engine.unification import unify
 
 
 class TestUnifyAtomAtom:
