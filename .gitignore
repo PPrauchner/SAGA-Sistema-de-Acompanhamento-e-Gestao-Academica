@@ -236,3 +236,6 @@ dist-ssr/
 # Sistema operacional
 .DS_Store
 Thumbs.db
+
+# Instruções para o Claude
+.claude
