@@ -31,9 +31,8 @@ Isolamento: depende apenas de terms.py. Sem imports de FastAPI, Firebase ou
 qualquer ORM.
 """
 from __future__ import annotations
-from typing import TYPE_CHECKING
 
-from backend.inference_engine.terms import Atom, Variable, Compound, Term
+from inference_engine.terms import Atom, Variable, Compound, Term
 
 
 def _occurs(var: Variable, term: Term) -> bool:
