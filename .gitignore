@@ -237,5 +237,9 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 
-# Instruções para o Claude
 .claude
+
+# Claude Code — arquivo de estado local
+.claude/current-issue
+
+.claude/subtasks-pending.json

@@ -11,3 +11,7 @@ Responsabilidades:
 - DELETE /api/v1/advisors/{advisor_id}: remove orientador (verificando ausência de
   orientandos ativos). Aplica @requires_role('coordenacao') e @audit_operation.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

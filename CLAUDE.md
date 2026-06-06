@@ -195,3 +195,117 @@ Documentação detalhada de cada módulo em `docs/specs/`:
 | `08_checklist_prorrogacoes.json`| Checklist + prorrogações              |
 | `09_relatorios_dashboard.json`  | Dashboards e relatórios               |
 | `10_integracao_frontend.json`   | Substituição dos dados hardcoded      |
+
+---
+
+## Workflow de Issues (GitHub Projects)
+
+### Ao iniciar trabalho em uma issue
+
+O **primeiro comando obrigatório** ao começar qualquer issue é registrá-la:
+
+```bash
+echo "NUMERO_DA_ISSUE" > .claude/current-issue
+```
+
+Substitua `NUMERO_DA_ISSUE` pelo número real (ex: `echo "42" > .claude/current-issue`).
+Esse arquivo é lido automaticamente pelo hook ao abrir o PR.
+
+### Quando o usuário confirmar que o trabalho está pronto
+
+1. Faça commit de tudo seguindo `guidelines/CommitConventions.md`
+2. Abra o PR com:
+
+```bash
+gh pr create \
+  --title "tipo: descrição curta (#NUMERO)" \
+  --body "Closes #NUMERO" \
+  --base main
+```
+
+O hook `.claude/hooks/post-bash.sh` detecta o `gh pr create` automaticamente
+e move a issue para **In Review** no GitHub Projects (projeto #4).
+
+### Regras
+
+- Nunca abra PR sem ter o `.claude/current-issue` preenchido — o hook não saberá qual issue mover.
+- O arquivo `.claude/current-issue` é ignorado pelo git (listado no `.gitignore`).
+- Se a issue não estiver vinculada ao projeto #4, o hook avisará mas não falhará.
+
+---
+
+## Comportamento Obrigatório (leia antes de qualquer tarefa)
+
+### 1. Fluxo SDD — spec antes de código
+
+Antes de implementar qualquer feature ou modificar lógica de negócio:
+1. Identifique o(s) spec(s) correspondente(s) em `docs/specs/`
+2. Leia o spec completo com `Read`
+3. Se houver ambiguidade entre o spec e o código existente, pergunte antes de assumir
+4. Ao terminar, compare a implementação com o spec e liste divergências
+
+Mapeamento rápido de domínio → spec:
+
+| Domínio                        | Spec                              |
+|--------------------------------|-----------------------------------|
+| Motor de inferência / regras   | `01_motor_inferencia.json`        |
+| Aspectos AOP                   | `02_aspectos_aop.json`            |
+| Firestore / schema             | `03_firebase_schema.json`         |
+| Autenticação / convites        | `04_autenticacao.json`            |
+| Discentes / orientadores       | `05_discentes.json`               |
+| Plano de trabalho              | `06_plano_trabalho.json`          |
+| Atividades / produções         | `07_atividades_producoes.json`    |
+| Checklist / prorrogações       | `08_checklist_prorrogacoes.json`  |
+| Relatórios / dashboard         | `09_relatorios_dashboard.json`    |
+| Integração frontend            | `10_integracao_frontend.json`     |
+
+### 2. Uma issue por sessão
+
+Mantenha o foco em uma única issue por conversa. Se perceber que a tarefa
+envolve múltiplos domínios não relacionados, sinalize ao usuário e sugira
+quebrar em issues separadas.
+
+### 3. Commits atômicos durante o trabalho
+
+Não acumule mudanças em áreas diferentes sem commitar. A cada etapa lógica
+concluída (ex: spec lido + modelo criado, ou endpoint implementado + teste
+passando), faça um commit seguindo `guidelines/CommitConventions.md`.
+
+**Critérios para atomicidade — um commit deve ter UMA responsabilidade lógica:**
+
+- **Uma camada por commit**: não misture mudanças em `models/`, `services/` e
+  `api/v1/` no mesmo commit, mesmo que todas sejam do mesmo domínio.
+- **Dependências e config separados do código funcional**: alterações em
+  `pyproject.toml`, `.env.example`, variáveis de ambiente ou arquivos de
+  configuração devem ser commits independentes, não agrupados com features.
+- **Scaffolding separado de implementação**: criar a estrutura de um arquivo
+  (ex: `router = APIRouter()` em stubs) é um commit; implementar a lógica
+  de um endpoint é outro commit.
+- **Um domínio por commit**: alterações que tocam `students/` e `activities/`
+  ao mesmo tempo devem ser dois commits, salvo se a mudança for exclusivamente
+  transversal (ex: renomear um campo compartilhado).
+- **Teste junto com o código que ele testa**: o teste de uma função vai no
+  mesmo commit da função, não depois.
+
+**Exemplos corretos para inicialização de um módulo backend:**
+```
+chore(backend): adiciona fastapi, pydantic-settings, firebase-admin ao pyproject.toml
+feat(backend/config): implementa Settings com pydantic-settings e cria .env.example
+feat(backend/firebase): stub de inicialização do Admin SDK
+feat(backend/core): inicializa app FastAPI com CORS, lifespan e registro de routers
+feat(backend/health): GET /api/v1/health retornando status da API e do Firebase
+```
+
+**Sinal de alerta**: se a mensagem de commit precisar de mais de uma frase no
+corpo para descrever *o que* foi feito (não *por que*), o commit provavelmente
+deve ser dividido.
+
+### 4. Nunca quebre os testes do inference_engine
+
+O motor de inferência é isolado e tem testes obrigatórios. Após qualquer
+alteração em `backend/inference_engine/`, rode:
+```bash
+pytest backend/inference_engine/tests/ -v
+```
+Não prossiga se algum teste falhar.
+

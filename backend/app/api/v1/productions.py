@@ -9,3 +9,7 @@ Responsabilidades:
   Aplica @requires_role('aluno'), @audit_operation e @check_deadlines (verifica período
   do curso). Persiste pontuacao_calculada, nivel_veiculo e peso_aplicado no documento.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

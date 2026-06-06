@@ -10,3 +10,7 @@ Responsabilidades:
   um veículo no programa. Altera fatos nivel_relevancia e relevancia_peso usados pelo
   motor RL05. Aplica @requires_role('coordenacao') e @audit_operation.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()
