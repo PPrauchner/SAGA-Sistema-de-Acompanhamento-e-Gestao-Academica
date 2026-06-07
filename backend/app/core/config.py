@@ -10,3 +10,32 @@ Responsabilidades:
 - Centralizar constantes de configuração reutilizadas pelos aspectos (ex: dias de alerta de prazo,
   limites de prorrogação) que são importadas por backend/app/aspects/aspect_config.py.
 """
+
+from functools import lru_cache
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Configurações carregadas do ambiente e do arquivo .env da raiz."""
+
+    firebase_project_id: str | None = None
+    firebase_private_key: str | None = None
+    firebase_client_email: str | None = None
+    firebase_storage_bucket: str | None = None
+    api_version: str = "v1"
+    cors_origins: str = "*"
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
