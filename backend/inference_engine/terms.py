@@ -12,3 +12,79 @@ Responsabilidades:
 - Definir o tipo union Term = Atom | Variable | Compound.
 - Módulo completamente isolado — sem imports de FastAPI, Firebase ou qualquer ORM.
 """
+
+from __future__ import annotations
+from typing import Union
+
+
+class Atom:
+    """Valor concreto imutável. Aceita str, int, float ou bool."""
+
+    __slots__ = ("value",)
+
+    def __init__(self, value: str | int | float | bool) -> None:
+        object.__setattr__(self, "value", value)
+
+    # Imutabilidade: impede atribuição após criação
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Atom é imutável")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Atom) and self.value == other.value
+
+    def __hash__(self) -> int:
+        return hash(("Atom", self.value))
+
+    def __repr__(self) -> str:
+        return f"Atom({self.value!r})"
+
+
+class Variable:
+    """Incógnita identificada por nome string. Igualdade por nome."""
+
+    __slots__ = ("name",)
+
+    def __init__(self, name: str) -> None:
+        object.__setattr__(self, "name", name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Variable é imutável")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Variable) and self.name == other.name
+
+    def __hash__(self) -> int:
+        return hash(("Variable", self.name))
+
+    def __repr__(self) -> str:
+        return f"Variable({self.name!r})"
+
+
+class Compound:
+    """Functor (string) + lista de argumentos (Term). Representa predicados/fatos."""
+
+    __slots__ = ("functor", "args")
+
+    def __init__(self, functor: str, args: list[Term]) -> None:
+        object.__setattr__(self, "functor", functor)
+        object.__setattr__(self, "args", list(args))
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Compound é imutável")
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, Compound)
+            and self.functor == other.functor
+            and self.args == other.args
+        )
+
+    def __hash__(self) -> int:
+        return hash(("Compound", self.functor, tuple(self.args)))
+
+    def __repr__(self) -> str:
+        return f"Compound({self.functor!r}, {self.args!r})"
+
+
+# Tipo union para anotações de tipo
+Term = Union[Atom, Variable, Compound]
