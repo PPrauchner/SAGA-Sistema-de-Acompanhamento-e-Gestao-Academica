@@ -15,6 +15,7 @@ Responsabilidades:
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 from typing import Any
@@ -53,21 +54,9 @@ class FirebaseRepository:
         payload["atualizado_em"] = firestore.SERVER_TIMESTAMP
         return payload
 
-    def _serialize_value(self, value: Any) -> Any:
-        if isinstance(value, Mapping):
-            return {key: self._serialize_value(item) for key, item in value.items()}
-        if isinstance(value, list):
-            return [self._serialize_value(item) for item in value]
-        if isinstance(value, tuple):
-            return tuple(self._serialize_value(item) for item in value)
-        if isinstance(value, datetime):
-            return value
-        return value
-
     def _snapshot_to_dict(self, snapshot) -> dict[str, Any]:
         data = snapshot.to_dict() or {}
-        serialized = self._serialize_value(data)
-        return {"id": snapshot.id, **serialized}
+        return {"id": snapshot.id, **data}
 
     def _not_found(self, collection: str, doc_id: str) -> HTTPException:
         return HTTPException(
@@ -76,7 +65,9 @@ class FirebaseRepository:
         )
 
     async def get(self, collection: str, doc_id: str) -> dict[str, Any]:
-        snapshot = self._document(collection, doc_id).get()
+        snapshot = await asyncio.to_thread(
+            lambda: self._document(collection, doc_id).get()
+        )
         if not snapshot.exists:
             raise self._not_found(collection, doc_id)
         return self._snapshot_to_dict(snapshot)
@@ -93,7 +84,7 @@ class FirebaseRepository:
             if doc_id
             else self._collection(collection).document()
         )
-        doc_ref.create(payload)
+        await asyncio.to_thread(lambda: doc_ref.create(payload))
         return await self.get(collection, doc_ref.id)
 
     async def set(
@@ -105,7 +96,7 @@ class FirebaseRepository:
     ) -> dict[str, Any]:
         payload = self._with_update_timestamp(data)
         doc_ref = self._document(collection, doc_id)
-        doc_ref.set(payload, merge=merge)
+        await asyncio.to_thread(lambda: doc_ref.set(payload, merge=merge))
         return await self.get(collection, doc_id)
 
     async def update(
@@ -115,17 +106,21 @@ class FirebaseRepository:
         data: Mapping[str, Any],
     ) -> dict[str, Any]:
         doc_ref = self._document(collection, doc_id)
-        if not doc_ref.get().exists:
+        exists = await asyncio.to_thread(lambda: doc_ref.get().exists)
+        if not exists:
             raise self._not_found(collection, doc_id)
 
-        doc_ref.update(self._with_update_timestamp(data))
+        await asyncio.to_thread(
+            lambda: doc_ref.update(self._with_update_timestamp(data))
+        )
         return await self.get(collection, doc_id)
 
     async def delete(self, collection: str, doc_id: str) -> None:
         doc_ref = self._document(collection, doc_id)
-        if not doc_ref.get().exists:
+        exists = await asyncio.to_thread(lambda: doc_ref.get().exists)
+        if not exists:
             raise self._not_found(collection, doc_id)
-        doc_ref.delete()
+        await asyncio.to_thread(lambda: doc_ref.delete())
 
     async def list(
         self,
@@ -134,50 +129,42 @@ class FirebaseRepository:
         order_by: OrderBy | Iterable[OrderBy] | None = None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        query: Any = self._collection(collection)
+        def _execute_query():
+            query: Any = self._collection(collection)
 
-        for filter_value in filters or []:
-            if isinstance(filter_value, FieldFilter):
-                query = query.where(filter=filter_value)
-                continue
+            for filter_value in filters or []:
+                if isinstance(filter_value, FieldFilter):
+                    query = query.where(filter=filter_value)
+                    continue
 
-            field_path, op_string, value = filter_value
-            query = query.where(filter=FieldFilter(field_path, op_string, value))
+                field_path, op_string, value = filter_value
+                query = query.where(filter=FieldFilter(field_path, op_string, value))
 
-        order_values: Iterable[OrderBy]
-        if order_by is None:
-            order_values = []
-        elif isinstance(order_by, str):
-            order_values = [order_by]
-        elif isinstance(order_by, tuple):
-            order_values = [order_by]
-        else:
-            order_values = order_by
-
-        for order_value in order_values:
-            if isinstance(order_value, str):
-                query = query.order_by(order_value)
+            order_values: Iterable[OrderBy]
+            if order_by is None:
+                order_values = []
+            elif isinstance(order_by, str):
+                order_values = [order_by]
+            elif isinstance(order_by, tuple):
+                order_values = [order_by]
             else:
-                field_path, direction = order_value
-                firestore_direction = (
-                    firestore.Query.DESCENDING
-                    if direction.lower() in {"desc", "descending"}
-                    else firestore.Query.ASCENDING
-                )
-                query = query.order_by(field_path, direction=firestore_direction)
+                order_values = order_by
 
-        if limit is not None:
-            query = query.limit(limit)
+            for order_value in order_values:
+                if isinstance(order_value, str):
+                    query = query.order_by(order_value)
+                else:
+                    field_path, direction = order_value
+                    firestore_direction = (
+                        firestore.Query.DESCENDING
+                        if direction.lower() in {"desc", "descending"}
+                        else firestore.Query.ASCENDING
+                    )
+                    query = query.order_by(field_path, direction=firestore_direction)
 
-        return [self._snapshot_to_dict(snapshot) for snapshot in query.stream()]
+            if limit is not None:
+                query = query.limit(limit)
 
-    async def query(
-        self,
-        collection: str,
-        filters: Iterable[Filter] | None = None,
-        order_by: OrderBy | Iterable[OrderBy] | None = None,
-        limit: int | None = None,
-    ) -> list[dict[str, Any]]:
-        return await self.list(
-            collection, filters=filters, order_by=order_by, limit=limit
-        )
+            return [self._snapshot_to_dict(snapshot) for snapshot in query.stream()]
+
+        return await asyncio.to_thread(_execute_query)

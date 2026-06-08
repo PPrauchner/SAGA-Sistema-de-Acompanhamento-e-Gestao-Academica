@@ -39,7 +39,7 @@ PROGRAM_ID = "prog_default"
 SEED_USER_ID = "seed_firestore"
 
 PROGRAM_DEFAULT: dict[str, Any] = {
-    "nome": "PPGCC - Programa de Pós-Graduação em Ciência da Computação",
+    "nome": "PPGCC — Programa de Pós-Graduação em Ciência da Computação",
     "instituicao": "UNIPAMPA",
     "duracao_meses": 24,
     "creditos_grupo_basico_min": 12,

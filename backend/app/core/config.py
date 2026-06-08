@@ -23,14 +23,17 @@ class Settings(BaseSettings):
         case_sensitive=False,
     )
 
+    # Firebase Admin SDK
     firebase_project_id: str
     firebase_private_key: str
     firebase_client_email: str
     firebase_storage_bucket: str = ""
 
+    # API
     api_version: str = "1.0.0-MVP"
     cors_origins: list[str] = ["http://localhost:5173"]
 
+    # Aspect constants — importados por aspect_config.py
     deadline_alert_days: int = 30
     max_extensions: int = 2
 
