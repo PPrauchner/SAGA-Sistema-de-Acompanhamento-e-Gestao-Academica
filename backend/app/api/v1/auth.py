@@ -13,3 +13,20 @@ Responsabilidades:
   todos os papéis.
 - GET /api/v1/health: health check público — verifica disponibilidade da API e do Firebase.
 """
+
+from fastapi import APIRouter
+
+from backend.app.core.config import settings
+from backend.app.core.firebase import is_initialized
+
+router = APIRouter()
+
+
+@router.get("/health", tags=["health"])
+async def health_check() -> dict:
+    """Health check público — verifica se a API e o Firebase estão acessíveis."""
+    return {
+        "status": "ok",
+        "firebase": "connected" if is_initialized() else "error",
+        "version": settings.api_version,
+    }

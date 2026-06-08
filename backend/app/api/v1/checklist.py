@@ -10,3 +10,7 @@ Responsabilidades:
   (orientandos) e coordenação, além de @check_deadlines para garantir que fatos de prazo
   estejam atualizados antes da inferência.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()
