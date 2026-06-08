@@ -245,4 +245,6 @@ Thumbs.db
 .claude/subtasks-pending.json
 
 # Relatórios de revisão de PR (gerados internamente)
-docs/Relatórios/
+docs/relatorios/
+# Google API credentials
+.credentials/
