@@ -17,20 +17,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Configurações carregadas do ambiente e do arquivo .env da raiz."""
-
-    firebase_project_id: str | None = None
-    firebase_private_key: str | None = None
-    firebase_client_email: str | None = None
-    firebase_storage_bucket: str | None = None
-    api_version: str = "v1"
-    cors_origins: str = "*"
-
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore",
+        case_sensitive=False,
     )
+
+    firebase_project_id: str
+    firebase_private_key: str
+    firebase_client_email: str
+    firebase_storage_bucket: str = ""
+
+    api_version: str = "1.0.0-MVP"
+    cors_origins: list[str] = ["http://localhost:5173"]
+
+    deadline_alert_days: int = 30
+    max_extensions: int = 2
 
 
 @lru_cache
