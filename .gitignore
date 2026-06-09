@@ -237,8 +237,6 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 
-.claude
-
 # Claude Code — arquivo de estado local
 .claude/current-issue
 
