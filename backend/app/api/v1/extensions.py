@@ -13,3 +13,7 @@ Responsabilidades:
   aprovada, atualiza prazo_final do aluno. Aplica @requires_role('coordenacao'),
   @audit_operation e @trigger_alerts (notifica aluno com resultado e novo prazo).
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

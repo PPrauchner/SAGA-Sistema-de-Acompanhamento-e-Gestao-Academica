@@ -12,3 +12,7 @@ Responsabilidades:
   aprova/rejeita. Operação mais crítica do fluxo — aplica @requires_role, @audit_operation
   e @trigger_alerts (notifica aluno após decisão). Motor verifica elegibilidade (RL04).
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

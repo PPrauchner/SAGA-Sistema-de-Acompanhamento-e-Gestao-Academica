@@ -8,3 +8,7 @@ Responsabilidades:
   gerados pelo aspecto A02 (@audit_operation). Exclusivo de @requires_role('coordenacao').
   Alimenta a AuditPage do frontend com dados reais em substituição aos dados hardcoded.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

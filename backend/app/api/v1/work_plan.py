@@ -17,3 +17,7 @@ Responsabilidades:
   Aplica @check_deadlines (verifica task.prazo) e @trigger_alerts (notifica orientador).
 - GET /api/v1/tasks/{task_id}/updates: lista atualizações de progresso de uma task.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

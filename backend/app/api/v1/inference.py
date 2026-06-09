@@ -10,3 +10,7 @@ Responsabilidades:
   Aplica @requires_role('aluno' apenas próprio, 'orientador' apenas orientandos,
   'coordenacao') e @audit_operation.
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()

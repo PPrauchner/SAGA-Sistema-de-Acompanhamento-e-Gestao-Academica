@@ -169,13 +169,130 @@ Flags para desabilitar aspectos em teste: `aspect_config.py`.
 
 ## Convenções de Código
 
-- **Python**: docstrings em todos os módulos; tipagem explícita; sem lógica
-  nos arquivos de rota (delegar para services)
-- **TypeScript**: um arquivo de API por domínio em `src/api/`; hooks em
-  `src/hooks/`; alias `@` aponta para `src/`
-- **Commits**: atômicos, seguir template em `guidelines/CommitConventions.md`
-- **Testes**: pytest para o motor de inferência; cobertura obrigatória de
-  todos os cenários apto/risco/inapto das 5 regras
+### Python — Docstrings
+
+Padrão **Google Style** em todos os arquivos Python. Três níveis obrigatórios:
+
+**1. Módulo** — todo `.py` começa com um bloco descritivo:
+```python
+"""
+<Título de uma linha descrevendo o módulo.>
+
+Responsabilidades:
+- <responsabilidade 1>
+- <responsabilidade 2>
+
+Restrições: (somente quando aplicável, ex: inference_engine/)
+- Sem imports de FastAPI, Firebase ou qualquer ORM.
+"""
+```
+
+**2. Função / método** — obrigatório quando há ≥ 2 parâmetros ou o retorno não é óbvio:
+```python
+def unify(t1: Term, t2: Term, subst: dict) -> dict | None:
+    """Unifica dois termos sob a substituição parcial `subst`.
+
+    Args:
+        t1: Primeiro termo a unificar.
+        t2: Segundo termo a unificar.
+        subst: Substituição parcial acumulada (variável → Term).
+
+    Returns:
+        Substituição estendida se bem-sucedida, None caso contrário.
+
+    Raises:
+        OccurCheckError: Se detectar ciclo via occur check.
+    """
+```
+
+**3. Aspecto** — além do cabeçalho de módulo, cada decorator/metaclasse que implementa um aspecto deve declarar explicitamente Join Point, Advice e Weaving:
+```python
+def requires_role(*roles: str):
+    """Aspecto A01 — Autorização por Papel.
+
+    Join Point: qualquer endpoint FastAPI decorado com @requires_role.
+    Advice: Before — verifica papel antes de executar a função original.
+    Weaving: decorador Python aplicado manualmente sobre funções de negócio.
+    """
+```
+
+**4. Classe** — docstring na classe e nos métodos públicos não-triviais:
+```python
+class FirebaseRepository:
+    """Repositório base genérico para operações no Firestore.
+
+    Attributes:
+        db: Cliente Firestore assíncrono obtido de core/firebase.py.
+    """
+```
+
+---
+
+### Python — Type Hints
+
+- **Todo parâmetro e retorno** de função/método devem ser tipados — sem exceção.
+- Usar sintaxe nativa do Python 3.10+:
+  - `X | None` em vez de `Optional[X]`
+  - `list[str]`, `dict[str, int]` em vez de `List[str]`, `Dict[str, int]`
+- Para forward references, adicionar `from __future__ import annotations` no topo.
+- Funções assíncronas: anotar apenas o tipo do valor retornado pelo `await` (ex: `async def get(...) -> Student`).
+- `inference_engine/` usa **exclusivamente** tipos da stdlib — proibido `pydantic`, `typing_extensions` ou qualquer tipo do FastAPI.
+
+```python
+# ✅ correto
+def apply(subst: dict, term: Term) -> Term: ...
+async def create_student(data: StudentCreate, user: CurrentUser) -> Student: ...
+def query(goal: Term) -> list[dict]: ...
+
+# ❌ errado
+def apply(subst, term):           # sem anotações
+async def get_all() -> list[Any]: # Any encobre erros
+```
+
+---
+
+### Restrições Obrigatórias do Enunciado
+
+#### Motor de Inferência (`inference_engine/`)
+- **Isolamento total**: proibido importar FastAPI, Firebase, pydantic, SQLAlchemy ou qualquer pacote fora da stdlib Python.
+- O único ponto de entrada para o sistema externo é `InferenceEngine.query(goal: Term) -> list[dict]`.
+- Decisões acadêmicas (aptidão à defesa, risco, validação de créditos) **nunca** como cadeias de `if/else` nos services — sempre como regras declarativas nos arquivos `rules/RL01`–`RL05`.
+- Para alterar uma política acadêmica: editar apenas o arquivo correspondente em `rules/`, não a lógica de controle.
+
+#### Aspectos AOP
+- **Proibido** usar bibliotecas externas de AOP (`aspectlib`, `python-aspectlib`, `wrapt` para fins de AOP, etc.).
+- Mecanismos permitidos: decoradores, metaclasses, descritores, `__init_subclass__`, `inspect`.
+- Todo aspecto **deve documentar** no docstring: Join Point, Advice (Before / After / Around), Weaving.
+- A lógica de negócio em `services/` e `api/v1/` **não deve conter** código de autorização, auditoria, histórico, validação de prazo ou alertas — esses comportamentos entram exclusivamente via aspectos.
+- Aspectos ativáveis/desativáveis via `aspect_config.py` sem alterar o código de negócio.
+
+#### Routers (`api/v1/`)
+- Nenhuma lógica de negócio nos arquivos de rota — apenas: receber request → chamar service → retornar response.
+- Ordem canônica de decoradores nos endpoints:
+  ```python
+  @requires_role(...)
+  @audit_operation
+  @check_deadlines
+  @trigger_alerts
+  async def endpoint_func(...):
+  ```
+
+#### Clean Code (geral)
+- Funções com responsabilidade única — se o nome precisar de "e" ou "ou", dividir em duas.
+- Nomes descritivos: sem abreviações opacas (`stud` → `student`, `act` → `activity`).
+- Constantes em `UPPER_SNAKE_CASE`; variáveis e funções em `snake_case`; classes em `PascalCase`.
+- Comentários explicam *por quê*, não *o quê* — código legível dispensa comentários descritivos.
+
+---
+
+### TypeScript
+- Um arquivo de API por domínio em `src/api/`; hooks em `src/hooks/`.
+- Alias `@` aponta para `src/`.
+- Tipar todos os retornos de funções e props de componentes.
+
+### Commits e Testes
+- **Commits**: atômicos, seguir template em `guidelines/CommitConventions.md`.
+- **Testes**: pytest para o motor de inferência; cobertura obrigatória de todos os cenários apto/risco/inapto das 5 regras.
 
 ---
 
@@ -195,3 +312,117 @@ Documentação detalhada de cada módulo em `docs/specs/`:
 | `08_checklist_prorrogacoes.json`| Checklist + prorrogações              |
 | `09_relatorios_dashboard.json`  | Dashboards e relatórios               |
 | `10_integracao_frontend.json`   | Substituição dos dados hardcoded      |
+
+---
+
+## Workflow de Issues (GitHub Projects)
+
+### Ao iniciar trabalho em uma issue
+
+O **primeiro comando obrigatório** ao começar qualquer issue é registrá-la:
+
+```bash
+echo "NUMERO_DA_ISSUE" > .claude/current-issue
+```
+
+Substitua `NUMERO_DA_ISSUE` pelo número real (ex: `echo "42" > .claude/current-issue`).
+Esse arquivo é lido automaticamente pelo hook ao abrir o PR.
+
+### Quando o usuário confirmar que o trabalho está pronto
+
+1. Faça commit de tudo seguindo `guidelines/CommitConventions.md`
+2. Abra o PR com:
+
+```bash
+gh pr create \
+  --title "tipo: descrição curta (#NUMERO)" \
+  --body "Closes #NUMERO" \
+  --base main
+```
+
+O hook `.claude/hooks/post-bash.sh` detecta o `gh pr create` automaticamente
+e move a issue para **In Review** no GitHub Projects (projeto #4).
+
+### Regras
+
+- Nunca abra PR sem ter o `.claude/current-issue` preenchido — o hook não saberá qual issue mover.
+- O arquivo `.claude/current-issue` é ignorado pelo git (listado no `.gitignore`).
+- Se a issue não estiver vinculada ao projeto #4, o hook avisará mas não falhará.
+
+---
+
+## Comportamento Obrigatório (leia antes de qualquer tarefa)
+
+### 1. Fluxo SDD — spec antes de código
+
+Antes de implementar qualquer feature ou modificar lógica de negócio:
+1. Identifique o(s) spec(s) correspondente(s) em `docs/specs/`
+2. Leia o spec completo com `Read`
+3. Se houver ambiguidade entre o spec e o código existente, pergunte antes de assumir
+4. Ao terminar, compare a implementação com o spec e liste divergências
+
+Mapeamento rápido de domínio → spec:
+
+| Domínio                        | Spec                              |
+|--------------------------------|-----------------------------------|
+| Motor de inferência / regras   | `01_motor_inferencia.json`        |
+| Aspectos AOP                   | `02_aspectos_aop.json`            |
+| Firestore / schema             | `03_firebase_schema.json`         |
+| Autenticação / convites        | `04_autenticacao.json`            |
+| Discentes / orientadores       | `05_discentes.json`               |
+| Plano de trabalho              | `06_plano_trabalho.json`          |
+| Atividades / produções         | `07_atividades_producoes.json`    |
+| Checklist / prorrogações       | `08_checklist_prorrogacoes.json`  |
+| Relatórios / dashboard         | `09_relatorios_dashboard.json`    |
+| Integração frontend            | `10_integracao_frontend.json`     |
+
+### 2. Uma issue por sessão
+
+Mantenha o foco em uma única issue por conversa. Se perceber que a tarefa
+envolve múltiplos domínios não relacionados, sinalize ao usuário e sugira
+quebrar em issues separadas.
+
+### 3. Commits atômicos durante o trabalho
+
+Não acumule mudanças em áreas diferentes sem commitar. A cada etapa lógica
+concluída (ex: spec lido + modelo criado, ou endpoint implementado + teste
+passando), faça um commit seguindo `guidelines/CommitConventions.md`.
+
+**Critérios para atomicidade — um commit deve ter UMA responsabilidade lógica:**
+
+- **Uma camada por commit**: não misture mudanças em `models/`, `services/` e
+  `api/v1/` no mesmo commit, mesmo que todas sejam do mesmo domínio.
+- **Dependências e config separados do código funcional**: alterações em
+  `pyproject.toml`, `.env.example`, variáveis de ambiente ou arquivos de
+  configuração devem ser commits independentes, não agrupados com features.
+- **Scaffolding separado de implementação**: criar a estrutura de um arquivo
+  (ex: `router = APIRouter()` em stubs) é um commit; implementar a lógica
+  de um endpoint é outro commit.
+- **Um domínio por commit**: alterações que tocam `students/` e `activities/`
+  ao mesmo tempo devem ser dois commits, salvo se a mudança for exclusivamente
+  transversal (ex: renomear um campo compartilhado).
+- **Teste junto com o código que ele testa**: o teste de uma função vai no
+  mesmo commit da função, não depois.
+
+**Exemplos corretos para inicialização de um módulo backend:**
+```
+chore(backend): adiciona fastapi, pydantic-settings, firebase-admin ao pyproject.toml
+feat(backend/config): implementa Settings com pydantic-settings e cria .env.example
+feat(backend/firebase): stub de inicialização do Admin SDK
+feat(backend/core): inicializa app FastAPI com CORS, lifespan e registro de routers
+feat(backend/health): GET /api/v1/health retornando status da API e do Firebase
+```
+
+**Sinal de alerta**: se a mensagem de commit precisar de mais de uma frase no
+corpo para descrever *o que* foi feito (não *por que*), o commit provavelmente
+deve ser dividido.
+
+### 4. Nunca quebre os testes do inference_engine
+
+O motor de inferência é isolado e tem testes obrigatórios. Após qualquer
+alteração em `backend/inference_engine/`, rode:
+```bash
+pytest backend/inference_engine/tests/ -v
+```
+Não prossiga se algum teste falhar.
+
