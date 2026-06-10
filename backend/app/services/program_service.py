@@ -16,7 +16,7 @@ from backend.app.repositories.program_repository import ProgramRepository
 class ProgramService:
     """Service to handle business logic for program configurations."""
 
-    def __init__(self, repository: Optional[ProgramRepository] = None):
+    def __init__(self, repository=None):
         """Initializes the ProgramService.
 
         Args:

@@ -15,7 +15,7 @@ from backend.app.repositories.activity_type_repository import ActivityTypeReposi
 class ActivityTypeService:
     """Service to handle business logic for activity types."""
 
-    def __init__(self, repository: Optional[ActivityTypeRepository] = None):
+    def __init__(self, repository=None):
         """Initializes the ActivityTypeService.
 
         Args:
