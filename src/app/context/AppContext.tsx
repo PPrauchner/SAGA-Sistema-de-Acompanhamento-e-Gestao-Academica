@@ -24,6 +24,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  student_id?: string;
   matricula?: string;
   programa?: string;
   orientador?: string;
@@ -71,6 +72,7 @@ const DEMO_USERS: Record<UserRole, User> = {
     name: "Lucas Ferreira Silva",
     email: "lucas.silva@pos.ufx.br",
     role: "aluno",
+    student_id: "aluno_risco",
     matricula: "2023001",
     programa: "PPGCC - Doutorado",
     orientador: "Profa. Dra. Carla Mendes",
