@@ -2,13 +2,53 @@
 
 ## Regra fundamental: commits DEVEM ser atômicos
 
-Cada commit deve representar **uma única mudança lógica e coerente**. Um commit atômico:
+Cada commit representa a **menor mudança funcional possível** — o mínimo de arquivos que, juntos, produzem uma mudança observável no comportamento do sistema. Um commit atômico:
 - Pode ser revertido sem afetar outras funcionalidades
 - Tem uma única razão para existir
 - Compila e passa nos testes de forma independente
 - É compreensível sem contexto adicional
 
 **Nunca** agrupe mudanças não relacionadas em um único commit.
+
+### Critério de atomicidade: mudança funcional mínima
+
+A pergunta a fazer antes de cada commit é: **"consigo dividir isso em partes menores que ainda façam sentido sozinhas?"**. Se sim, divida.
+
+Um commit pode incluir mais de um arquivo **somente** quando esses arquivos são inseparáveis para que a mudança funcione — por exemplo, um novo modelo Pydantic e o schema Firestore correspondente. Se os arquivos podem ser introduzidos em etapas distintas, devem ser commits distintos.
+
+**Nunca** faça (vários arquivos de camadas diferentes agrupados):
+```
+feat(backend/api): implementa endpoint de validação de atividades
+# inclui: router, service, repository, schema — tudo junto
+```
+
+**Sempre** progrida em etapas:
+```
+feat(backend/models): adiciona schema ActivityValidation
+feat(backend/repositories): adiciona ActivityRepository.update_status
+feat(backend/services): implementa ActivityService.validate
+feat(backend/api): adiciona endpoint PATCH /activities/{id}/validate
+```
+
+Cada etapa deve compilar e fazer sentido isoladamente.
+
+### Testes sempre em commit separado
+
+Commits de implementação (`feat`, `fix`, `refactor`) **nunca** devem incluir arquivos de teste. A sequência correta é:
+
+1. `feat(escopo): implementa a funcionalidade X`
+2. `test(escopo): adiciona testes para X`
+
+**Nunca** faça:
+```
+feat(inference-engine/rules): implementa rl03 e adiciona testes
+```
+
+**Sempre** separe:
+```
+feat(inference-engine/rules): implementa regra rl03 de status acadêmico
+test(inference-engine/rules): adiciona cenários apto/risco/inapto para rl03
+```
 
 ---
 
