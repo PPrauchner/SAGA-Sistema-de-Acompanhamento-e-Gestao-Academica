@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useApp, DEMO_USERS, UserRole } from "../../context/AppContext";
+import { useApp, UserRole } from "../../context/AppContext";
 import { AuthLayout } from "./AuthLayout";
 import {
   Eye, EyeOff, Mail, Lock, AlertCircle, CheckCircle2,
@@ -30,7 +30,7 @@ const FIELD_DEFAULTS: Record<UserRole, { email: string }> = {
 type FormState = "idle" | "loading" | "success" | "error";
 
 export function LoginPage() {
-  const { setCurrentUser, setCurrentPage } = useApp();
+  const { login, setCurrentPage } = useApp();
   const [role, setRole] = useState<UserRole>("coordenacao");
   const [email, setEmail] = useState(FIELD_DEFAULTS.coordenacao.email);
   const [password, setPassword] = useState("senha123");
@@ -59,11 +59,14 @@ export function LoginPage() {
     if (err) { setErrorMsg(err); return; }
     setErrorMsg("");
     setFormState("loading");
-    await new Promise((r) => setTimeout(r, 1200));
-    setFormState("success");
-    await new Promise((r) => setTimeout(r, 600));
-    setCurrentUser(DEMO_USERS[role]);
-    setCurrentPage("dashboard");
+    try {
+      await login(email, password);
+      // O AppContext redireciona para a área do papel quando o perfil chega.
+      setFormState("success");
+    } catch {
+      setFormState("idle");
+      setErrorMsg("E-mail ou senha inválidos.");
+    }
   };
 
   const isLoading = formState === "loading";

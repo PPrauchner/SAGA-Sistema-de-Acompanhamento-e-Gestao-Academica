@@ -363,6 +363,7 @@ Commits atômicos seguindo Conventional Commits. Detalhes em [`guidelines/Commit
 | Inaurrara Flores | [@inaurrara](https://github.com/inaurrara) |
 | Lorenzo Ponsci Ficher | [@lorenzoficher](https://github.com/lorenzoficher) |
 | Gabriel Dornelles | [@bielGD23](https://github.com/bielGD23) |
+| Gustavo dos Anjos | [@gustavodanjos](https://github.com/gustavodanjos) |
 
 ### Professores
 

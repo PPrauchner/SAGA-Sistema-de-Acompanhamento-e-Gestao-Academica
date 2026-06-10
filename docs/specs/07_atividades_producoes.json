@@ -17,7 +17,8 @@
 
   "requisitos_fundo": [
     "Coordenação cadastra e mantém tipos de atividade creditável com pontuação, limites e status ativo",
-    "Aluno registra atividades (incluindo produções) com comprovante (URL) e data de realização",
+    "Aluno registra atividades (incluindo produções) enviando o comprovante via upload real (Firebase Storage) e a data de realização",
+    "Upload de comprovante via Firebase Storage faz parte do MVP: o arquivo é enviado ao backend, que o persiste no bucket (Admin SDK) e grava a URL de download em comprovante_url — desvio consciente vs. specs originais (que tratavam comprovante como URL string)",
     "Fluxo de status da atividade: rascunho → enviado → (aprovado | rejeitado)",
     "Motor verifica elegibilidade antes de contabilizar créditos (RL04)",
     "Motor calcula pontuação de produções ponderando nível do veículo (RL05)",
@@ -170,13 +171,27 @@
         "tipo_id": "string",
         "descricao": "string",
         "data_realizacao": "string (ISO8601)",
-        "comprovante_url": "string | null",
+        "comprovante_url": "string | null (URL de download retornada por POST /api/v1/activities/{activity_id}/comprovante)",
         "status": "string ('rascunho'|'enviado')"
       },
       "response_201": {
         "id": "string",
         "elegibilidade_preliminar": "boolean (motor RL04 roda imediatamente)",
         "notificacao_enviada": "boolean"
+      }
+    },
+    {
+      "path": "/api/v1/activities/{activity_id}/comprovante",
+      "method": "POST",
+      "descricao": "Faz upload real do comprovante (PDF ou imagem) ao Firebase Storage e devolve a URL de download para gravar em comprovante_url. Backend persiste no bucket via Admin SDK; o frontend nunca escreve direto no Storage.",
+      "papeis_autorizados": ["aluno"],
+      "aspectos_aplicados": ["@requires_role('aluno')", "@audit_operation"],
+      "request_body": {
+        "arquivo": "multipart/form-data (PDF|JPEG|PNG, tamanho máximo validado no backend)"
+      },
+      "response_201": {
+        "comprovante_url": "string (URL de download tokenizada gerada pelo Storage)",
+        "path_bucket": "string (comprovantes/{programa_id}/{student_id}/{activity_id}/{filename})"
       }
     },
     {
@@ -240,7 +255,7 @@
         "status_publicacao": "string ('publicado'|'submetido'|'aceito')",
         "observacao": "string | null",
         "data_realizacao": "string (ISO8601)",
-        "comprovante_url": "string | null"
+        "comprovante_url": "string | null (URL de download retornada por POST /api/v1/activities/{activity_id}/comprovante)"
       },
       "response_201": {
         "id": "string",

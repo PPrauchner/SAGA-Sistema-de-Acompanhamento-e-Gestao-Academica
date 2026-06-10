@@ -1,50 +1,22 @@
 # CLAUDE.md — SAGA
 
-Sistema de Acompanhamento e Gestão Acadêmica (SAGA) para programas de
-pós-graduação. Gerencia discentes, planos de trabalho, atividades
-creditáveis, produções bibliográficas e prorrogações. Dois paradigmas
-obrigatórios: **motor de inferência lógica** (Python puro) e **AOP**
-(decoradores/metaclasses nativos do Python).
+Instruções de desenvolvimento para o SAGA — Sistema de Acompanhamento e Gestão Acadêmica.
+
+> Para entender o **domínio do problema** (entidades, ciclo de vida do discente, regras acadêmicas, papéis), ver [`CONTEXT.md`](./CONTEXT.md).
 
 ---
 
+## Skills e Regras de Comportamento
+
+@.claude/rules/karpathy-principles.md
+
+> As regras específicas de backend e frontend são carregadas automaticamente
+> via .claude/rules/backend.md e .claude/rules/frontend.md quando o Claude
+> abre arquivos em backend/ ou src/.
+
 ## Arquitetura
 
-```
-raiz/
-├── src/                        # Frontend React + Vite + Tailwind
-│   ├── app/
-│   │   ├── components/         # Páginas e componentes UI (shadcn/ui)
-│   │   └── context/AppContext  # Estado global e roteamento
-│   ├── api/                    # Clientes HTTP por domínio
-│   ├── hooks/                  # useAuth, useNotifications
-│   ├── lib/firebase.ts         # Firebase SDK (Auth + Firestore)
-│   └── styles/
-├── backend/
-│   ├── app/
-│   │   ├── main.py             # FastAPI + lifespan Firebase
-│   │   ├── core/               # config, firebase admin, auth dependency
-│   │   ├── api/v1/             # Routers FastAPI por domínio
-│   │   ├── models/             # Pydantic schemas
-│   │   ├── services/           # Lógica de negócio (+ inference_service)
-│   │   ├── repositories/       # Acesso ao Firestore
-│   │   └── aspects/            # 5 aspectos AOP
-│   ├── inference_engine/       # Motor lógico isolado (sem imports externos)
-│   │   ├── terms.py            # Atom, Variable, Compound
-│   │   ├── unification.py      # unify()
-│   │   ├── substitution.py     # apply()
-│   │   ├── resolver.py         # solve() — sem backtracking
-│   │   ├── knowledge_base.py   # FactBase + RuleBase + InferenceEngine
-│   │   ├── rules/              # RL01–RL05 (módulos declarativos)
-│   │   └── tests/              # pytest — 5 arquivos, sem __init__.py
-│   └── scripts/seed_firestore.py
-├── docs/specs/                 # 10 JSONs de especificação técnica
-├── guidelines/
-│   ├── Guidelines.md
-│   └── CommitConventions.md    # Template e regras de commit
-├── .gitmessage                 # Template git: git config commit.template .gitmessage
-└── CLAUDE.md                   # este arquivo
-```
+Ver [`.claude/rules/architecture.md`](./.claude/rules/architecture.md) para a árvore completa de arquivos e camadas do backend.
 
 ---
 
@@ -95,6 +67,7 @@ VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_PROJECT_ID=
 VITE_AUTH_DOMAIN=
 VITE_FIRESTORE_DB=
+VITE_API_URL=        # base da API do backend; default http://localhost:8000 se ausente
 ```
 
 ---
@@ -110,13 +83,16 @@ O `inference_engine/` é **completamente isolado**:
   correspondente em `rules/` (RL01–RL05), não a lógica de controle
 
 ### Regras implementadas
-| ID   | Arquivo                  | Descrição                             |
-|------|--------------------------|---------------------------------------|
-| RL01 | `defense_eligibility.py` | Aptidão à defesa (5 condições AND)    |
-| RL02 | `credit_validation.py`   | Créditos por grupo (mín/máx)          |
-| RL03 | `academic_status.py`     | Em risco (4 cláusulas OR, sem NAF)    |
-| RL04 | `activity_eligibility.py`| Elegibilidade de atividade creditável |
-| RL05 | `production_scoring.py`  | Pontuação ponderada por veículo       |
+
+Ver descrições de domínio em [`CONTEXT.md → Regras Acadêmicas`](./CONTEXT.md#regras-acadêmicas-motor-de-inferência).
+
+| ID   | Arquivo                    |
+|------|----------------------------|
+| RL01 | `defense_eligibility.py`   |
+| RL02 | `credit_validation.py`     |
+| RL03 | `academic_status.py`       |
+| RL04 | `activity_eligibility.py`  |
+| RL05 | `production_scoring.py`    |
 
 ---
 
@@ -147,36 +123,27 @@ Flags para desabilitar aspectos em teste: `aspect_config.py`.
 
 ## Firebase / Firestore
 
+Ver coleções e entidades em [`CONTEXT.md → Modelo de Dados`](./CONTEXT.md#modelo-de-dados-coleções-firestore).
+
+Regras de acesso:
 - **Auth**: custom claims `{ role, programa_id }` em cada token JWT
 - **Escrita**: exclusivamente via Admin SDK no backend
 - **Leitura direta no frontend**: apenas `notifications/` (onSnapshot)
-- **Coleções principais**: `users`, `students`, `advisors`, `activity_types`,
-  `vehicles`, `programs`, `audit_logs`, `notifications`, `invites`
-- **Sub-coleções**: `students/{id}/work_plan`, `/activities`, `/productions`,
-  `/extensions`, `/inferred_status`, `/history`
 
 ---
-
-## Papéis e Permissões
-
-| Papel         | Permissões principais                                       |
-|---------------|-------------------------------------------------------------|
-| `coordenacao` | CRUD completo, validação final, relatórios, configurações   |
-| `orientador`  | Leitura de orientandos, criar plano/tasks, emitir pareceres |
-| `aluno`       | Próprios dados, registrar atividades/produções/progresso    |
 
 ---
 
 ## Convenções de Código
 
-- **Python**: docstrings em todos os módulos; tipagem explícita; sem lógica
-  nos arquivos de rota (delegar para services)
-- **TypeScript**: um arquivo de API por domínio em `src/api/`; hooks em
-  `src/hooks/`; alias `@` aponta para `src/`
-- **Commits**: atômicos, seguir template em `guidelines/CommitConventions.md`
-- **Testes**: pytest para o motor de inferência; cobertura obrigatória de
-  todos os cenários apto/risco/inapto das 5 regras
+Ver [`.claude/rules/code-conventions.md`](./.claude/rules/code-conventions.md) para: docstrings Google Style, type hints Python 3.10+, restrições do enunciado (isolamento do motor, AOP, routers), convenções TypeScript e Clean Code.
 
+Resumo das regras críticas:
+- **inference_engine/**: isolado, sem imports externos, ponto de entrada único `InferenceEngine.query()`
+- **Aspectos**: sem bibliotecas externas; documentar Join Point, Advice e Weaving em cada docstring
+- **Routers**: apenas receber request → chamar service → retornar response; sem lógica de negócio
+- **Commits**: menor mudança funcional possível — progredir camada a camada (model → repository → service → router), nunca agrupar arquivos de etapas distintas; testes **sempre** em commit separado (`feat`/`fix` primeiro, `test` depois); ver `guidelines/CommitConventions.md`
+- **Testes**: pytest, cobrir todos os cenários apto/risco/inapto das 5 regras
 ---
 
 ## Especificações Técnicas
@@ -226,86 +193,6 @@ gh pr create \
 O hook `.claude/hooks/post-bash.sh` detecta o `gh pr create` automaticamente
 e move a issue para **In Review** no GitHub Projects (projeto #4).
 
-### Regras
+### Regras Gerais
 
-- Nunca abra PR sem ter o `.claude/current-issue` preenchido — o hook não saberá qual issue mover.
-- O arquivo `.claude/current-issue` é ignorado pelo git (listado no `.gitignore`).
-- Se a issue não estiver vinculada ao projeto #4, o hook avisará mas não falhará.
-
----
-
-## Comportamento Obrigatório (leia antes de qualquer tarefa)
-
-### 1. Fluxo SDD — spec antes de código
-
-Antes de implementar qualquer feature ou modificar lógica de negócio:
-1. Identifique o(s) spec(s) correspondente(s) em `docs/specs/`
-2. Leia o spec completo com `Read`
-3. Se houver ambiguidade entre o spec e o código existente, pergunte antes de assumir
-4. Ao terminar, compare a implementação com o spec e liste divergências
-
-Mapeamento rápido de domínio → spec:
-
-| Domínio                        | Spec                              |
-|--------------------------------|-----------------------------------|
-| Motor de inferência / regras   | `01_motor_inferencia.json`        |
-| Aspectos AOP                   | `02_aspectos_aop.json`            |
-| Firestore / schema             | `03_firebase_schema.json`         |
-| Autenticação / convites        | `04_autenticacao.json`            |
-| Discentes / orientadores       | `05_discentes.json`               |
-| Plano de trabalho              | `06_plano_trabalho.json`          |
-| Atividades / produções         | `07_atividades_producoes.json`    |
-| Checklist / prorrogações       | `08_checklist_prorrogacoes.json`  |
-| Relatórios / dashboard         | `09_relatorios_dashboard.json`    |
-| Integração frontend            | `10_integracao_frontend.json`     |
-
-### 2. Uma issue por sessão
-
-Mantenha o foco em uma única issue por conversa. Se perceber que a tarefa
-envolve múltiplos domínios não relacionados, sinalize ao usuário e sugira
-quebrar em issues separadas.
-
-### 3. Commits atômicos durante o trabalho
-
-Não acumule mudanças em áreas diferentes sem commitar. A cada etapa lógica
-concluída (ex: spec lido + modelo criado, ou endpoint implementado + teste
-passando), faça um commit seguindo `guidelines/CommitConventions.md`.
-
-**Critérios para atomicidade — um commit deve ter UMA responsabilidade lógica:**
-
-- **Uma camada por commit**: não misture mudanças em `models/`, `services/` e
-  `api/v1/` no mesmo commit, mesmo que todas sejam do mesmo domínio.
-- **Dependências e config separados do código funcional**: alterações em
-  `pyproject.toml`, `.env.example`, variáveis de ambiente ou arquivos de
-  configuração devem ser commits independentes, não agrupados com features.
-- **Scaffolding separado de implementação**: criar a estrutura de um arquivo
-  (ex: `router = APIRouter()` em stubs) é um commit; implementar a lógica
-  de um endpoint é outro commit.
-- **Um domínio por commit**: alterações que tocam `students/` e `activities/`
-  ao mesmo tempo devem ser dois commits, salvo se a mudança for exclusivamente
-  transversal (ex: renomear um campo compartilhado).
-- **Teste junto com o código que ele testa**: o teste de uma função vai no
-  mesmo commit da função, não depois.
-
-**Exemplos corretos para inicialização de um módulo backend:**
-```
-chore(backend): adiciona fastapi, pydantic-settings, firebase-admin ao pyproject.toml
-feat(backend/config): implementa Settings com pydantic-settings e cria .env.example
-feat(backend/firebase): stub de inicialização do Admin SDK
-feat(backend/core): inicializa app FastAPI com CORS, lifespan e registro de routers
-feat(backend/health): GET /api/v1/health retornando status da API e do Firebase
-```
-
-**Sinal de alerta**: se a mensagem de commit precisar de mais de uma frase no
-corpo para descrever *o que* foi feito (não *por que*), o commit provavelmente
-deve ser dividido.
-
-### 4. Nunca quebre os testes do inference_engine
-
-O motor de inferência é isolado e tem testes obrigatórios. Após qualquer
-alteração em `backend/inference_engine/`, rode:
-```bash
-pytest backend/inference_engine/tests/ -v
-```
-Não prossiga se algum teste falhar.
-
+ver descrições de regras gerais em [`CONTEXT.md → Regras Gerais`]
