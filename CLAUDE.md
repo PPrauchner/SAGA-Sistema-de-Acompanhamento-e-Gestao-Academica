@@ -67,6 +67,7 @@ VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_PROJECT_ID=
 VITE_AUTH_DOMAIN=
 VITE_FIRESTORE_DB=
+VITE_API_URL=        # base da API do backend; default http://localhost:8000 se ausente
 ```
 
 ---
