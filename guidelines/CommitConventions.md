@@ -10,6 +10,24 @@ Cada commit deve representar **uma única mudança lógica e coerente**. Um comm
 
 **Nunca** agrupe mudanças não relacionadas em um único commit.
 
+### Testes sempre em commit separado
+
+Commits de implementação (`feat`, `fix`, `refactor`) **nunca** devem incluir arquivos de teste. A sequência correta é:
+
+1. `feat(escopo): implementa a funcionalidade X`
+2. `test(escopo): adiciona testes para X`
+
+**Nunca** faça:
+```
+feat(inference-engine/rules): implementa rl03 e adiciona testes
+```
+
+**Sempre** separe:
+```
+feat(inference-engine/rules): implementa regra rl03 de status acadêmico
+test(inference-engine/rules): adiciona cenários apto/risco/inapto para rl03
+```
+
 ---
 
 ## Template

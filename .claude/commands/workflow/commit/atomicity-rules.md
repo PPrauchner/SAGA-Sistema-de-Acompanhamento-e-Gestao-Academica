@@ -6,7 +6,7 @@
 - **Config/deps separados de features** — `pyproject.toml`, `.env.example`, arquivos de configuração = commit independente
 - **Scaffolding separado de implementação** — criar estrutura de arquivo ≠ implementar lógica
 - **Um domínio por commit** — mudanças em `students/` e `activities/` = dois commits
-- **Teste junto com o código que testa** — o teste vai no mesmo commit da função que ele testa
+- **Teste separado do código que testa** — o teste vai em outro commit separado da função que ele testa
 - **Docs junto com o que documentam** — docstrings e README do módulo vão no commit do módulo
 
 ## Tipos

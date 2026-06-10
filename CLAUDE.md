@@ -141,7 +141,7 @@ Resumo das regras críticas:
 - **inference_engine/**: isolado, sem imports externos, ponto de entrada único `InferenceEngine.query()`
 - **Aspectos**: sem bibliotecas externas; documentar Join Point, Advice e Weaving em cada docstring
 - **Routers**: apenas receber request → chamar service → retornar response; sem lógica de negócio
-- **Commits**: atômicos, seguir `guidelines/CommitConventions.md`
+- **Commits**: atômicos, seguir `guidelines/CommitConventions.md`; testes **sempre** em commit separado da implementação (`feat`/`fix` primeiro, `test` depois)
 - **Testes**: pytest, cobrir todos os cenários apto/risco/inapto das 5 regras
 ---
 
