@@ -1,8 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
-import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building } from "lucide-react";
+import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building, Plus, Trash2, CheckCircle2, XCircle } from "lucide-react";
+import { programsApi } from "../../../api/programsApi";
+import { activityTypesApi } from "../../../api/activityTypesApi";
+import { toast } from "sonner";
 
-const TABS = [
+const BASE_TABS = [
   { id: "perfil", label: "Perfil", icon: <User size={16} /> },
   { id: "notificacoes", label: "Notificações", icon: <Bell size={16} /> },
   { id: "seguranca", label: "Segurança", icon: <Shield size={16} /> },
@@ -14,6 +17,62 @@ export function SettingsPage() {
   const { currentUser, darkMode, toggleDarkMode } = useApp();
   const [activeTab, setActiveTab] = useState("perfil");
   const [saved, setSaved] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Program Config State
+  const [programConfig, setProgramConfig] = useState<any>(null);
+  const [activityTypes, setActivityTypes] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (activeTab === "programa" && currentUser?.role === "coordenacao") {
+      fetchProgramData();
+    }
+  }, [activeTab, currentUser?.role]);
+
+  const fetchProgramData = async () => {
+    setLoading(true);
+    try {
+      const [config, types] = await Promise.all([
+        programsApi.getProgramConfig(),
+        activityTypesApi.getActivityTypes()
+      ]);
+      setProgramConfig(config);
+      setActivityTypes(types);
+    } catch (error) {
+      toast.error("Erro ao carregar dados do programa");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await programsApi.updateProgramConfig(programConfig);
+      setSaved(true);
+      toast.success("Configurações atualizadas");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      toast.error("Erro ao salvar configurações");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleToggleActivity = async (id: string) => {
+    try {
+      await activityTypesApi.toggleActivityType(id);
+      setActivityTypes(activityTypes.map(t => t.id === id ? { ...t, ativo: !t.ativo } : t));
+      toast.success("Status atualizado");
+    } catch (error) {
+      toast.error("Erro ao atualizar status");
+    }
+  };
+
+  const tabs = currentUser?.role === "coordenacao" 
+    ? [...BASE_TABS, { id: "programa", label: "Regras do Programa", icon: <Building size={16} /> }]
+    : BASE_TABS;
 
   const handleSave = () => {
     setSaved(true);
@@ -29,7 +88,7 @@ export function SettingsPage() {
 
       {/* Mobile horizontal tab bar */}
       <div className="md:hidden flex gap-2 overflow-x-auto pb-2 mb-4" style={{ scrollbarWidth: "none" }}>
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -51,7 +110,7 @@ export function SettingsPage() {
         {/* Sidebar — desktop only */}
         <div className="hidden md:block w-56 flex-shrink-0">
           <div className="rounded-2xl p-3 sticky top-0" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-            {TABS.map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -286,6 +345,97 @@ export function SettingsPage() {
                 <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
                   <strong style={{ color: "var(--foreground)" }}>Versão do Sistema:</strong> SAGA v2.4.1 · Build 2025.03.01
                 </p>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "programa" && currentUser?.role === "coordenacao" && (
+            <div className="space-y-6">
+              <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)", marginBottom: "24px" }}>Regras Acadêmicas do Programa</h2>
+                
+                {loading && !programConfig ? (
+                  <p>Carregando...</p>
+                ) : (
+                  <form onSubmit={handleSaveConfig} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Básicos</label>
+                      <input 
+                        type="number"
+                        value={programConfig?.creditos_grupo_basico_min || 0}
+                        onChange={e => setProgramConfig({...programConfig, creditos_grupo_basico_min: parseInt(e.target.value)})}
+                        className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Específicos</label>
+                      <input 
+                        type="number"
+                        value={programConfig?.creditos_grupo_especifico_min || 0}
+                        onChange={e => setProgramConfig({...programConfig, creditos_grupo_especifico_min: parseInt(e.target.value)})}
+                        className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5 opacity-70">Máximo Créditos Tecnológicos</label>
+                      <input 
+                        type="number"
+                        value={programConfig?.creditos_grupo_tecnologico_max || 0}
+                        onChange={e => setProgramConfig({...programConfig, creditos_grupo_tecnologico_max: parseInt(e.target.value)})}
+                        className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Total de Créditos</label>
+                      <input 
+                        type="number"
+                        value={programConfig?.creditos_total_min || 0}
+                        onChange={e => setProgramConfig({...programConfig, creditos_total_min: parseInt(e.target.value)})}
+                        className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold mb-1.5 opacity-70">Meses até Qualificação</label>
+                      <input 
+                        type="number"
+                        value={programConfig?.meses_ate_qualificacao || 0}
+                        onChange={e => setProgramConfig({...programConfig, meses_ate_qualificacao: parseInt(e.target.value)})}
+                        className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
+                      />
+                    </div>
+                    
+                    <div className="col-span-full">
+                      <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-xl px-5 py-2.5 bg-[#123C7A] text-white font-semibold text-sm">
+                        <Save size={15} /> {saved ? "Salvo!" : "Salvar Regras"}
+                      </button>
+                    </div>
+                  </form>
+                )}
+              </div>
+
+              <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                <div className="flex items-center justify-between mb-6">
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)" }}>Tipos de Atividade</h2>
+                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D4A017] text-white text-xs font-bold">
+                    <Plus size={14} /> Novo Tipo
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {activityTypes.map(type => (
+                    <div key={type.id} className="flex items-center justify-between p-3 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
+                      <div>
+                        <p className="text-sm font-bold">{type.nome}</p>
+                        <p className="text-xs opacity-60">{type.categoria} · {type.pontuacao_base} pts</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => handleToggleActivity(type.id)} title={type.ativo ? "Desativar" : "Ativar"}>
+                          {type.ativo ? <CheckCircle2 size={18} className="text-green-600" /> : <XCircle size={18} className="text-red-500" />}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           )}
