@@ -1,0 +1,31 @@
+{
+  "_comentario": [
+    "Este arquivo é um TEMPLATE. Copie-o para settings.local.json e preencha.",
+    "settings.local.json está no .gitignore — nunca commite esse arquivo.",
+    "",
+    "PASSO 1: Substitua /CAMINHO/LOCAL/DO/REPOSITORIO/ pelo caminho real",
+    "         no seu computador (onde o repo está clonado).",
+    "         Exemplo Windows: C:/Users/SeuNome/Documents/SAGA/**",
+    "         Exemplo Mac/Linux: /home/seunome/projetos/SAGA/**",
+    "",
+    "PASSO 2: Renomeie para settings.local.json",
+    "",
+    "PASSO 3: Não adicione nomes de colegas nem senhas aqui."
+  ],
+  "permissions": {
+    "allow": [
+      "Bash(gh issue *)",
+      "Bash(git add *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)",
+      "Bash(git fetch *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(git status)",
+      "Bash(git log *)",
+      "Bash(python -m pytest *)",
+
+      "Read(/CAMINHO/LOCAL/DO/REPOSITORIO/**)"
+    ]
+  }
+}

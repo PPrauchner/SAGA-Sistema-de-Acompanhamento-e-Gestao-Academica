@@ -1,50 +1,22 @@
 # CLAUDE.md — SAGA
 
-Sistema de Acompanhamento e Gestão Acadêmica (SAGA) para programas de
-pós-graduação. Gerencia discentes, planos de trabalho, atividades
-creditáveis, produções bibliográficas e prorrogações. Dois paradigmas
-obrigatórios: **motor de inferência lógica** (Python puro) e **AOP**
-(decoradores/metaclasses nativos do Python).
+Instruções de desenvolvimento para o SAGA — Sistema de Acompanhamento e Gestão Acadêmica.
+
+> Para entender o **domínio do problema** (entidades, ciclo de vida do discente, regras acadêmicas, papéis), ver [`CONTEXT.md`](./CONTEXT.md).
 
 ---
 
+## Skills e Regras de Comportamento
+
+@.claude/rules/karpathy-principles.md
+
+> As regras específicas de backend e frontend são carregadas automaticamente
+> via .claude/rules/backend.md e .claude/rules/frontend.md quando o Claude
+> abre arquivos em backend/ ou src/.
+
 ## Arquitetura
 
-```
-raiz/
-├── src/                        # Frontend React + Vite + Tailwind
-│   ├── app/
-│   │   ├── components/         # Páginas e componentes UI (shadcn/ui)
-│   │   └── context/AppContext  # Estado global e roteamento
-│   ├── api/                    # Clientes HTTP por domínio
-│   ├── hooks/                  # useAuth, useNotifications
-│   ├── lib/firebase.ts         # Firebase SDK (Auth + Firestore)
-│   └── styles/
-├── backend/
-│   ├── app/
-│   │   ├── main.py             # FastAPI + lifespan Firebase
-│   │   ├── core/               # config, firebase admin, auth dependency
-│   │   ├── api/v1/             # Routers FastAPI por domínio
-│   │   ├── models/             # Pydantic schemas
-│   │   ├── services/           # Lógica de negócio (+ inference_service)
-│   │   ├── repositories/       # Acesso ao Firestore
-│   │   └── aspects/            # 5 aspectos AOP
-│   ├── inference_engine/       # Motor lógico isolado (sem imports externos)
-│   │   ├── terms.py            # Atom, Variable, Compound
-│   │   ├── unification.py      # unify()
-│   │   ├── substitution.py     # apply()
-│   │   ├── resolver.py         # solve() — sem backtracking
-│   │   ├── knowledge_base.py   # FactBase + RuleBase + InferenceEngine
-│   │   ├── rules/              # RL01–RL05 (módulos declarativos)
-│   │   └── tests/              # pytest — 5 arquivos, sem __init__.py
-│   └── scripts/seed_firestore.py
-├── docs/specs/                 # 10 JSONs de especificação técnica
-├── guidelines/
-│   ├── Guidelines.md
-│   └── CommitConventions.md    # Template e regras de commit
-├── .gitmessage                 # Template git: git config commit.template .gitmessage
-└── CLAUDE.md                   # este arquivo
-```
+Ver [`.claude/rules/architecture.md`](./.claude/rules/architecture.md) para a árvore completa de arquivos e camadas do backend.
 
 ---
 
@@ -110,13 +82,16 @@ O `inference_engine/` é **completamente isolado**:
   correspondente em `rules/` (RL01–RL05), não a lógica de controle
 
 ### Regras implementadas
-| ID   | Arquivo                  | Descrição                             |
-|------|--------------------------|---------------------------------------|
-| RL01 | `defense_eligibility.py` | Aptidão à defesa (5 condições AND)    |
-| RL02 | `credit_validation.py`   | Créditos por grupo (mín/máx)          |
-| RL03 | `academic_status.py`     | Em risco (4 cláusulas OR, sem NAF)    |
-| RL04 | `activity_eligibility.py`| Elegibilidade de atividade creditável |
-| RL05 | `production_scoring.py`  | Pontuação ponderada por veículo       |
+
+Ver descrições de domínio em [`CONTEXT.md → Regras Acadêmicas`](./CONTEXT.md#regras-acadêmicas-motor-de-inferência).
+
+| ID   | Arquivo                    |
+|------|----------------------------|
+| RL01 | `defense_eligibility.py`   |
+| RL02 | `credit_validation.py`     |
+| RL03 | `academic_status.py`       |
+| RL04 | `activity_eligibility.py`  |
+| RL05 | `production_scoring.py`    |
 
 ---
 
@@ -147,23 +122,14 @@ Flags para desabilitar aspectos em teste: `aspect_config.py`.
 
 ## Firebase / Firestore
 
+Ver coleções e entidades em [`CONTEXT.md → Modelo de Dados`](./CONTEXT.md#modelo-de-dados-coleções-firestore).
+
+Regras de acesso:
 - **Auth**: custom claims `{ role, programa_id }` em cada token JWT
 - **Escrita**: exclusivamente via Admin SDK no backend
 - **Leitura direta no frontend**: apenas `notifications/` (onSnapshot)
-- **Coleções principais**: `users`, `students`, `advisors`, `activity_types`,
-  `vehicles`, `programs`, `audit_logs`, `notifications`, `invites`
-- **Sub-coleções**: `students/{id}/work_plan`, `/activities`, `/productions`,
-  `/extensions`, `/inferred_status`, `/history`
 
 ---
-
-## Papéis e Permissões
-
-| Papel         | Permissões principais                                       |
-|---------------|-------------------------------------------------------------|
-| `coordenacao` | CRUD completo, validação final, relatórios, configurações   |
-| `orientador`  | Leitura de orientandos, criar plano/tasks, emitir pareceres |
-| `aluno`       | Próprios dados, registrar atividades/produções/progresso    |
 
 ---
 
@@ -177,6 +143,12 @@ Flags para desabilitar aspectos em teste: `aspect_config.py`.
 - **Testes**: pytest para o motor de inferência; cobertura obrigatória de
   todos os cenários apto/risco/inapto das 5 regras
 
+Resumo das regras críticas:
+- **inference_engine/**: isolado, sem imports externos, ponto de entrada único `InferenceEngine.query()`
+- **Aspectos**: sem bibliotecas externas; documentar Join Point, Advice e Weaving em cada docstring
+- **Routers**: apenas receber request → chamar service → retornar response; sem lógica de negócio
+- **Commits**: atômicos, seguir `guidelines/CommitConventions.md`
+- **Testes**: pytest, cobrir todos os cenários apto/risco/inapto das 5 regras
 ---
 
 ## Especificações Técnicas
