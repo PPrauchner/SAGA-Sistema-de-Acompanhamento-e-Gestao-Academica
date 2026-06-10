@@ -50,17 +50,21 @@ export function useAuth(): UseAuthResult {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const idToken = await user.getIdToken();
-        setCurrentUser(user);
-        setToken(idToken);
-        setProfile(await getMe(idToken));
-      } else {
-        setCurrentUser(null);
-        setToken(null);
-        setProfile(null);
+      try {
+        if (user) {
+          const idToken = await user.getIdToken();
+          setCurrentUser(user);
+          setToken(idToken);
+          setProfile(await getMe(idToken));
+        } else {
+          setCurrentUser(null);
+          setToken(null);
+          setProfile(null);
+        }
+      } finally {
+        // Garante que o gate de loading sempre resolva, mesmo se getMe falhar.
+        setLoading(false);
       }
-      setLoading(false);
     });
     return unsubscribe;
   }, []);
