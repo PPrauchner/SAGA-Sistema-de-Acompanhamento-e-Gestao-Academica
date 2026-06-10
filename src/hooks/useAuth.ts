@@ -25,21 +25,8 @@ import {
 } from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
+import { getMe, type AuthProfile } from "@/api/authApi";
 import type { UserRole } from "@/app/context/AppContext";
-
-// Base da API do backend; em dev o FastAPI roda em http://localhost:8000.
-const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
-
-/** Perfil retornado por GET /api/v1/auth/me, já em camelCase. */
-interface AuthProfile {
-  uid: string;
-  email: string;
-  nome: string;
-  role: UserRole;
-  programaId: string;
-  studentId: string | null;
-  advisorId: string | null;
-}
 
 /** Valor exposto pelo hook useAuth. */
 interface UseAuthResult {
@@ -55,25 +42,6 @@ interface UseAuthResult {
   loading: boolean;
 }
 
-async function fetchProfile(token: string): Promise<AuthProfile> {
-  const response = await fetch(`${API_URL}/api/v1/auth/me`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!response.ok) {
-    throw new Error(`Falha ao carregar perfil (HTTP ${response.status})`);
-  }
-  const data = await response.json();
-  return {
-    uid: data.uid,
-    email: data.email,
-    nome: data.nome,
-    role: data.role,
-    programaId: data.programa_id,
-    studentId: data.student_id ?? null,
-    advisorId: data.advisor_id ?? null,
-  };
-}
-
 export function useAuth(): UseAuthResult {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<AuthProfile | null>(null);
@@ -86,7 +54,7 @@ export function useAuth(): UseAuthResult {
         const idToken = await user.getIdToken();
         setCurrentUser(user);
         setToken(idToken);
-        setProfile(await fetchProfile(idToken));
+        setProfile(await getMe(idToken));
       } else {
         setCurrentUser(null);
         setToken(null);
