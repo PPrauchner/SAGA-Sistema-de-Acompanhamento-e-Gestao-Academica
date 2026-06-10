@@ -103,3 +103,12 @@ class InviteResponse(BaseModel):
     # UUID do convite — retornado apenas para testes; em produção só por e-mail.
     token: str
     expira_em: str  # ISO8601
+
+
+class FirstAccessResponse(BaseModel):
+    """Resposta 200 de POST /api/v1/auth/first-access: conta ativada."""
+
+    message: str
+    uid: str
+    role: Role
+    email: str
