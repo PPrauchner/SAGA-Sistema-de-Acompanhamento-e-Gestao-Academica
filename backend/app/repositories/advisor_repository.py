@@ -11,3 +11,51 @@ Responsabilidades:
 - check_advisor_capacity(advisor_id): verifica se orientador ainda está abaixo do
   limite_orientandos configurado.
 """
+
+from __future__ import annotations
+
+from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.repositories.student_repository import StudentRepository
+
+
+class AdvisorRepository(FirebaseRepository):
+    def __init__(self) -> None:
+        super().__init__("advisors")
+
+    async def get_advisors_with_student_count(
+        self,
+    ) -> list[dict]:
+
+        advisors = await self.list_all()
+
+        students = await StudentRepository().list_all()
+
+        for advisor in advisors:
+            advisor["orientandos_ativos"] = sum(
+                1
+                for student in students
+                if student.get("orientador_id") == advisor["id"]
+            )
+
+        return advisors
+
+    async def check_advisor_capacity(
+        self,
+        advisor_id: str,
+    ) -> bool:
+
+        advisor = await self.get(advisor_id)
+
+        if advisor is None:
+            return False
+
+        students = await StudentRepository().list_all()
+
+        current = sum(
+            1 for student in students if student.get("orientador_id") == advisor_id
+        )
+
+        return current < advisor.get(
+            "limite_orientandos",
+            5,
+        )

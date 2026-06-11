@@ -10,3 +10,41 @@ Responsabilidades:
   na coleção students/ filtrando por orientador_id).
 - Mapear o documento Firestore da coleção advisors/.
 """
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+
+
+class AdvisorCreateRequest(BaseModel):
+    nome: str
+    email: str
+    departamento: str
+
+    lattes: str | None = None
+    programa_id: str
+
+    limite_orientandos: int = 5
+
+
+class AdvisorUpdateRequest(BaseModel):
+    nome: str | None = None
+    departamento: str | None = None
+
+    lattes: str | None = None
+    limite_orientandos: int | None = None
+
+
+class AdvisorResponse(BaseModel):
+    id: str
+
+    nome: str
+    email: str
+
+    departamento: str
+    programa_id: str
+
+    lattes: str | None = None
+
+    limite_orientandos: int
+    orientandos_ativos: int
