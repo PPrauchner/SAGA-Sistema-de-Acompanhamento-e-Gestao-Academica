@@ -1,6 +1,6 @@
 [project]
 name = "saga-sistema-de-acompanhamento-e-gestao-academica"
-version = "1.0.0-MVP"
+version = "1.0.0"
 description = "Sistema de Acompanhamento e Gestão Acadêmica para programas de pós-graduação"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -24,3 +24,11 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["backend/inference_engine/tests"]
 asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.16",
+]
