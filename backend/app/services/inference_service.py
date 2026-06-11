@@ -20,3 +20,67 @@ Responsabilidades:
 - É o único módulo que instancia o InferenceEngine — outros serviços não acessam o motor
   diretamente.
 """
+from backend.app.repositories.program_repository import ProgramRepository
+from backend.inference_engine.terms import Compound, Atom
+from backend.inference_engine.knowledge_base import FactBase, RuleBase, InferenceEngine
+
+class InferenceService:
+    """Serviço responsável por coordenar a carga de dados e executar o motor lógico."""
+
+    def __init__(self):
+        self._program_repo = ProgramRepository()
+
+    async def _load_program_facts(self, programa_id: str) -> list[Compound]:
+        """Carrega as configurações do programa e converte em fatos para o motor.
+
+        Args:
+            programa_id: O ID do programa.
+
+        Returns:
+            Lista de fatos (Compound) configurando os limites de créditos.
+        """
+        config = await self._program_repo.get_by_id(programa_id)
+        if not config:
+            return []
+
+        prog_atom = Atom(programa_id)
+        return [
+            Compound("min_creditos_basico", [prog_atom, Atom(config.creditos_grupo_basico_min)]),
+            Compound("min_creditos_especifico", [prog_atom, Atom(config.creditos_grupo_especifico_min)]),
+            Compound("max_creditos_tecnologico", [prog_atom, Atom(config.creditos_grupo_tecnologico_max)]),
+            Compound("min_creditos_total", [prog_atom, Atom(config.creditos_total_min)]),
+        ]
+
+    async def run_inference(self, student_id: str, programa_id: str) -> dict[str, bool]:
+        """Orquestra a carga de dados do aluno e executa as inferências do motor lógico.
+
+        Args:
+            student_id: ID do aluno.
+            programa_id: ID do programa do qual o aluno faz parte.
+
+        Returns:
+            Dicionário com os resultados booleanos das inferências (ex: creditos_validos).
+        """
+        # 1. Carregar configurações em formato de fatos lógicos
+        program_facts = await self._load_program_facts(programa_id)
+        
+        # 2. Instanciar FactBase e RuleBase
+        fact_base = FactBase()
+        for fact in program_facts:
+            fact_base.add_fact(fact)
+            
+        rule_base = RuleBase()
+        
+        # 3. Instanciar o motor
+        engine = InferenceEngine(fact_base, rule_base)
+        
+        # 4. Executar as consultas (queries)
+        student_atom = Atom(student_id)
+        
+        creditos_validos = engine.query_bool(Compound("creditos_validos", [student_atom]))
+        
+        return {
+            "creditos_validos": creditos_validos
+        }
+
+
