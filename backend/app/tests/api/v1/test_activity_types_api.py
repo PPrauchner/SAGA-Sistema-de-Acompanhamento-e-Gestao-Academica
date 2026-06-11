@@ -29,8 +29,9 @@ def test_get_activity_types_success():
     mock_service.get_all_by_program.return_value = [{"id": "1", "nome": "Artigo"}]
 
     # Override dependencies
-    app.dependency_overrides[get_current_user] = lambda: MagicMock(
-        programa_id="prog_default", role="coordenacao"
+    from backend.app.core.auth import CurrentUser
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
     )
     app.dependency_overrides[ActivityTypeService] = lambda: mock_service
 
@@ -52,8 +53,9 @@ def test_create_activity_type_success():
     mock_service.create_type.return_value = "new_id"
 
     # Override dependencies
-    app.dependency_overrides[get_current_user] = lambda: MagicMock(
-        programa_id="prog_default", role="coordenacao"
+    from backend.app.core.auth import CurrentUser
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
     )
     app.dependency_overrides[ActivityTypeService] = lambda: mock_service
 

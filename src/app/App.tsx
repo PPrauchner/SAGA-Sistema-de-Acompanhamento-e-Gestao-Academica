@@ -73,7 +73,18 @@ function PageRouter() {
 }
 
 function AppContent() {
-  const { currentPage } = useApp();
+  const { currentPage, loading } = useApp();
+
+  // Enquanto o estado de autenticação inicial não resolve, evita o flash da
+  // tela de login para usuários já autenticados.
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen"
+        style={{ background: "var(--background)", color: "var(--muted-foreground)", fontSize: "14px" }}>
+        Carregando…
+      </div>
+    );
+  }
 
   const isAuthPage = ["login", "register", "password-recovery", "change-password", "first-access"].includes(currentPage);
 

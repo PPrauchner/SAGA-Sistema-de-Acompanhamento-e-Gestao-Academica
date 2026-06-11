@@ -15,10 +15,9 @@ class ActivityTypeRepository(FirebaseRepository):
 
     def __init__(self):
         """Initializes the ActivityTypeRepository."""
-        super().__init__()
-        self.collection = "activity_types"
+        super().__init__("activity_types")
 
-    def get_all_by_program(self, programa_id: str) -> List[Dict[str, Any]]:
+    async def get_all_by_program(self, programa_id: str) -> List[Dict[str, Any]]:
         """Fetches all activity types belonging to a specific program.
 
         Args:
@@ -27,9 +26,9 @@ class ActivityTypeRepository(FirebaseRepository):
         Returns:
             A list of activity type documents.
         """
-        return self.query(self.collection, filters=[("programa_id", "==", programa_id)])
+        return await self.query(filters=[("programa_id", "==", programa_id)])
 
-    def get_type(self, type_id: str) -> Optional[Dict[str, Any]]:
+    async def get_type(self, type_id: str) -> Optional[Dict[str, Any]]:
         """Fetches a single activity type by ID.
 
         Args:
@@ -38,9 +37,9 @@ class ActivityTypeRepository(FirebaseRepository):
         Returns:
             The activity type data or None.
         """
-        return self.get(self.collection, type_id)
+        return await self.get(type_id)
 
-    def create_type(self, data: Dict[str, Any]) -> str:
+    async def create_type(self, data: Dict[str, Any]) -> str:
         """Creates a new activity type.
 
         Args:
@@ -49,9 +48,9 @@ class ActivityTypeRepository(FirebaseRepository):
         Returns:
             The ID of the created document.
         """
-        return self.create(self.collection, data)
+        return await self.create(data)
 
-    def update_type(self, type_id: str, data: Dict[str, Any]) -> bool:
+    async def update_type(self, type_id: str, data: Dict[str, Any]) -> bool:
         """Updates an existing activity type.
 
         Args:
@@ -61,4 +60,5 @@ class ActivityTypeRepository(FirebaseRepository):
         Returns:
             True if the update was successful.
         """
-        return self.update(self.collection, type_id, data)
+        return await self.update(type_id, data)
+

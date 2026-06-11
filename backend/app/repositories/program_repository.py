@@ -15,10 +15,9 @@ class ProgramRepository(FirebaseRepository):
 
     def __init__(self):
         """Initializes the ProgramRepository."""
-        super().__init__()
-        self.collection = "programs"
+        super().__init__("programs")
 
-    def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
+    async def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
         """Fetches the configuration for a given program.
 
         Args:
@@ -27,9 +26,9 @@ class ProgramRepository(FirebaseRepository):
         Returns:
             The program configuration data or None.
         """
-        return self.get(self.collection, programa_id)
+        return await self.get(programa_id)
 
-    def update_config(self, programa_id: str, data: Dict[str, Any]) -> bool:
+    async def update_config(self, programa_id: str, data: Dict[str, Any]) -> bool:
         """Updates the configuration for a given program.
 
         Args:
@@ -39,9 +38,9 @@ class ProgramRepository(FirebaseRepository):
         Returns:
             True if the update was successful.
         """
-        return self.update(self.collection, programa_id, data)
+        return await self.update(programa_id, data)
 
-    def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
+    async def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
         """Fetches all vehicle relevance levels for a program.
 
         Args:
@@ -51,9 +50,9 @@ class ProgramRepository(FirebaseRepository):
             A list of vehicle level mappings.
         """
         collection_path = f"{self.collection}/{programa_id}/vehicle_levels"
-        return self.query(collection_path)
+        return await self.query(subcollection_path=collection_path)
 
-    def update_vehicle_level(self, programa_id: str, veiculo_id: str, data: Dict[str, Any]) -> bool:
+    async def update_vehicle_level(self, programa_id: str, veiculo_id: str, data: Dict[str, Any]) -> bool:
         """Updates or creates a vehicle relevance level mapping.
 
         Args:
@@ -64,7 +63,14 @@ class ProgramRepository(FirebaseRepository):
         Returns:
             True if the update was successful.
         """
+        import asyncio
+        from backend.app.core.firebase import get_firestore_client
         collection_path = f"{self.collection}/{programa_id}/vehicle_levels"
-        # Using the vehicle ID as the document ID for the mapping
-        self.db.collection(collection_path).document(veiculo_id).set(data, merge=True)
-        return True
+        
+        def _update():
+            # Using the vehicle ID as the document ID for the mapping
+            get_firestore_client().collection(collection_path).document(veiculo_id).set(data, merge=True)
+            return True
+            
+        return await asyncio.to_thread(_update)
+

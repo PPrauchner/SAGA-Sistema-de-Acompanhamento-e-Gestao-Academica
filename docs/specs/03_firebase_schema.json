@@ -9,8 +9,20 @@
     "Firebase Auth com custom claims: { role: 'aluno'|'orientador'|'coordenacao', programa_id: 'prog_default' }",
     "Firestore como único banco de dados — nenhuma outra persistência no MVP",
     "Regras de segurança do Firestore: escrita apenas via backend (Admin SDK) — frontend lê apenas as próprias notificações via onSnapshot",
-    "Comprovante de atividade: campo URL string — Firebase Storage é opcional para o MVP"
+    "Comprovante de atividade/produção: upload real via Firebase Storage faz parte do MVP — o arquivo é enviado ao bucket e o campo comprovante_url recebe a URL de download gerada"
   ],
+
+  "firebase_storage": {
+    "descricao": "Upload real de comprovantes de atividades e produções. Faz parte do MVP (desvio consciente vs. specs originais, que tratavam o comprovante como URL string e o Storage como opcional).",
+    "bucket": "{FIREBASE_PROJECT_ID}.appspot.com",
+    "estrutura_paths": "comprovantes/{programa_id}/{student_id}/{activity_id}/{filename}",
+    "campo_url_gerado": "comprovante_url em students/{id}/activities e students/{id}/productions recebe a URL de download retornada pelo upload",
+    "regras_acesso": [
+      "Upload exclusivamente via backend (Admin SDK) — o frontend nunca escreve direto no bucket",
+      "Leitura via URL de download tokenizada, restrita ao próprio aluno, ao seu orientador e à coordenação",
+      "Tipos permitidos: PDF e imagens (JPEG/PNG); tamanho máximo validado no backend"
+    ]
+  },
 
   "colecoes": {
     "programs": {
@@ -151,7 +163,7 @@
             "aluno_id": "string",
             "descricao": "string",
             "data_realizacao": "Timestamp",
-            "comprovante_url": "string | null",
+            "comprovante_url": "string | null (URL de download gerada pelo upload no Firebase Storage)",
             "creditos_gerados": "float (calculado a partir do tipo)",
             "status": "string ('rascunho'|'enviado'|'aprovado'|'rejeitado')",
             "parecer_orientador": "string | null",

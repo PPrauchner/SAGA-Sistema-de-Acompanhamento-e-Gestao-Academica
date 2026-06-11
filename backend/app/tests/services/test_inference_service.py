@@ -6,17 +6,17 @@ from backend.inference_engine.terms import Compound, Atom
 
 @pytest.fixture
 def mock_program_config():
-    return ProgramConfig(
-        id="prog_test",
-        creditos_grupo_basico_min=12,
-        creditos_grupo_especifico_min=8,
-        creditos_grupo_tecnologico_max=4,
-        creditos_total_min=24,
-        meses_ate_qualificacao=12,
-        max_prorrogacoes=1,
-        duracao_prorrogacao_meses=6,
-        niveis_veiculo=[]
-    )
+    return {
+        "id": "prog_test",
+        "creditos_grupo_basico_min": 12,
+        "creditos_grupo_especifico_min": 8,
+        "creditos_grupo_tecnologico_max": 4,
+        "creditos_total_min": 24,
+        "meses_ate_qualificacao": 12,
+        "max_prorrogacoes": 1,
+        "duracao_prorrogacao_meses": 6,
+        "niveis_veiculo": []
+    }
 
 @pytest.fixture
 def anyio_backend():
@@ -27,7 +27,7 @@ def anyio_backend():
 async def test_load_program_facts(mock_repo_class, mock_program_config):
     # Arrange
     mock_repo_instance = mock_repo_class.return_value
-    mock_repo_instance.get_by_id = AsyncMock(return_value=mock_program_config)
+    mock_repo_instance.get_config = AsyncMock(return_value=mock_program_config)
     
     service = InferenceService()
     
@@ -35,7 +35,7 @@ async def test_load_program_facts(mock_repo_class, mock_program_config):
     facts = await service._load_program_facts("prog_test")
     
     # Assert
-    mock_repo_instance.get_by_id.assert_called_with("prog_test")
+    mock_repo_instance.get_config.assert_called_with("prog_test")
     
     # Expected facts based on RL02 rules
     expected_facts = [
@@ -56,7 +56,7 @@ async def test_load_program_facts(mock_repo_class, mock_program_config):
 async def test_run_inference(mock_repo_class, mock_fact_base_class, mock_engine_class, mock_program_config):
     # Arrange
     mock_repo_instance = mock_repo_class.return_value
-    mock_repo_instance.get_by_id = AsyncMock(return_value=mock_program_config)
+    mock_repo_instance.get_config = AsyncMock(return_value=mock_program_config)
     
     mock_engine_instance = mock_engine_class.return_value
     mock_engine_instance.query_bool.return_value = True # Supondo que tem créditos
@@ -70,7 +70,7 @@ async def test_run_inference(mock_repo_class, mock_fact_base_class, mock_engine_
     
     # Assert
     # 1. Verificamos se o repositório foi chamado
-    mock_repo_instance.get_by_id.assert_called_with("prog_test")
+    mock_repo_instance.get_config.assert_called_with("prog_test")
     
     # 2. Verificamos se os fatos foram adicionados na FactBase
     assert mock_fact_base_instance.add_fact.called

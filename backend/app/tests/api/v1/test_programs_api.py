@@ -30,8 +30,9 @@ def test_get_config_success():
     mock_service.get_config.return_value = {"id": "prog_default", "creditos_total_min": 24}
 
     # Override dependencies
-    app.dependency_overrides[get_current_user] = lambda: MagicMock(
-        programa_id="prog_default", role="coordenacao"
+    from backend.app.core.auth import CurrentUser
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
     )
     app.dependency_overrides[ProgramService] = lambda: mock_service
 
@@ -53,8 +54,9 @@ def test_update_config_success():
     mock_service.update_config.return_value = True
 
     # Override dependencies
-    app.dependency_overrides[get_current_user] = lambda: MagicMock(
-        programa_id="prog_default", role="coordenacao"
+    from backend.app.core.auth import CurrentUser
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
     )
     app.dependency_overrides[ProgramService] = lambda: mock_service
 

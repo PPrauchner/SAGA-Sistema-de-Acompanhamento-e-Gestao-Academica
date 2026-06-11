@@ -29,8 +29,9 @@ def test_update_vehicle_level_success():
     mock_service.update_vehicle_level.return_value = True
 
     # Override dependencies
-    app.dependency_overrides[get_current_user] = lambda: MagicMock(
-        programa_id="prog_default", role="coordenacao"
+    from backend.app.core.auth import CurrentUser
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
     )
     app.dependency_overrides[ProgramService] = lambda: mock_service
 

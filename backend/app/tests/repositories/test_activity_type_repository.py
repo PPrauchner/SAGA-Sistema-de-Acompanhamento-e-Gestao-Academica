@@ -27,10 +27,15 @@ def mock_db():
 def repo(mock_db):
     """Fixture for ActivityTypeRepository with mocked DB."""
     with patch("backend.app.repositories.firebase_repository.get_firestore_client", return_value=mock_db):
-        return ActivityTypeRepository()
+        yield ActivityTypeRepository()
 
 
-def test_get_all_by_program(repo, mock_db):
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
+
+@pytest.mark.anyio
+async def test_get_all_by_program(repo, mock_db):
     """Should call Firestore to get activity types for a program."""
     # Setup mock
     mock_doc = MagicMock()
@@ -39,7 +44,7 @@ def test_get_all_by_program(repo, mock_db):
     mock_db.collection.return_value.where.return_value.stream.return_value = [mock_doc]
 
     # Execute
-    result = repo.get_all_by_program("prog_default")
+    result = await repo.get_all_by_program("prog_default")
 
     # Assert
     assert len(result) == 1

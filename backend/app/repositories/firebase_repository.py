@@ -7,116 +7,146 @@ Responsabilidades:
 - Handle DocumentNotFoundError and other common database exceptions.
 """
 
-from typing import Any, Dict, List, Optional
+from __future__ import annotations
+
+import asyncio
+from typing import Any
+
 from backend.app.core.firebase import get_firestore_client
 
 
 class FirebaseRepository:
-    """Generic base repository for Firestore operations."""
+    """Repositório base genérico para operações no Firestore.
 
-    def __init__(self):
-        """Initializes the repository with a Firestore client."""
-        self.db = get_firestore_client()
+    O Firebase Admin SDK expõe um cliente síncrono; cada operação de I/O é
+    executada em uma thread separada via asyncio.to_thread para não bloquear
+    o event loop do FastAPI. Repositórios concretos herdam esta classe e
+    fixam sua coleção no construtor.
 
-    def get(self, collection: str, doc_id: str) -> Optional[Dict[str, Any]]:
-        """Retrieves a single document by ID.
+    Attributes:
+        collection: Nome da coleção Firestore manipulada por esta instância.
+    """
 
-        Args:
-            collection: The name of the collection.
-            doc_id: The unique identifier of the document.
+    def __init__(self, collection: str) -> None:
+        self.collection = collection
 
-        Returns:
-            The document data as a dictionary, or None if not found.
-        """
-        doc_ref = self.db.collection(collection).document(doc_id)
-        doc = doc_ref.get()
-        if doc.exists:
-            data = doc.to_dict()
-            data['id'] = doc.id
-            return data
-        return None
+    def _document(self, doc_id: str):
+        """Retorna a referência síncrona do documento na coleção desta instância."""
+        return get_firestore_client().collection(self.collection).document(doc_id)
 
-    def create(self, collection: str, data: Dict[str, Any], doc_id: Optional[str] = None) -> str:
-        """Creates a new document in the collection.
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        """Lê um documento por id.
 
         Args:
-            collection: The name of the collection.
-            data: The data to be stored.
-            doc_id: Optional fixed ID for the document.
+            doc_id: Identificador do documento na coleção.
 
         Returns:
-            The ID of the created document.
+            O documento como dict com 'id' incluído, ou None se não existir.
         """
-        if doc_id:
-            self.db.collection(collection).document(doc_id).set(data)
-            return doc_id
-        
-        _, doc_ref = self.db.collection(collection).add(data)
-        return doc_ref.id
 
-    def update(self, collection: str, doc_id: str, data: Dict[str, Any]) -> bool:
-        """Updates an existing document.
+        def _read() -> dict[str, Any] | None:
+            snapshot = self._document(doc_id).get()
+            if snapshot.exists:
+                data = snapshot.to_dict() or {}
+                data['id'] = snapshot.id
+                return data
+            return None
+
+        return await asyncio.to_thread(_read)
+
+    async def set(self, doc_id: str, data: dict[str, Any]) -> None:
+        """Cria ou sobrescreve um documento com id explícito.
 
         Args:
-            collection: The name of the collection.
-            doc_id: The unique identifier of the document.
-            data: The fields to update.
+            doc_id: Identificador do documento (ex: token do convite, uid do usuário).
+            data: Conteúdo completo a persistir.
+        """
+        await asyncio.to_thread(self._document(doc_id).set, data)
+
+    async def create(self, data: dict[str, Any], doc_id: str | None = None) -> str:
+        """Cria um novo documento na coleção.
+
+        Args:
+            data: Os dados a serem armazenados.
+            doc_id: ID fixo opcional para o documento.
 
         Returns:
-            True if the update was successful.
+            O ID do documento criado.
         """
-        doc_ref = self.db.collection(collection).document(doc_id)
-        doc_ref.update(data)
+        def _create() -> str:
+            if doc_id:
+                self._document(doc_id).set(data)
+                return doc_id
+            
+            _, doc_ref = get_firestore_client().collection(self.collection).add(data)
+            return doc_ref.id
+
+        return await asyncio.to_thread(_create)
+
+    async def update(self, doc_id: str, data: dict[str, Any]) -> bool:
+        """Atualiza parcialmente os campos de um documento existente.
+
+        Args:
+            doc_id: Identificador do documento a atualizar.
+            data: Mapa dos campos a alterar.
+            
+        Returns:
+            True se a atualização for executada.
+        """
+        await asyncio.to_thread(self._document(doc_id).update, data)
         return True
 
-    def delete(self, collection: str, doc_id: str) -> bool:
-        """Deletes a document from the collection.
+    async def delete(self, doc_id: str) -> bool:
+        """Exclui um documento da coleção.
 
         Args:
-            collection: The name of the collection.
-            doc_id: The unique identifier of the document.
-
+            doc_id: Identificador do documento a excluir.
+            
         Returns:
-            True if the deletion was successful.
+            True se a exclusão for executada.
         """
-        self.db.collection(collection).document(doc_id).delete()
+        await asyncio.to_thread(self._document(doc_id).delete)
         return True
 
-    def query(
+    async def query(
         self, 
-        collection: str, 
-        filters: Optional[List[tuple]] = None, 
-        order_by: Optional[str] = None, 
-        limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
-        """Performs a query on the collection.
+        filters: list[tuple] | None = None, 
+        order_by: str | None = None, 
+        limit: int | None = None,
+        subcollection_path: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Realiza uma consulta na coleção ou subcoleção.
 
         Args:
-            collection: The name of the collection.
-            filters: List of tuples (field, operator, value) for filtering.
-            order_by: Field name to order the results by.
-            limit: Maximum number of results to return.
+            filters: Lista de tuplas (campo, operador, valor) para filtro.
+            order_by: Nome do campo para ordenação.
+            limit: Número máximo de resultados.
+            subcollection_path: Opcional, permite consultar subcoleções ignorando self.collection.
 
         Returns:
-            A list of document data as dictionaries.
+            Lista de documentos (dicts) que atendem aos critérios.
         """
-        query_ref = self.db.collection(collection)
-        
-        if filters:
-            for field, op, value in filters:
-                query_ref = query_ref.where(field, op, value)
-        
-        if order_by:
-            query_ref = query_ref.order_by(order_by)
+        def _execute_query() -> list[dict[str, Any]]:
+            path = subcollection_path if subcollection_path else self.collection
+            query_ref = get_firestore_client().collection(path)
             
-        if limit:
-            query_ref = query_ref.limit(limit)
+            if filters:
+                for field, op, value in filters:
+                    query_ref = query_ref.where(field, op, value)
             
-        docs = query_ref.stream()
-        results = []
-        for doc in docs:
-            data = doc.to_dict()
-            data['id'] = doc.id
-            results.append(data)
-            
-        return results
+            if order_by:
+                query_ref = query_ref.order_by(order_by)
+                
+            if limit:
+                query_ref = query_ref.limit(limit)
+                
+            docs = query_ref.stream()
+            results = []
+            for doc in docs:
+                data = doc.to_dict() or {}
+                data['id'] = doc.id
+                results.append(data)
+                
+            return results
+
+        return await asyncio.to_thread(_execute_query)

@@ -28,10 +28,15 @@ def mock_db():
 def repo(mock_db):
     """Fixture for ProgramRepository with mocked DB."""
     with patch("backend.app.repositories.firebase_repository.get_firestore_client", return_value=mock_db):
-        return ProgramRepository()
+        yield ProgramRepository()
 
 
-def test_get_config_calls_firestore(repo, mock_db):
+@pytest.fixture
+def anyio_backend():
+    return 'asyncio'
+
+@pytest.mark.anyio
+async def test_get_config_calls_firestore(repo, mock_db):
     """Should call Firestore to get a program document."""
     # Setup mock
     mock_doc = MagicMock()
@@ -40,7 +45,7 @@ def test_get_config_calls_firestore(repo, mock_db):
     mock_db.collection.return_value.document.return_value.get.return_value = mock_doc
 
     # Execute
-    result = repo.get_config("prog_default")
+    result = await repo.get_config("prog_default")
 
     # Assert
     assert result["creditos_total_min"] == 24

@@ -5,12 +5,19 @@ Responsabilidades:
 - Definir flags booleanas que ativam ou desativam cada aspecto.
 """
 
-AUTHORIZATION_ENABLED = True
-AUDIT_ENABLED = True
-HISTORY_ENABLED = True
-DEADLINE_VALIDATION_ENABLED = True
-ALERTS_ENABLED = True
+from __future__ import annotations
 
-# Prazos
-DIAS_ALERTA_PRAZO_QUALIFICACAO = 90
-DIAS_ALERTA_PRAZO_FINAL = 60
+# --- Flags de ativação dos aspectos --------------------------------------
+# Cada aspecto consulta sua flag antes de executar o advice. Desligar um
+# aspecto (ex: em teste) não exige alterar a lógica de negócio decorada.
+AUTHORIZATION_ENABLED: bool = True
+AUDIT_ENABLED: bool = True
+HISTORY_ENABLED: bool = True
+DEADLINE_VALIDATION_ENABLED: bool = True
+ALERTS_ENABLED: bool = True
+
+# --- Constantes de prazo (aspecto A04 — deadline_validation.py) -----------
+# Quantos dias antes do prazo de qualificação um alerta deve ser disparado.
+DIAS_ALERTA_PRAZO_QUALIFICACAO: int = 90
+# Quantos dias antes do prazo final um alerta deve ser disparado.
+DIAS_ALERTA_PRAZO_FINAL: int = 60

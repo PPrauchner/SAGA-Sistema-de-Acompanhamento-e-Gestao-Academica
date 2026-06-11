@@ -39,9 +39,13 @@ class InferenceService:
         Returns:
             Lista de fatos (Compound) configurando os limites de créditos.
         """
-        config = await self._program_repo.get_by_id(programa_id)
-        if not config:
+        config_data = await self._program_repo.get_config(programa_id)
+        if not config_data:
             return []
+
+        # Assuming ProgramConfig model handles validation from dict
+        from backend.app.models.program_config import ProgramConfig
+        config = ProgramConfig(**config_data)
 
         prog_atom = Atom(programa_id)
         return [
