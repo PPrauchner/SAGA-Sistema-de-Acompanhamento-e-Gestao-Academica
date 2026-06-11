@@ -11,7 +11,7 @@ Responsabilidades:
   estejam atualizados antes da inferência.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
 from backend.app.models.checklist import ChecklistResponse
 from backend.app.repositories.fixtures import FixtureRepository
@@ -21,23 +21,19 @@ from backend.app.services.inference_service import InferenceService, StudentNotF
 router = APIRouter()
 
 
-def _build_checklist_service() -> ChecklistService:
-    """Ponto ÚNICO de wiring de dados (#41).
-
-    Trocar FixtureRepository pelos repositórios reais do Firestore quando a issue #41
-    (Discentes) mergear — nenhum outro código precisa mudar.
-    """
+def _get_checklist_service() -> ChecklistService:
     repo = FixtureRepository()
     return ChecklistService(InferenceService(repo), repo)
 
 
-# Ordem canônica de aspectos a aplicar quando A01/A04 e get_current_user estiverem prontos:
-#   @requires_role('aluno', 'orientador', 'coordenacao')
-#   @check_deadlines
+# TODO: adicionar @requires_role('aluno', 'orientador', 'coordenacao') e @check_deadlines
 @router.get("/checklist/{student_id}", response_model=ChecklistResponse)
-async def get_checklist(student_id: str) -> ChecklistResponse:
+async def get_checklist(
+    student_id: str,
+    service: ChecklistService = Depends(_get_checklist_service),
+) -> ChecklistResponse:
     """Retorna o checklist de integralização do aluno."""
     try:
-        return await _build_checklist_service().get_checklist(student_id)
+        return await service.get_checklist(student_id)
     except StudentNotFoundError:
         raise HTTPException(status_code=404, detail="Aluno não encontrado")
