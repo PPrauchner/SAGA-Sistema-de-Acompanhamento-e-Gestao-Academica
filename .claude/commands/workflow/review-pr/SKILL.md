@@ -21,8 +21,19 @@ gh issue view N --json number,title,body,labels,assignees,milestone
 ```
 Extraia o número da sprint do título: `[Sprint N]` → formatar com dois dígitos (`01`, `02`...).
 
-### 3. Identificar specs relevantes
-Use a tabela do `CLAUDE.md` e o [mapa de specs](./specs-map.md). Leia cada spec identificado.
+### 3. Ler o modelo de dados e identificar specs relevantes
+
+**Sempre** leia o modelo de dados canônico:
+```
+Read docs/data-model.md
+```
+
+Use-o como referência cruzada ao analisar o diff:
+- Verificar se campos, nomes de coleções e enums no código coincidem com o modelo (ex: `tipo_producao`, não `tipo`; `creditos_concedidos` é override da coordenação, `creditos_gerados` é o calc — não confundir)
+- Sinalizar como **MODERADO** qualquer desvio de nome ou tipo em relação ao modelo
+- Verificar invariantes: ex., toda `activities.producao_id` deve ter uma `productions` correspondente; `advisors` existe ⟺ usuário pode orientar
+
+Em seguida, use a tabela do `CLAUDE.md` e o [mapa de specs](./specs-map.md). Leia cada spec identificado. Onde `data-model.md` e `03_firebase_schema.json` divergirem, o `data-model.md` vence.
 
 ### 4. Obter o diff
 ```bash
@@ -32,9 +43,9 @@ gh pr view $ARGUMENTS --json files --jq '.files[].path'
 Leia arquivos alterados com Read quando necessário.
 
 ### 5. Analisar: o que deveria ter sido feito vs o que foi feito
-Compare issue + specs + diff. Categorize incongruências:
+Compare issue + specs + data-model + diff. Categorize incongruências:
 - **CRÍTICO** — bloqueadores: DoD não cumprida, falha de import, testes não passando
-- **MODERADO** — desvios de requisito ou spec
+- **MODERADO** — desvios de requisito, spec ou data-model (campo com nome errado, tipo incorreto, invariante violada)
 - **MENOR** — qualidade e convenções
 
 ### 6. Determinar caminho do relatório
