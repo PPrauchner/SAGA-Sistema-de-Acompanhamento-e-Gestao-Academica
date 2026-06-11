@@ -24,3 +24,4 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 testpaths = ["backend/inference_engine/tests", "backend/app/tests"]
 asyncio_mode = "auto"
+pythonpath = ["backend"]
