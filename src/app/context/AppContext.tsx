@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { useAuth } from "@/hooks/useAuth";
 
 export type UserRole = "aluno" | "orientador" | "coordenacao";
 
@@ -38,7 +39,8 @@ interface AppContextType {
   darkMode: boolean;
   notificationCount: number;
   mobileMenuOpen: boolean;
-  setCurrentUser: (user: User | null) => void;
+  loading: boolean;
+  login: (email: string, senha: string) => Promise<void>;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -49,42 +51,61 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const DEMO_USERS: Record<UserRole, User> = {
-  coordenacao: {
-    id: "1",
-    name: "Prof. Dr. Roberto Almeida",
-    email: "roberto.almeida@ppg.ufx.br",
-    role: "coordenacao",
-    departamento: "Ciência da Computação",
-    programa: "PPGCC - Programa de Pós-Graduação em Ciência da Computação",
-  },
-  orientador: {
-    id: "2",
-    name: "Profa. Dra. Carla Mendes",
-    email: "carla.mendes@ppg.ufx.br",
-    role: "orientador",
-    departamento: "Ciência da Computação",
-    programa: "PPGCC",
-  },
-  aluno: {
-    id: "3",
-    name: "Lucas Ferreira Silva",
-    email: "lucas.silva@pos.ufx.br",
-    role: "aluno",
-    matricula: "2023001",
-    programa: "PPGCC - Doutorado",
-    orientador: "Profa. Dra. Carla Mendes",
-  },
+// Páginas de autenticação (acessíveis sem sessão). Fora deste conjunto, toda
+// página exige usuário autenticado.
+const AUTH_PAGES: PageId[] = [
+  "login", "register", "password-recovery", "change-password", "first-access",
+];
+
+// Guarda de rota por papel — espelha os `roles` de NAV_ITEMS no Sidebar. Páginas
+// ausentes deste mapa são liberadas para qualquer usuário autenticado.
+const ALL_ROLES: UserRole[] = ["aluno", "orientador", "coordenacao"];
+const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
+  alunos: ["orientador", "coordenacao"],
+  "aluno-detail": ["orientador", "coordenacao"],
+  orientadores: ["coordenacao"],
+  "orientador-detail": ["coordenacao"],
+  relatorios: ["orientador", "coordenacao"],
+  inferencia: ["orientador", "coordenacao"],
+  auditoria: ["coordenacao"],
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const { profile, login, logout: signOut, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
   const [notificationCount] = useState(5);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // O perfil vem do backend (GET /auth/me) via useAuth; mapeamos para o formato
+  // de exibição consumido pelo layout. Campos sem origem no backend ficam vazios.
+  const currentUser: User | null = profile
+    ? {
+        id: profile.uid,
+        name: profile.nome,
+        email: profile.email,
+        role: profile.role,
+        programa: profile.programaId,
+      }
+    : null;
+
+  // Guarda de rota: redireciona conforme o estado de autenticação e o papel.
+  useEffect(() => {
+    if (loading) return;
+    const onAuthPage = AUTH_PAGES.includes(currentPage);
+    if (!profile) {
+      if (!onAuthPage) setCurrentPage("login");
+      return;
+    }
+    if (onAuthPage) {
+      setCurrentPage("dashboard");
+      return;
+    }
+    const allowed = PAGE_ROLES[currentPage] ?? ALL_ROLES;
+    if (!allowed.includes(profile.role)) setCurrentPage("dashboard");
+  }, [loading, profile, currentPage]);
 
   const toggleDarkMode = () => {
     setDarkMode((d) => {
@@ -95,9 +116,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    setCurrentUser(null);
-    setCurrentPage("login");
+    void signOut();
     setMobileMenuOpen(false);
+    // O efeito de guarda redireciona para "login" quando o perfil é limpo.
   };
 
   return (
@@ -110,7 +131,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         darkMode,
         notificationCount,
         mobileMenuOpen,
-        setCurrentUser,
+        loading,
+        login,
         setCurrentPage,
         setSelectedStudentId,
         setSidebarCollapsed,
@@ -129,5 +151,3 @@ export function useApp() {
   if (!ctx) throw new Error("useApp must be used within AppProvider");
   return ctx;
 }
-
-export { DEMO_USERS };
