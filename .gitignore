@@ -241,3 +241,9 @@ Thumbs.db
 .claude/current-issue
 
 .claude/subtasks-pending.json
+
+# Arquivos locais não versionados
+.env.example
+.github/
+backend/__init__.py
+SAGA-Sistema-de-Acompanhamento-e-Gestao-Academica/
