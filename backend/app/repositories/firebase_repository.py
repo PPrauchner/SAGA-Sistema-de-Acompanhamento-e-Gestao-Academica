@@ -73,3 +73,27 @@ class FirebaseRepository:
             data: Mapa dos campos a alterar.
         """
         await asyncio.to_thread(self._document(doc_id).update, data)
+
+    async def delete(self, doc_id: str) -> None:
+        """Remove um documento da coleção."""
+
+        await asyncio.to_thread(
+            self._document(doc_id).delete,
+        )
+
+    async def list_all(self) -> list[dict[str, Any]]:
+        """Lista todos os documentos da coleção."""
+
+        def _list() -> list[dict[str, Any]]:
+            docs = get_firestore_client().collection(self.collection).stream()
+
+            result = []
+
+            for doc in docs:
+                item = doc.to_dict()
+                item["id"] = doc.id
+                result.append(item)
+
+            return result
+
+        return await asyncio.to_thread(_list)
