@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
-import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building, Plus, Trash2, CheckCircle2, XCircle } from "lucide-react";
+import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building, Plus, CheckCircle2, XCircle, Edit } from "lucide-react";
 import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
 import { toast } from "sonner";
@@ -22,6 +22,13 @@ export function SettingsPage() {
   // Program Config State
   const [programConfig, setProgramConfig] = useState<any>(null);
   const [activityTypes, setActivityTypes] = useState<any[]>([]);
+
+  // Modal States
+  const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
+  const [currentActivity, setCurrentActivity] = useState<any>(null);
+  
+  const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+  const [currentVehicle, setCurrentVehicle] = useState<any>(null);
 
   useEffect(() => {
     if (activeTab === "programa" && currentUser?.role === "coordenacao") {
@@ -68,6 +75,54 @@ export function SettingsPage() {
     } catch (error) {
       toast.error("Erro ao atualizar status");
     }
+  };
+
+  const handleSaveActivity = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (currentActivity.id) {
+        const updated = await activityTypesApi.updateActivityType(currentActivity.id, currentActivity);
+        setActivityTypes(activityTypes.map(t => t.id === updated.id ? updated : t));
+        toast.success("Tipo de atividade atualizado!");
+      } else {
+        const created = await activityTypesApi.createActivityType(currentActivity);
+        setActivityTypes([...activityTypes, created]);
+        toast.success("Tipo de atividade criado!");
+      }
+      setIsActivityModalOpen(false);
+    } catch (error) {
+      toast.error("Erro ao salvar tipo de atividade");
+    }
+  };
+
+  const handleSaveVehicle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const updatedConfig = await programsApi.updateVehicleLevel(currentVehicle.id, {
+        nivel: currentVehicle.nivel,
+        peso: currentVehicle.peso
+      });
+      setProgramConfig(updatedConfig);
+      toast.success("Nível de veículo atualizado!");
+      setIsVehicleModalOpen(false);
+    } catch (error) {
+      toast.error("Erro ao salvar nível de veículo");
+    }
+  };
+
+  const openNewActivityModal = () => {
+    setCurrentActivity({ nome: "", categoria: "tecnologico", pontuacao_base: 10, exige_comprovante: true, maximo_creditos: null });
+    setIsActivityModalOpen(true);
+  };
+
+  const openEditActivityModal = (type: any) => {
+    setCurrentActivity({ ...type });
+    setIsActivityModalOpen(true);
+  };
+
+  const openEditVehicleModal = (level: any) => {
+    setCurrentVehicle({ ...level });
+    setIsVehicleModalOpen(true);
   };
 
   const tabs = currentUser?.role === "coordenacao" 
@@ -415,8 +470,33 @@ export function SettingsPage() {
 
               <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                 <div className="flex items-center justify-between mb-6">
+                  <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)" }}>Níveis de Veículo</h2>
+                </div>
+
+                <div className="space-y-3">
+                  {programConfig?.niveis_veiculo?.map((level: any) => (
+                    <div key={level.id} className="flex items-center justify-between p-3 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
+                      <div>
+                        <p className="text-sm font-bold">{level.nivel}</p>
+                        <p className="text-xs opacity-60">Peso Multiplicador: {level.peso}</p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => openEditVehicleModal(level)} title="Editar Peso">
+                          <Edit size={16} className="text-blue-600" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {(!programConfig?.niveis_veiculo || programConfig.niveis_veiculo.length === 0) && (
+                    <p className="text-sm opacity-60">Nenhum nível de veículo configurado.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+                <div className="flex items-center justify-between mb-6">
                   <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)" }}>Tipos de Atividade</h2>
-                  <button className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D4A017] text-white text-xs font-bold">
+                  <button onClick={openNewActivityModal} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#D4A017] text-white text-xs font-bold">
                     <Plus size={14} /> Novo Tipo
                   </button>
                 </div>
@@ -429,6 +509,9 @@ export function SettingsPage() {
                         <p className="text-xs opacity-60">{type.categoria} · {type.pontuacao_base} pts</p>
                       </div>
                       <div className="flex items-center gap-3">
+                        <button onClick={() => openEditActivityModal(type)} title="Editar">
+                          <Edit size={16} className="text-blue-600" />
+                        </button>
                         <button onClick={() => handleToggleActivity(type.id)} title={type.ativo ? "Desativar" : "Ativar"}>
                           {type.ativo ? <CheckCircle2 size={18} className="text-green-600" /> : <XCircle size={18} className="text-red-500" />}
                         </button>
@@ -441,6 +524,62 @@ export function SettingsPage() {
           )}
         </div>
       </div>
+
+      {/* MODAL TIPOS DE ATIVIDADE */}
+      {isActivityModalOpen && currentActivity && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-[var(--card)] rounded-2xl w-full max-w-md p-6 border border-[var(--border)] shadow-xl relative">
+            <h2 className="text-lg font-bold mb-4">{currentActivity.id ? "Editar Tipo de Atividade" : "Novo Tipo de Atividade"}</h2>
+            <form onSubmit={handleSaveActivity} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1.5">Nome da Atividade</label>
+                <input required type="text" value={currentActivity.nome} onChange={e => setCurrentActivity({...currentActivity, nome: e.target.value})} className="w-full rounded-xl px-4 py-2 border border-[var(--border)] bg-[var(--input-background)]" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5">Categoria</label>
+                  <select required value={currentActivity.categoria} onChange={e => setCurrentActivity({...currentActivity, categoria: e.target.value})} className="w-full rounded-xl px-4 py-2 border border-[var(--border)] bg-[var(--input-background)]">
+                    <option value="basico">Básico</option>
+                    <option value="especifico">Específico</option>
+                    <option value="tecnologico">Tecnológico</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold mb-1.5">Pontuação Base</label>
+                  <input required type="number" step="0.1" value={currentActivity.pontuacao_base} onChange={e => setCurrentActivity({...currentActivity, pontuacao_base: parseFloat(e.target.value)})} className="w-full rounded-xl px-4 py-2 border border-[var(--border)] bg-[var(--input-background)]" />
+                </div>
+              </div>
+              <div className="flex gap-4 mt-6">
+                <button type="button" onClick={() => setIsActivityModalOpen(false)} className="flex-1 px-4 py-2 rounded-xl bg-[var(--muted)] text-[var(--foreground)] font-semibold">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-2 rounded-xl bg-[#123C7A] text-white font-semibold">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL NÍVEIS DE VEÍCULO */}
+      {isVehicleModalOpen && currentVehicle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-[var(--card)] rounded-2xl w-full max-w-sm p-6 border border-[var(--border)] shadow-xl relative">
+            <h2 className="text-lg font-bold mb-4">Editar Peso: Nível {currentVehicle.nivel}</h2>
+            <form onSubmit={handleSaveVehicle} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold mb-1.5">Multiplicador de Peso</label>
+                <input required type="number" step="0.1" value={currentVehicle.peso} onChange={e => setCurrentVehicle({...currentVehicle, peso: parseFloat(e.target.value)})} className="w-full rounded-xl px-4 py-2 border border-[var(--border)] bg-[var(--input-background)]" />
+                <p className="text-xs text-[var(--muted-foreground)] mt-2">
+                  Ex: Um peso de 1.5 aplicará 50% de bônus na pontuação base da atividade para produções neste veículo.
+                </p>
+              </div>
+              <div className="flex gap-4 mt-6">
+                <button type="button" onClick={() => setIsVehicleModalOpen(false)} className="flex-1 px-4 py-2 rounded-xl bg-[var(--muted)] text-[var(--foreground)] font-semibold">Cancelar</button>
+                <button type="submit" className="flex-1 px-4 py-2 rounded-xl bg-[#123C7A] text-white font-semibold">Salvar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
