@@ -18,6 +18,106 @@ Responsabilidades:
   Aplica @track_history.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, status
+
+from backend.app.aspects.authorization import requires_role
+from backend.app.core.auth import CurrentUser, get_current_user
+from backend.app.models.student import (
+    ProficienciaRequest,
+    QualificacaoRequest,
+    SituacaoRequest,
+    StudentCreateRequest,
+    StudentUpdateRequest,
+)
+from backend.app.services.student_service import StudentService
 
 router = APIRouter()
+
+service = StudentService()
+
+
+@router.get("/students")
+@requires_role("coordenacao", "orientador")
+async def list_students(
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.list_students()
+
+
+@router.get("/students/{student_id}")
+@requires_role("coordenacao", "orientador", "aluno")
+async def get_student(
+    student_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.get_student(student_id)
+
+
+@router.post(
+    "/students",
+    status_code=status.HTTP_201_CREATED,
+)
+@requires_role("coordenacao")
+async def create_student(
+    body: StudentCreateRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.create_student(body)
+
+
+@router.put("/students/{student_id}")
+@requires_role("coordenacao")
+async def update_student(
+    student_id: str,
+    body: StudentUpdateRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.update_student(student_id, body)
+
+
+@router.delete("/students/{student_id}")
+@requires_role("coordenacao")
+async def delete_student(
+    student_id: str,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.delete_student(student_id)
+
+
+@router.patch("/students/{student_id}/qualificacao")
+@requires_role("coordenacao")
+async def update_qualificacao(
+    student_id: str,
+    body: QualificacaoRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.update_qualificacao(
+        student_id,
+        body,
+    )
+
+
+@router.patch("/students/{student_id}/proficiencia")
+@requires_role("coordenacao")
+async def update_proficiencia(
+    student_id: str,
+    body: ProficienciaRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.update_proficiencia(
+        student_id,
+        body,
+    )
+
+
+@router.patch("/students/{student_id}/situacao")
+@requires_role("coordenacao")
+async def update_situacao(
+    student_id: str,
+    body: SituacaoRequest,
+    user: CurrentUser = Depends(get_current_user),
+):
+    return await service.update_situacao(
+        student_id,
+        body,
+    )
