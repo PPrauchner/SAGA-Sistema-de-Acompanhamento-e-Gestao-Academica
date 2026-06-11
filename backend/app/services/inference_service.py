@@ -20,23 +20,14 @@ Responsabilidades:
 - É o único módulo que instancia o InferenceEngine — outros serviços não acessam o motor
   diretamente.
 
-A origem dos dados é injetada via InferenceDataSource (costura única). Hoje recebe um
-FixtureRepository; quando a issue #41 mergear, basta injetar os repositórios reais do
-Firestore — os métodos abaixo definem o contrato esperado.
+A origem dos dados é injetada via InferenceDataSource — os métodos definem o contrato
+esperado pelos repositórios concretos.
 """
 
 from __future__ import annotations
 
-import sys
 from datetime import date, datetime, timezone
-from pathlib import Path
 from typing import Any, Protocol
-
-# Ponte de import: o pacote inference_engine é isolado e importado como top-level
-# (from inference_engine...). Garante que o diretório backend/ esteja no sys.path.
-_BACKEND_DIR = Path(__file__).resolve().parents[2]
-if str(_BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(_BACKEND_DIR))
 
 from inference_engine.knowledge_base import FactBase, InferenceEngine, RuleBase
 from inference_engine.rules import register_all
