@@ -14,3 +14,37 @@ Responsabilidades:
 - Casos de teste: creditos_validos, basico_insuficiente, tecnologico_excedido,
   total_insuficiente.
 """
+from inference_engine.terms import Compound, Variable
+
+
+def register(rule_base) -> None:
+    aluno = Variable("Aluno")
+    programa = Variable("Programa")
+
+    basico = Variable("Basico")
+    especifico = Variable("Especifico")
+    tecnologico = Variable("Tecnologico")
+    total = Variable("Total")
+
+    min_basico = Variable("MinBasico")
+    min_especifico = Variable("MinEspecifico")
+    max_tecnologico = Variable("MaxTecnologico")
+    min_total = Variable("MinTotal")
+
+    rule_base.add_rule(
+        Compound("creditos_validos", [aluno]),
+        [
+            Compound("creditos_grupo_basico", [aluno, basico]),
+            Compound("creditos_grupo_especifico", [aluno, especifico]),
+            Compound("creditos_grupo_tecnologico", [aluno, tecnologico]),
+            Compound("total_creditos", [aluno, total]),
+            Compound("min_creditos_basico", [programa, min_basico]),
+            Compound("min_creditos_especifico", [programa, min_especifico]),
+            Compound("max_creditos_tecnologico", [programa, max_tecnologico]),
+            Compound("min_creditos_total", [programa, min_total]),
+            Compound("gte", [basico, min_basico]),
+            Compound("gte", [especifico, min_especifico]),
+            Compound("lte", [tecnologico, max_tecnologico]),
+            Compound("gte", [total, min_total]),
+        ],
+    )

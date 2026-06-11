@@ -11,3 +11,20 @@ Responsabilidades:
 - Casos de teste cobertos em inference_engine/tests/test_rules.py: cenário apto (todas as
   5 condições presentes), inapto_sem_producao, inapto_creditos_invalidos.
 """
+
+from inference_engine.terms import Compound, Variable
+
+
+def register(rule_base) -> None:
+    aluno = Variable("Aluno")
+
+    rule_base.add_rule(
+        Compound("apto_defesa", [aluno]),
+        [
+            Compound("creditos_validos", [aluno]),
+            Compound("proficiencia_comprovada", [aluno]),
+            Compound("qualificacao_aprovada", [aluno]),
+            Compound("producao_bibliografica_validada", [aluno]),
+            Compound("plano_concluido", [aluno]),
+        ],
+    )

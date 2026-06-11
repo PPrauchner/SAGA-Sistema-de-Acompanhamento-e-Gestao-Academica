@@ -12,3 +12,20 @@ Responsabilidades:
 - Casos de teste: elegivel (4 fatos presentes), sem_comprovante, tipo_inativo,
   excede_limite_tecnologico.
 """
+
+from inference_engine.terms import Compound, Variable
+
+
+def register(rule_base) -> None:
+    atividade = Variable("Atividade")
+    aluno = Variable("Aluno")
+
+    rule_base.add_rule(
+        Compound("atividade_elegivel", [atividade, aluno]),
+        [
+            Compound("dentro_periodo_curso", [atividade, aluno]),
+            Compound("tem_comprovante", [atividade]),
+            Compound("tipo_ativo", [atividade]),
+            Compound("nao_excede_limite_categoria", [atividade, aluno]),
+        ],
+    )

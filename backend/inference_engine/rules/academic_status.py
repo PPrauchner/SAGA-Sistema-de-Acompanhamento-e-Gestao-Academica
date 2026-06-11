@@ -12,3 +12,38 @@ Responsabilidades:
   calculados e inseridos na FactBase pelo InferenceService antes de cada consulta.
 - Casos de teste: em_risco_prazo, em_risco_qualificacao, em_risco_plano_atrasado, regular.
 """
+
+from inference_engine.terms import Compound, Variable
+
+
+def register(rule_base) -> None:
+    aluno = Variable("Aluno")
+
+    rule_base.add_rule(
+        Compound("em_risco", [aluno]),
+        [
+            Compound("prazo_estourado", [aluno]),
+        ],
+    )
+
+    rule_base.add_rule(
+        Compound("em_risco", [aluno]),
+        [
+            Compound("creditos_insuficientes", [aluno]),
+        ],
+    )
+
+    rule_base.add_rule(
+        Compound("em_risco", [aluno]),
+        [
+            Compound("qualificacao_pendente", [aluno]),
+            Compound("prazo_qualificacao_proximo", [aluno]),
+        ],
+    )
+
+    rule_base.add_rule(
+        Compound("em_risco", [aluno]),
+        [
+            Compound("plano_atrasado", [aluno]),
+        ],
+    )
