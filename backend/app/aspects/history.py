@@ -14,3 +14,43 @@ Responsabilidades:
 - Weaving via HistoryMeta: envolve automaticamente todos os métodos update_* de subclasses
   de EntityService. Alternativa: @track_history aplicado explicitamente.
 """
+
+from __future__ import annotations
+
+import functools
+from datetime import datetime, timezone
+
+from backend.app.repositories.student_repository import StudentRepository
+
+
+def track_history(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        student_id = kwargs.get("student_id")
+
+        repo = StudentRepository()
+
+        previous = None
+
+        if student_id:
+            previous = await repo.get(student_id)
+
+        result = await func(*args, **kwargs)
+
+        if student_id and previous:
+            current = await repo.get(student_id)
+
+            await repo.set(
+                f"history_{student_id}_{datetime.now(timezone.utc).timestamp()}",
+                {
+                    "entidade_tipo": "student",
+                    "entidade_id": student_id,
+                    "valor_anterior": previous,
+                    "valor_novo": current,
+                    "timestamp": datetime.now(timezone.utc),
+                },
+            )
+
+        return result
+
+    return wrapper

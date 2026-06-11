@@ -14,3 +14,74 @@ Responsabilidades:
 - Em caso de exceção: registra erro no AuditLog e re-lança a exceção.
 - Paradigma AOP: decorador Python + inspect como mecanismo de weaving explícito.
 """
+from __future__ import annotations
+
+import functools
+from datetime import datetime, timezone
+from typing import Any
+
+from backend.app.core.auth import CurrentUser
+from backend.app.repositories.firebase_repository import FirebaseRepository
+
+
+def _find_user(
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> CurrentUser | None:
+    for value in (*kwargs.values(), *args):
+        if isinstance(value, CurrentUser):
+            return value
+    return None
+
+
+def audit_operation(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        user = _find_user(args, kwargs)
+
+        repo = FirebaseRepository("audit_logs")
+
+        started_at = datetime.now(timezone.utc)
+
+        try:
+            result = await func(*args, **kwargs)
+
+            finished_at = datetime.now(timezone.utc)
+
+            await repo.set(
+                str(finished_at.timestamp()),
+                {
+                    "usuario_id": user.uid if user else None,
+                    "role": user.role if user else None,
+                    "operacao": func.__name__,
+                    "resultado_status": "success",
+                    "timestamp": finished_at,
+                    "duracao_ms": int(
+                        (finished_at - started_at).total_seconds() * 1000
+                    ),
+                },
+            )
+
+            return result
+
+        except Exception as exc:
+            finished_at = datetime.now(timezone.utc)
+
+            await repo.set(
+                str(finished_at.timestamp()),
+                {
+                    "usuario_id": user.uid if user else None,
+                    "role": user.role if user else None,
+                    "operacao": func.__name__,
+                    "resultado_status": "error",
+                    "erro_mensagem": str(exc),
+                    "timestamp": finished_at,
+                    "duracao_ms": int(
+                        (finished_at - started_at).total_seconds() * 1000
+                    ),
+                },
+            )
+
+            raise
+
+    return wrapper
