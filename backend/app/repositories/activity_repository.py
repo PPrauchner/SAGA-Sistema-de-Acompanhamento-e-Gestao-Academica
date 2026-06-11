@@ -12,10 +12,6 @@ Responsabilidades:
   fato producao_bibliografica_validada.
 - Salvar histórico de tipos de atividade em activity_types/{id}/history/ para o aspecto A03.
 """
-"""
-Repositório de atividades — acesso direto ao Firestore.
-Responsável apenas por leitura e escrita; sem lógica de negócio.
-"""
 
 from datetime import datetime, timezone
 from typing import Optional
@@ -48,3 +44,50 @@ class ActivityRepository:
         if not doc.exists:
             return None
         return doc.to_dict().get("orientador_uid")
+
+    def get_student_uid_by_activity(self, activity_id: str) -> Optional[str]:
+        """
+        Retorna o uid Firebase Auth do aluno dono da atividade.
+
+        Usado pelo aspecto A05 para determinar o destinatário da notificação
+        de resultado da validação.
+        """
+        activity = self.get_by_id(activity_id)
+        if not activity:
+            return None
+        student_id = activity.get("student_id")
+        if not student_id:
+            return None
+        doc = self._db().collection("students").document(student_id).get()
+        if not doc.exists:
+            return None
+        return doc.to_dict().get("uid")
+
+    def get_activity_type(self, tipo_id: str) -> Optional[dict]:
+        """
+        Retorna os metadados do tipo de atividade (pontuacao_base, categoria, etc.).
+
+        Usado pelo service para determinar créditos a contabilizar quando a
+        coordenação não fornece creditos_concedidos explícitos.
+        """
+        doc = self._db().collection("activity_types").document(tipo_id).get()
+        if not doc.exists:
+            return None
+        return {"id": doc.id, **doc.to_dict()}
+
+    def count_approved_productions(self, student_id: str) -> int:
+        """
+        Conta produções bibliográficas aprovadas do aluno.
+
+        Usado para decidir se o fato producao_bibliografica_validada deve
+        ser gerado após uma aprovação.
+        """
+        docs = (
+            self._db()
+            .collection(self.COLLECTION)
+            .where("student_id", "==", student_id)
+            .where("categoria", "==", "producao_bibliografica")
+            .where("status", "==", "aprovada")
+            .stream()
+        )
+        return sum(1 for _ in docs)
