@@ -10,36 +10,47 @@ Responsabilidades:
   (notifica orientador após submissão).
 - PATCH /api/v1/activities/{activity_id}/validate: orientador emite parecer ou coordenação
   aprova/rejeita. Operação mais crítica do fluxo — aplica @requires_role, @audit_operation
-  e @trigger_alerts (notifica aluno após decisão). Motor verifica elegibilidade (RL04).
-"""
-"""
-Router de atividades — PATCH /activities/{id}/validate
-"""
-"""
-Router de atividades — PATCH /activities/{id}/validate
+  e @trigger_alerts (notifica aluno após decisão da coordenação). Motor verifica
+  elegibilidade (RL04) e gera fato producao_bibliografica_validada quando aplicável.
 """
 
 from fastapi import APIRouter, Depends
+from typing import Union
 
 from backend.app.core.auth_dependency import get_current_user
-from backend.app.models.activity import ActivityResponse, ValidateActivityRequest
+from backend.app.models.activity import (
+    ActivityResponse,
+    ValidateActivityRequest,
+    ValidateActivityResponse,
+)
 from backend.app.services import activity_service
 
 router = APIRouter()
 
 
-@router.patch("/activities/{activity_id}/validate", response_model=ActivityResponse)
+@router.patch(
+    "/activities/{activity_id}/validate",
+    response_model=Union[ActivityResponse, ValidateActivityResponse],
+)
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
     current_user: dict = Depends(get_current_user),
-) -> ActivityResponse:
+) -> Union[ActivityResponse, ValidateActivityResponse]:
     """
     Valida uma atividade submetida.
 
     Ação `parecer_orientador`:
     - Apenas o orientador do próprio aluno pode emitir (A01 por propriedade)
     - Operação auditada (A02)
+    - Retorna ActivityResponse com status atualizado para 'parecer_emitido'
+
+    Ação `aprovar` | `rejeitar` (coordenação):
+    - Apenas coordenação (A01)
+    - Operação mais crítica — auditada com detalhes (A02)
+    - Contabiliza créditos e gera fato para o motor se produção bibliográfica (RL04/RL05)
+    - Notifica o aluno do resultado (A05 — história 26)
+    - Retorna ValidateActivityResponse com novo_status, creditos_contabilizados e fato_gerado
     """
     if payload.acao.value == "parecer_orientador":
         return await activity_service.emitir_parecer_orientador(
@@ -48,9 +59,8 @@ async def validate_activity(
             current_user=current_user,
         )
 
-    # Outras ações (aprovar, rejeitar) serão implementadas em issues futuras
-    from fastapi import HTTPException, status
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail=f"Ação '{payload.acao}' ainda não implementada.",
+    return await activity_service.validate_activity(
+        activity_id=activity_id,
+        payload=payload,
+        current_user=current_user,
     )
