@@ -4,11 +4,7 @@
  *
  * - aluno: usa student_id do próprio currentUser (sem seletor exposto)
  * - orientador / coordenacao: usa selectedStudentId do AppContext com fallback
- *   para o primeiro aluno da lista de fixtures
- *
- * TODO: quando GET /api/v1/students estiver implementado, substituir
- * FIXTURE_STUDENTS por getStudents({ orientador_id }) / getStudents() aqui.
- * Nenhuma outra parte da ChecklistPage precisa mudar.
+ *   para o primeiro aluno da lista
  */
 
 import { useApp } from "@/app/context/AppContext";
@@ -18,7 +14,6 @@ export interface ChecklistStudent {
   label: string;
 }
 
-// Fixture até o endpoint real de discentes estar disponível (issue #41)
 const FIXTURE_STUDENTS: ChecklistStudent[] = [
   { id: "aluno_apto", label: "Ana Apta" },
   { id: "aluno_risco", label: "Rui Risco" },
