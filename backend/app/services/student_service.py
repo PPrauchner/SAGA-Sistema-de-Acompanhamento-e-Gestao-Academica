@@ -20,6 +20,8 @@ Responsabilidades:
 
 from __future__ import annotations
 
+from backend.app.core.auth import CurrentUser
+
 from fastapi import HTTPException, status
 
 from backend.app.aspects.audit import audit_operation
@@ -40,20 +42,24 @@ class StudentService:
     def __init__(self) -> None:
         self._students = StudentRepository()
 
-    async def list_students(self) -> list[dict]:
-        return await self._students.list_all()
+    async def list_students(
+        self,
+        user: CurrentUser,
+    ) -> list[dict]:
 
-    async def get_student(self, student_id: str) -> dict:
-        student = await self._students.get(student_id)
+        students = await self._students.list_all()
 
-        if student is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Aluno não encontrado",
-            )
+        if user.role == "coordenacao":
+            return students
 
-        student["id"] = student_id
-        return student
+        if user.role == "orientador":
+            return [
+                student
+                for student in students
+                if student.get("orientador_id") == user.uid
+            ]
+
+        return []
 
     @audit_operation
     async def create_student(
@@ -164,3 +170,20 @@ class StudentService:
             "message": "Situação atualizada",
             "historico_criado": True,
         }
+    
+    async def get_student(
+        self,
+        student_id: str,
+    ) -> dict:
+
+        student = await self._students.get(student_id)
+
+        if student is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Aluno não encontrado",
+            )
+
+        student["id"] = student_id
+
+        return student

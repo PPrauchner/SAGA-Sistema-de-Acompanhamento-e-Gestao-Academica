@@ -41,7 +41,7 @@ service = StudentService()
 async def list_students(
     user: CurrentUser = Depends(get_current_user),
 ):
-    return await service.list_students()
+    return await service.list_students(user)
 
 
 @router.get("/students/{student_id}")
