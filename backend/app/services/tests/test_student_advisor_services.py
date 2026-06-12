@@ -4,11 +4,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 import pytest
+from fastapi import HTTPException
 
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
 from backend.app.models.advisor import AdvisorCreateRequest
-from backend.app.models.student import StudentCreateRequest
+from backend.app.models.student import SituacaoRequest, StudentCreateRequest
 from backend.app.models.user import InviteRequest
 from backend.app.services import advisor_service as advisor_module
 from backend.app.services import student_service as student_module
@@ -67,6 +68,15 @@ class _FakeAdvisorRepository(_FakeRepo):
             )
         return advisors
 
+    async def count_active_students(self, advisor_id: str) -> int:
+        students = await _FakeStudentRepository().list_all()
+        return sum(
+            1
+            for student in students
+            if student.get("orientador_id") == advisor_id
+            and student.get("situacao_registrada") not in {"concluido", "desligado"}
+        )
+
 
 class _FakeAuthService:
     async def create_invite(
@@ -101,6 +111,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
 
 async def test_create_student_usa_auto_id_e_retorna_invite_token() -> None:
     service = StudentService(auth_service=_FakeAuthService())
+    data_ingresso = datetime(2024, 3, 31, tzinfo=timezone.utc)
 
     result = await service.create_student(
         StudentCreateRequest(
@@ -109,7 +120,7 @@ async def test_create_student_usa_auto_id_e_retorna_invite_token() -> None:
             matricula="2024001",
             orientador_id="advisor1",
             nivel="mestrado",
-            data_ingresso=datetime.now(timezone.utc),
+            data_ingresso=data_ingresso,
             programa_id="prog",
         ),
         _coord(),
@@ -119,6 +130,12 @@ async def test_create_student_usa_auto_id_e_retorna_invite_token() -> None:
     assert result["invite_token"] == "tok-aluno"
     assert "2024001" not in _FakeStudentRepository.store
     assert _FakeStudentRepository.store["student1"]["matricula"] == "2024001"
+    assert _FakeStudentRepository.store["student1"]["prazo_final"] == datetime(
+        2026,
+        3,
+        31,
+        tzinfo=timezone.utc,
+    )
 
 
 async def test_list_students_orientador_filtra_por_auto_id_do_advisor() -> None:
@@ -135,6 +152,46 @@ async def test_list_students_orientador_filtra_por_auto_id_do_advisor() -> None:
     result = await service.list_students(_advisor_user())
 
     assert [student["id"] for student in result] == ["student1"]
+
+
+async def test_get_student_orientador_filtra_por_propriedade() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador"},
+        "advisor2": {"uid": "outro", "nome": "Outro"},
+    }
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Meu aluno", "orientador_id": "advisor1"},
+        "student2": {"nome": "Outro aluno", "orientador_id": "advisor2"},
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    result = await service.get_student("student1", _advisor_user())
+
+    assert result["id"] == "student1"
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_student("student2", _advisor_user())
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_update_situacao_nao_grava_observacao_no_documento() -> None:
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Aluno", "situacao_registrada": "regular"},
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    await service.update_situacao(
+        "student1",
+        SituacaoRequest(
+            situacao_registrada="em_risco",
+            observacao="Acompanhar no historico",
+        ),
+        _coord(),
+    )
+
+    assert _FakeStudentRepository.store["student1"]["situacao_registrada"] == "em_risco"
+    assert "situacao_observacao" not in _FakeStudentRepository.store["student1"]
 
 
 async def test_create_advisor_usa_auto_id_e_retorna_invite_token() -> None:
@@ -154,3 +211,19 @@ async def test_create_advisor_usa_auto_id_e_retorna_invite_token() -> None:
     assert result["invite_token"] == "tok-orientador"
     assert "orientador@x.com" not in _FakeAdvisorRepository.store
     assert _FakeAdvisorRepository.store["advisor1"]["email"] == "orientador@x.com"
+
+
+async def test_get_advisor_retorna_orientandos_ativos() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador"},
+    }
+    _FakeStudentRepository.store = {
+        "student1": {"orientador_id": "advisor1", "situacao_registrada": "regular"},
+        "student2": {"orientador_id": "advisor1", "situacao_registrada": "concluido"},
+        "student3": {"orientador_id": "advisor2", "situacao_registrada": "regular"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.get_advisor("advisor1")
+
+    assert result["orientandos_ativos"] == 1
