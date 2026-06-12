@@ -20,6 +20,7 @@ import functools
 from datetime import datetime, timezone
 from typing import Any
 
+from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
@@ -37,6 +38,9 @@ def _find_user(
 def audit_operation(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
+        if not aspect_config.AUDIT_ENABLED:
+            return await func(*args, **kwargs)
+
         user = _find_user(args, kwargs)
 
         repo = FirebaseRepository("audit_logs")
@@ -54,7 +58,7 @@ def audit_operation(func):
                     "usuario_id": user.uid if user else None,
                     "role": user.role if user else None,
                     "operacao": func.__name__,
-                    "resultado_status": "success",
+                    "resultado_status": "sucesso",
                     "timestamp": finished_at,
                     "duracao_ms": int(
                         (finished_at - started_at).total_seconds() * 1000
@@ -73,7 +77,7 @@ def audit_operation(func):
                     "usuario_id": user.uid if user else None,
                     "role": user.role if user else None,
                     "operacao": func.__name__,
-                    "resultado_status": "error",
+                    "resultado_status": "erro",
                     "erro_mensagem": str(exc),
                     "timestamp": finished_at,
                     "duracao_ms": int(

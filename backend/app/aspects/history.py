@@ -18,15 +18,30 @@ Responsabilidades:
 from __future__ import annotations
 
 import functools
+import inspect
 from datetime import datetime, timezone
 
+from backend.app.aspects import aspect_config
+from backend.app.core.auth import CurrentUser
 from backend.app.repositories.student_repository import StudentRepository
 
 
 def track_history(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
-        student_id = kwargs.get("student_id")
+        if not aspect_config.HISTORY_ENABLED:
+            return await func(*args, **kwargs)
+
+        bound = inspect.signature(func).bind_partial(*args, **kwargs)
+        student_id = bound.arguments.get("student_id")
+        user = next(
+            (
+                value
+                for value in bound.arguments.values()
+                if isinstance(value, CurrentUser)
+            ),
+            None,
+        )
 
         repo = StudentRepository()
 
@@ -40,13 +55,15 @@ def track_history(func):
         if student_id and previous:
             current = await repo.get(student_id)
 
-            await repo.set(
-                f"history_{student_id}_{datetime.now(timezone.utc).timestamp()}",
+            await repo.save_history_snapshot(
+                student_id,
                 {
                     "entidade_tipo": "student",
                     "entidade_id": student_id,
                     "valor_anterior": previous,
                     "valor_novo": current,
+                    "usuario_id": user.uid if user else None,
+                    "role": user.role if user else None,
                     "timestamp": datetime.now(timezone.utc),
                 },
             )
