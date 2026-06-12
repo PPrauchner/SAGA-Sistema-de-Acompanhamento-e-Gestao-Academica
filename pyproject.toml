@@ -22,7 +22,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-testpaths = ["backend/inference_engine/tests"]
+testpaths = ["backend/inference_engine/tests", "backend/app"]
 asyncio_mode = "auto"
 
 [tool.hatch.build.targets.wheel]
