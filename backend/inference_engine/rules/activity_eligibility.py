@@ -13,19 +13,23 @@ Responsabilidades:
   excede_limite_tecnologico.
 """
 
+from __future__ import annotations
+
 from inference_engine.terms import Compound, Variable
 
+_ATV = Variable("Atv")
+_A = Variable("A")
 
-def register(rule_base) -> None:
-    atividade = Variable("Atividade")
-    aluno = Variable("Aluno")
-
-    rule_base.add_rule(
-        Compound("atividade_elegivel", [atividade, aluno]),
+# atividade_elegivel(Atv, A) :- dentro_periodo_curso(Atv, A), tem_comprovante(Atv),
+#                               tipo_ativo(Atv), nao_excede_limite_categoria(Atv, A).
+CLAUSES: list[tuple[Compound, list[Compound]]] = [
+    (
+        Compound("atividade_elegivel", [_ATV, _A]),
         [
-            Compound("dentro_periodo_curso", [atividade, aluno]),
-            Compound("tem_comprovante", [atividade]),
-            Compound("tipo_ativo", [atividade]),
-            Compound("nao_excede_limite_categoria", [atividade, aluno]),
+            Compound("dentro_periodo_curso", [_ATV, _A]),
+            Compound("tem_comprovante", [_ATV]),
+            Compound("tipo_ativo", [_ATV]),
+            Compound("nao_excede_limite_categoria", [_ATV, _A]),
         ],
-    )
+    ),
+]
