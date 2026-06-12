@@ -2,9 +2,11 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   Brain, Zap, Database, GitBranch, Terminal, Clock, CheckCircle2,
   XCircle, Circle, Play, RotateCcw, Cpu, Activity, AlertTriangle,
-  ChevronRight, Code2, Layers, Shield, Network, FileCheck, Search,
+  ChevronRight, Code2, Layers, Shield, Network, FileCheck, Search, Loader2,
 } from "lucide-react";
-import { useApp } from "../../context/AppContext";
+import { useApp } from "@/app/context/AppContext";
+import { getInference, type InferenceResult } from "@/api/inferenceApi";
+import { getChecklist, type ChecklistResponse } from "@/api/checklistApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -699,6 +701,144 @@ function ExplainPanel({ student, question }: { student: StudentProfile; question
   );
 }
 
+// ─── Real Inference Panel (dados reais do backend) ────────────────────────────
+// Consome GET /inference e /checklist. Enquanto a issue #41 não popula o Firestore,
+// usa os alunos de fixture do backend (aluno_apto/risco/regular).
+
+const PANEL_FIXTURES = [
+  { id: "aluno_apto", label: "Ana Apta" },
+  { id: "aluno_risco", label: "Rui Risco" },
+  { id: "aluno_regular", label: "Rita Regular" },
+];
+
+const SITU_CLR: Record<string, string> = {
+  fase_defesa: "#10b981",
+  qualificado: "#3b82f6",
+  regular: "#64748b",
+  em_risco: "#f59e0b",
+};
+
+function BoolPill({ label, value }: { label: string; value: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: value ? "#022c22" : "#2c0a0a", border: `1px solid ${value ? "#064e3b" : "#450a0a"}` }}>
+      {value ? <CheckCircle2 size={14} style={{ color: "#10b981" }} /> : <XCircle size={14} style={{ color: "#ef4444" }} />}
+      <span style={{ fontSize: 12, fontWeight: 700, color: value ? "#10b981" : "#ef4444", fontFamily: "monospace" }}>{label}</span>
+    </div>
+  );
+}
+
+function RealInferencePanel() {
+  const [studentId, setStudentId] = useState("aluno_risco");
+  const [inf, setInf] = useState<InferenceResult | null>(null);
+  const [chk, setChk] = useState<ChecklistResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showFacts, setShowFacts] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError(null);
+    Promise.all([getInference(studentId), getChecklist(studentId)])
+      .then(([i, c]) => { if (active) { setInf(i); setChk(c); } })
+      .catch(() => { if (active) setError("Não foi possível carregar a inferência do backend."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [studentId]);
+
+  return (
+    <div className="rounded-2xl p-5" style={{ background: "#030712", border: "1px solid #1e293b" }}>
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+        <div className="flex items-center gap-2">
+          <Database size={14} style={{ color: "#3b82f6" }} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0" }}>Inferência real (motor lógico + backend)</span>
+        </div>
+        <div className="flex gap-1.5">
+          {PANEL_FIXTURES.map((s) => (
+            <button key={s.id} onClick={() => setStudentId(s.id)} className="rounded-lg px-3 py-1.5"
+              style={{ background: studentId === s.id ? "#1e3a5f" : "#0f172a", color: studentId === s.id ? "#60a5fa" : "#475569", border: "1px solid #1e293b", fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {loading && (
+        <div className="flex items-center gap-2" style={{ color: "#64748b", fontSize: 12 }}>
+          <Loader2 size={16} className="animate-spin" /> Consultando o motor…
+        </div>
+      )}
+      {error && !loading && (
+        <div className="rounded-lg p-3" style={{ background: "#2c0a0a", color: "#ef4444", fontSize: 12 }}>{error}</div>
+      )}
+
+      {inf && chk && !loading && (
+        <div className="space-y-4">
+          {/* Situação inferida vs registrada + conflito */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="rounded-lg px-3 py-1.5" style={{ background: "#0f172a", border: `1px solid ${(SITU_CLR[inf.situacao_inferida] ?? "#334155")}40`, color: SITU_CLR[inf.situacao_inferida] ?? "#94a3b8", fontSize: 12, fontWeight: 700, fontFamily: "monospace" }}>
+              inferida: {inf.situacao_inferida}
+            </span>
+            <span className="rounded-lg px-3 py-1.5" style={{ background: "#0f172a", border: "1px solid #334155", color: "#94a3b8", fontSize: 12, fontFamily: "monospace" }}>
+              registrada: {chk.situacao_registrada}
+            </span>
+            {chk.conflito_situacao && (
+              <span className="flex items-center gap-1.5 rounded-lg px-3 py-1.5" style={{ background: "#2c0a0a", border: "1px solid #450a0a", color: "#f59e0b", fontSize: 12, fontWeight: 700 }}>
+                <AlertTriangle size={14} /> conflito de situação
+              </span>
+            )}
+          </div>
+
+          {/* Conclusões booleanas */}
+          <div className="flex gap-2 flex-wrap">
+            <BoolPill label="apto_defesa" value={inf.apto_defesa} />
+            <BoolPill label="creditos_validos" value={inf.creditos_validos} />
+            <BoolPill label="em_risco" value={inf.em_risco} />
+          </div>
+
+          {/* Riscos detectados */}
+          {inf.riscos_detectados.length > 0 && (
+            <div className="rounded-lg p-3 space-y-1" style={{ background: "#1c1002", border: "1px solid #451a03" }}>
+              {inf.riscos_detectados.map((r, i) => (
+                <div key={i} className="flex items-center gap-2" style={{ fontSize: 12, color: "#fbbf24" }}><AlertTriangle size={12} /> {r}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Pontuações de produção (RL05) */}
+          {inf.pontuacoes_producoes.length > 0 && (
+            <div>
+              <p style={{ fontSize: 10, fontWeight: 700, color: "#475569", letterSpacing: 1, marginBottom: 6, fontFamily: "monospace" }}>PONTUAÇÕES DE PRODUÇÃO (RL05)</p>
+              <div className="flex gap-2 flex-wrap">
+                {inf.pontuacoes_producoes.map((p) => (
+                  <span key={p.producao_id} className="rounded-lg px-2.5 py-1" style={{ background: "#0f172a", border: "1px solid #1e293b", color: "#93c5fd", fontSize: 11, fontFamily: "monospace" }}>
+                    {p.producao_id}: {p.score} ({p.nivel_veiculo} ×{p.peso_aplicado})
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Fatos usados pelo motor */}
+          <div>
+            <button onClick={() => setShowFacts((v) => !v)} className="flex items-center gap-1.5" style={{ fontSize: 11, color: "#60a5fa", fontFamily: "monospace" }}>
+              <ChevronRight size={12} style={{ transform: showFacts ? "rotate(90deg)" : "none", transition: "transform .2s" }} />
+              {inf.fatos_usados.length} fatos usados pelo motor
+            </button>
+            {showFacts && (
+              <div className="mt-2 rounded-lg p-3 space-y-0.5" style={{ background: "#0b1220", border: "1px solid #1e293b", maxHeight: 200, overflowY: "auto" }}>
+                {inf.fatos_usados.map((f, i) => (
+                  <div key={i} style={{ fontSize: 10.5, color: "#64748b", fontFamily: "'Courier New',monospace" }}>{f}</div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const RISK_CFG = {
@@ -749,6 +889,11 @@ export function InferencePage() {
 
   return (
     <div className="space-y-5 inference-root" style={{ color:"var(--foreground)" }}>
+
+      {/* ── Painel de inferência real (motor + backend) ── */}
+      <RealInferencePanel />
+
+      {/* A visualização abaixo é ilustrativa (demo do encadeamento lógico). */}
 
       {/* ── Header ── */}
       <div className="rounded-2xl p-6 relative overflow-hidden" style={{ background:"linear-gradient(135deg, #030712 0%, #0a1628 50%, #0d0a1f 100%)", border:"1px solid #1e293b", boxShadow:"0 20px 60px rgba(0,0,0,0.5)" }}>
