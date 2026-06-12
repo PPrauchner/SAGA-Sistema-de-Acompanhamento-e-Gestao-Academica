@@ -13,37 +13,22 @@ Responsabilidades:
 - Casos de teste: em_risco_prazo, em_risco_qualificacao, em_risco_plano_atrasado, regular.
 """
 
+from __future__ import annotations
+
 from inference_engine.terms import Compound, Variable
 
+_A = Variable("A")
 
-def register(rule_base) -> None:
-    aluno = Variable("Aluno")
-
-    rule_base.add_rule(
-        Compound("em_risco", [aluno]),
+# em_risco(A) é satisfeito por qualquer uma das 4 cláusulas (OR implícito).
+CLAUSES: list[tuple[Compound, list[Compound]]] = [
+    (Compound("em_risco", [_A]), [Compound("prazo_estourado", [_A])]),
+    (Compound("em_risco", [_A]), [Compound("creditos_insuficientes", [_A])]),
+    (
+        Compound("em_risco", [_A]),
         [
-            Compound("prazo_estourado", [aluno]),
+            Compound("qualificacao_pendente", [_A]),
+            Compound("prazo_qualificacao_proximo", [_A]),
         ],
-    )
-
-    rule_base.add_rule(
-        Compound("em_risco", [aluno]),
-        [
-            Compound("creditos_insuficientes", [aluno]),
-        ],
-    )
-
-    rule_base.add_rule(
-        Compound("em_risco", [aluno]),
-        [
-            Compound("qualificacao_pendente", [aluno]),
-            Compound("prazo_qualificacao_proximo", [aluno]),
-        ],
-    )
-
-    rule_base.add_rule(
-        Compound("em_risco", [aluno]),
-        [
-            Compound("plano_atrasado", [aluno]),
-        ],
-    )
+    ),
+    (Compound("em_risco", [_A]), [Compound("plano_atrasado", [_A])]),
+]
