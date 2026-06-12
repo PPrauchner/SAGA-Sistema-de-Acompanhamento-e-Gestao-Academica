@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 
 class AdvisorCreateRequest(BaseModel):
+    uid: str | None = None
     nome: str
     email: str
     departamento: str
@@ -37,6 +38,7 @@ class AdvisorUpdateRequest(BaseModel):
 
 class AdvisorResponse(BaseModel):
     id: str
+    uid: str
 
     nome: str
     email: str

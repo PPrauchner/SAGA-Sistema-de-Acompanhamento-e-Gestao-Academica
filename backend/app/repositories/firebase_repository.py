@@ -40,6 +40,16 @@ class FirebaseRepository:
         """Retorna a referência síncrona do documento na coleção desta instância."""
         return get_firestore_client().collection(self.collection).document(doc_id)
 
+    async def create(self, data: dict[str, Any]) -> str:
+        """Cria um documento com auto-id e retorna o id gerado."""
+
+        def _create() -> str:
+            doc_ref = get_firestore_client().collection(self.collection).document()
+            doc_ref.set(data)
+            return doc_ref.id
+
+        return await asyncio.to_thread(_create)
+
     async def get(self, doc_id: str) -> dict[str, Any] | None:
         """Lê um documento por id.
 
@@ -97,3 +107,18 @@ class FirebaseRepository:
             return result
 
         return await asyncio.to_thread(_list)
+
+    async def set_subcollection_auto(
+        self,
+        doc_id: str,
+        subcollection: str,
+        data: dict[str, Any],
+    ) -> str:
+        """Cria um documento com auto-id em uma subcoleção."""
+
+        def _create() -> str:
+            doc_ref = self._document(doc_id).collection(subcollection).document()
+            doc_ref.set(data)
+            return doc_ref.id
+
+        return await asyncio.to_thread(_create)

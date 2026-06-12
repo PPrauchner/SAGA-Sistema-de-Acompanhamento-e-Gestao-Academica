@@ -16,6 +16,8 @@ Responsabilidades:
 
 from __future__ import annotations
 
+from typing import Any
+
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
 
@@ -24,3 +26,10 @@ class StudentRepository(FirebaseRepository):
 
     def __init__(self) -> None:
         super().__init__("students")
+
+    async def save_history_snapshot(
+        self,
+        student_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        return await self.set_subcollection_auto(student_id, "history", snapshot)
