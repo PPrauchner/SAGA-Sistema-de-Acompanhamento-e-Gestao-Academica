@@ -20,7 +20,9 @@ Responsabilidades:
 
 from fastapi import APIRouter, Depends, status
 
+from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.history import track_history
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.student import (
     ProficienciaRequest,
@@ -58,6 +60,7 @@ async def get_student(
     status_code=status.HTTP_201_CREATED,
 )
 @requires_role("coordenacao")
+@audit_operation
 async def create_student(
     body: StudentCreateRequest,
     user: CurrentUser = Depends(get_current_user),
@@ -67,6 +70,7 @@ async def create_student(
 
 @router.put("/students/{student_id}")
 @requires_role("coordenacao")
+@audit_operation
 async def update_student(
     student_id: str,
     body: StudentUpdateRequest,
@@ -77,6 +81,7 @@ async def update_student(
 
 @router.delete("/students/{student_id}")
 @requires_role("coordenacao")
+@audit_operation
 async def delete_student(
     student_id: str,
     user: CurrentUser = Depends(get_current_user),
@@ -86,6 +91,8 @@ async def delete_student(
 
 @router.patch("/students/{student_id}/qualificacao")
 @requires_role("coordenacao")
+@audit_operation
+@track_history
 async def update_qualificacao(
     student_id: str,
     body: QualificacaoRequest,
@@ -100,6 +107,8 @@ async def update_qualificacao(
 
 @router.patch("/students/{student_id}/proficiencia")
 @requires_role("coordenacao")
+@audit_operation
+@track_history
 async def update_proficiencia(
     student_id: str,
     body: ProficienciaRequest,
@@ -114,6 +123,8 @@ async def update_proficiencia(
 
 @router.patch("/students/{student_id}/situacao")
 @requires_role("coordenacao")
+@audit_operation
+@track_history
 async def update_situacao(
     student_id: str,
     body: SituacaoRequest,

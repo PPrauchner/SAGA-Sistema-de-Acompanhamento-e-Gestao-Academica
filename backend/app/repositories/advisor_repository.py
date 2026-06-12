@@ -17,6 +17,8 @@ from __future__ import annotations
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 
+_TERMINAL_STUDENT_STATUSES = {"concluido", "desligado"}
+
 
 class AdvisorRepository(FirebaseRepository):
     def __init__(self) -> None:
@@ -35,9 +37,23 @@ class AdvisorRepository(FirebaseRepository):
                 1
                 for student in students
                 if student.get("orientador_id") == advisor["id"]
+                and student.get("situacao_registrada") not in _TERMINAL_STUDENT_STATUSES
             )
 
         return advisors
+
+    async def count_active_students(
+        self,
+        advisor_id: str,
+    ) -> int:
+        students = await StudentRepository().list_all()
+
+        return sum(
+            1
+            for student in students
+            if student.get("orientador_id") == advisor_id
+            and student.get("situacao_registrada") not in _TERMINAL_STUDENT_STATUSES
+        )
 
     async def check_advisor_capacity(
         self,
