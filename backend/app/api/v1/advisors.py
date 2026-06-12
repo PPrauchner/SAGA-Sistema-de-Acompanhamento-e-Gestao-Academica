@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import status
 
+from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import (
     requires_role,
 )
@@ -64,6 +65,7 @@ async def get_advisor(
     status_code=status.HTTP_201_CREATED,
 )
 @requires_role("coordenacao")
+@audit_operation
 async def create_advisor(
     body: AdvisorCreateRequest,
     user: CurrentUser = Depends(
@@ -78,6 +80,7 @@ async def create_advisor(
 
 @router.put("/advisors/{advisor_id}")
 @requires_role("coordenacao")
+@audit_operation
 async def update_advisor(
     advisor_id: str,
     body: AdvisorUpdateRequest,
@@ -94,6 +97,7 @@ async def update_advisor(
 
 @router.delete("/advisors/{advisor_id}")
 @requires_role("coordenacao")
+@audit_operation
 async def delete_advisor(
     advisor_id: str,
     user: CurrentUser = Depends(

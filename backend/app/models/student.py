@@ -24,6 +24,7 @@ StudentLevel = Literal["mestrado", "doutorado"]
 SituacaoRegistrada = Literal[
     "regular",
     "em_prorrogacao",
+    "em_risco",
     "qualificado",
     "fase_defesa",
     "concluido",
