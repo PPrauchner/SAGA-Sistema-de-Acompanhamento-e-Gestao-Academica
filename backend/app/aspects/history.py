@@ -34,6 +34,7 @@ def track_history(func):
 
         bound = inspect.signature(func).bind_partial(*args, **kwargs)
         student_id = bound.arguments.get("student_id")
+        payload = bound.arguments.get("data") or bound.arguments.get("body")
         user = next(
             (
                 value
@@ -55,18 +56,21 @@ def track_history(func):
         if student_id and previous:
             current = await repo.get(student_id)
 
-            await repo.save_history_snapshot(
-                student_id,
-                {
-                    "entidade_tipo": "student",
-                    "entidade_id": student_id,
-                    "valor_anterior": previous,
-                    "valor_novo": current,
-                    "usuario_id": user.uid if user else None,
-                    "role": user.role if user else None,
-                    "timestamp": datetime.now(timezone.utc),
-                },
-            )
+            snapshot = {
+                "entidade_tipo": "student",
+                "entidade_id": student_id,
+                "valor_anterior": previous,
+                "valor_novo": current,
+                "usuario_id": user.uid if user else None,
+                "role": user.role if user else None,
+                "timestamp": datetime.now(timezone.utc),
+            }
+
+            observacao = getattr(payload, "observacao", None)
+            if observacao is not None:
+                snapshot["observacao"] = observacao
+
+            await repo.save_history_snapshot(student_id, snapshot)
 
         return result
 

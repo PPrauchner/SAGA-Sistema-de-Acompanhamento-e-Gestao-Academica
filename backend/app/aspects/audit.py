@@ -5,10 +5,10 @@ Responsabilidades:
 - Implementar o decorador @audit_operation usando inspect para captura de metadados em
   tempo de execução, sem bibliotecas externas de AOP.
 - Before (captura): usa inspect.signature(func).bind(*args, **kwargs).arguments para
-  extrair parâmetros nomeados; registra timestamp_inicio, usuario_id, role, operacao e
+  extrair parâmetros nomeados; registra timestamp_inicio, usuario_id, role, programa_id, operacao e
   entidade_afetada_id.
 - Executa a função original (await func(*args, **kwargs)).
-- After (persiste): monta documento AuditLog com {usuario_id, role, operacao, modulo
+- After (persiste): monta documento AuditLog com {usuario_id, role, programa_id, operacao, modulo
   (via inspect.getmodule), recurso, valor_entrada, resultado_status, erro_mensagem,
   timestamp, duracao_ms} e persiste em audit_logs/{auto_id} no Firestore.
 - Em caso de exceção: registra erro no AuditLog e re-lança a exceção.
@@ -52,11 +52,11 @@ def audit_operation(func):
 
             finished_at = datetime.now(timezone.utc)
 
-            await repo.set(
-                str(finished_at.timestamp()),
+            await repo.create(
                 {
                     "usuario_id": user.uid if user else None,
                     "role": user.role if user else None,
+                    "programa_id": user.programa_id if user else None,
                     "operacao": func.__name__,
                     "resultado_status": "sucesso",
                     "timestamp": finished_at,
@@ -71,11 +71,11 @@ def audit_operation(func):
         except Exception as exc:
             finished_at = datetime.now(timezone.utc)
 
-            await repo.set(
-                str(finished_at.timestamp()),
+            await repo.create(
                 {
                     "usuario_id": user.uid if user else None,
                     "role": user.role if user else None,
+                    "programa_id": user.programa_id if user else None,
                     "operacao": func.__name__,
                     "resultado_status": "erro",
                     "erro_mensagem": str(exc),
