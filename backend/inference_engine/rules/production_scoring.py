@@ -13,27 +13,29 @@ Responsabilidades:
   producao_C_base10 → Score=5.0.
 """
 
+from __future__ import annotations
+
 from inference_engine.terms import Compound, Variable
 
+_P = Variable("P")
+_V = Variable("V")
+_PROG = Variable("Prog")
+_NIVEL = Variable("Nivel")
+_PESO = Variable("Peso")
+_BASE = Variable("Base")
+_SCORE = Variable("Score")
 
-def register(rule_base) -> None:
-    producao = Variable("Producao")
-    veiculo = Variable("Veiculo")
-    nivel = Variable("Nivel")
-
-    peso = Variable("Peso")
-    base = Variable("Base")
-    score = Variable("Score")
-
-    programa = Variable("Programa")
-
-    rule_base.add_rule(
-        Compound("pontuacao_producao", [producao, score]),
+# pontuacao_producao(P, Score) :- producao_veiculo(P, V), nivel_relevancia(V, Prog, Nivel),
+#   relevancia_peso(Nivel, Peso), pontuacao_base(P, Base), mul(Base, Peso, Score).
+CLAUSES: list[tuple[Compound, list[Compound]]] = [
+    (
+        Compound("pontuacao_producao", [_P, _SCORE]),
         [
-            Compound("producao_veiculo", [producao, veiculo]),
-            Compound("nivel_relevancia", [veiculo, programa, nivel]),
-            Compound("relevancia_peso", [nivel, peso]),
-            Compound("pontuacao_base", [producao, base]),
-            Compound("mul", [base, peso, score]),
+            Compound("producao_veiculo", [_P, _V]),
+            Compound("nivel_relevancia", [_V, _PROG, _NIVEL]),
+            Compound("relevancia_peso", [_NIVEL, _PESO]),
+            Compound("pontuacao_base", [_P, _BASE]),
+            Compound("mul", [_BASE, _PESO, _SCORE]),
         ],
-    )
+    ),
+]
