@@ -12,19 +12,24 @@ Responsabilidades:
   5 condições presentes), inapto_sem_producao, inapto_creditos_invalidos.
 """
 
+from __future__ import annotations
+
 from inference_engine.terms import Compound, Variable
 
+_A = Variable("A")
 
-def register(rule_base) -> None:
-    aluno = Variable("Aluno")
-
-    rule_base.add_rule(
-        Compound("apto_defesa", [aluno]),
+# apto_defesa(A) :- creditos_validos(A), proficiencia_comprovada(A),
+#                   qualificacao_aprovada(A), producao_bibliografica_validada(A),
+#                   plano_concluido(A).
+CLAUSES: list[tuple[Compound, list[Compound]]] = [
+    (
+        Compound("apto_defesa", [_A]),
         [
-            Compound("creditos_validos", [aluno]),
-            Compound("proficiencia_comprovada", [aluno]),
-            Compound("qualificacao_aprovada", [aluno]),
-            Compound("producao_bibliografica_validada", [aluno]),
-            Compound("plano_concluido", [aluno]),
+            Compound("creditos_validos", [_A]),
+            Compound("proficiencia_comprovada", [_A]),
+            Compound("qualificacao_aprovada", [_A]),
+            Compound("producao_bibliografica_validada", [_A]),
+            Compound("plano_concluido", [_A]),
         ],
-    )
+    ),
+]
