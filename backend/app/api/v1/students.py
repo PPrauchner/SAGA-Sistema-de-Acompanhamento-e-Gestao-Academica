@@ -40,7 +40,7 @@ service = StudentService()
 @requires_role("coordenacao", "orientador")
 async def list_students(
     user: CurrentUser = Depends(get_current_user),
-):
+) -> list[dict]:
     return await service.list_students(user)
 
 
@@ -49,8 +49,8 @@ async def list_students(
 async def get_student(
     student_id: str,
     user: CurrentUser = Depends(get_current_user),
-):
-    return await service.get_student(student_id)
+) -> dict:
+    return await service.get_student(student_id, user)
 
 
 @router.post(
@@ -61,8 +61,8 @@ async def get_student(
 async def create_student(
     body: StudentCreateRequest,
     user: CurrentUser = Depends(get_current_user),
-):
-    return await service.create_student(body)
+) -> dict:
+    return await service.create_student(body, user)
 
 
 @router.put("/students/{student_id}")
@@ -71,8 +71,8 @@ async def update_student(
     student_id: str,
     body: StudentUpdateRequest,
     user: CurrentUser = Depends(get_current_user),
-):
-    return await service.update_student(student_id, body)
+) -> dict:
+    return await service.update_student(student_id, body, user)
 
 
 @router.delete("/students/{student_id}")
@@ -80,8 +80,8 @@ async def update_student(
 async def delete_student(
     student_id: str,
     user: CurrentUser = Depends(get_current_user),
-):
-    return await service.delete_student(student_id)
+) -> dict:
+    return await service.delete_student(student_id, user)
 
 
 @router.patch("/students/{student_id}/qualificacao")
@@ -90,10 +90,11 @@ async def update_qualificacao(
     student_id: str,
     body: QualificacaoRequest,
     user: CurrentUser = Depends(get_current_user),
-):
+) -> dict:
     return await service.update_qualificacao(
         student_id,
         body,
+        user,
     )
 
 
@@ -103,10 +104,11 @@ async def update_proficiencia(
     student_id: str,
     body: ProficienciaRequest,
     user: CurrentUser = Depends(get_current_user),
-):
+) -> dict:
     return await service.update_proficiencia(
         student_id,
         body,
+        user,
     )
 
 
@@ -116,8 +118,9 @@ async def update_situacao(
     student_id: str,
     body: SituacaoRequest,
     user: CurrentUser = Depends(get_current_user),
-):
+) -> dict:
     return await service.update_situacao(
         student_id,
         body,
+        user,
     )

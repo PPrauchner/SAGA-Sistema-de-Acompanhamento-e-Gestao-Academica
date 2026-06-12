@@ -42,7 +42,7 @@ async def list_advisors(
     user: CurrentUser = Depends(
         get_current_user,
     ),
-):
+) -> list[dict]:
     return await service.list_advisors()
 
 
@@ -53,7 +53,7 @@ async def get_advisor(
     user: CurrentUser = Depends(
         get_current_user,
     ),
-):
+) -> dict:
     return await service.get_advisor(
         advisor_id,
     )
@@ -69,9 +69,10 @@ async def create_advisor(
     user: CurrentUser = Depends(
         get_current_user,
     ),
-):
+) -> dict:
     return await service.create_advisor(
         body,
+        user,
     )
 
 
@@ -83,10 +84,11 @@ async def update_advisor(
     user: CurrentUser = Depends(
         get_current_user,
     ),
-):
+) -> dict:
     return await service.update_advisor(
         advisor_id,
         body,
+        user,
     )
 
 
@@ -97,7 +99,8 @@ async def delete_advisor(
     user: CurrentUser = Depends(
         get_current_user,
     ),
-):
+) -> dict:
     return await service.delete_advisor(
         advisor_id,
+        user,
     )
