@@ -4,6 +4,7 @@ export type StudentLevel = "mestrado" | "doutorado";
 export type StudentStatus =
   | "regular"
   | "em_prorrogacao"
+  | "em_risco"
   | "qualificado"
   | "fase_defesa"
   | "concluido"

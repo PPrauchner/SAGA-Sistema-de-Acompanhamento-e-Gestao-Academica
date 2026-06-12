@@ -27,6 +27,7 @@ const STATUS_MAP: Record<
 > = {
   regular: { label: "Regular", color: "#1F8A70", bg: "#dcfce7", icon: <CheckCircle size={12} /> },
   em_prorrogacao: { label: "Prorrogação", color: "#D4A017", bg: "#fef9c3", icon: <AlertTriangle size={12} /> },
+  em_risco: { label: "Em Risco", color: "#dc2626", bg: "#fee2e2", icon: <AlertTriangle size={12} /> },
   qualificado: { label: "Qualificado", color: "#123C7A", bg: "#eef3fc", icon: <CheckCircle size={12} /> },
   fase_defesa: { label: "Defesa", color: "#7c3aed", bg: "#ede9fe", icon: <GraduationCap size={12} /> },
   concluido: { label: "Concluído", color: "#3b82f6", bg: "#dbeafe", icon: <CheckCircle size={12} /> },
