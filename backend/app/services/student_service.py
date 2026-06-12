@@ -20,12 +20,11 @@ Responsabilidades:
 
 from __future__ import annotations
 
-from backend.app.core.auth import CurrentUser
-
 from fastapi import HTTPException, status
 
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.history import track_history
+from backend.app.core.auth import CurrentUser
 from backend.app.models.student import (
     ProficienciaRequest,
     QualificacaoRequest,
@@ -33,14 +32,18 @@ from backend.app.models.student import (
     StudentCreateRequest,
     StudentUpdateRequest,
 )
+from backend.app.models.user import InviteRequest
+from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.student_repository import StudentRepository
+from backend.app.services.auth_service import AuthService
 
 
 class StudentService:
     """Serviço de negócio para gestão de discentes."""
 
-    def __init__(self) -> None:
+    def __init__(self, auth_service: AuthService | None = None) -> None:
         self._students = StudentRepository()
+        self._auth = auth_service
 
     async def list_students(
         self,
@@ -53,25 +56,44 @@ class StudentService:
             return students
 
         if user.role == "orientador":
+            advisors = await AdvisorRepository().list_all()
+
+            advisor = next(
+                (
+                    item
+                    for item in advisors
+                    if item.get("uid") == user.uid
+                ),
+                None,
+            )
+
+            if advisor is None:
+                return []
+
+            advisor_id = advisor["id"]
+
             return [
                 student
                 for student in students
-                if student.get("orientador_id") == user.uid
+                if student.get("orientador_id") == advisor_id
             ]
 
-        return []
+        return [
+            student
+            for student in students
+            if student.get("uid") == user.uid
+        ]
 
     @audit_operation
     async def create_student(
         self,
         data: StudentCreateRequest,
+        user: CurrentUser,
     ) -> dict:
-        student_id = data.matricula
-
-        await self._students.set(
-            student_id,
+        student_id = await self._students.create(
             {
                 **data.model_dump(),
+                "uid": None,
                 "situacao_registrada": "regular",
                 "situacao_inferida": "regular",
                 "qualificacao_aprovada": False,
@@ -80,10 +102,25 @@ class StudentService:
                 "proficiencia_data": None,
             },
         )
+        auth = self._auth or AuthService()
+        try:
+            invite = await auth.create_invite(
+                InviteRequest(
+                    email=data.email,
+                    role="aluno",
+                    nome=data.nome,
+                ),
+                user,
+                {"student_id": student_id},
+            )
+        except Exception:
+            await self._students.delete(student_id)
+            raise
 
         return {
             "id": student_id,
             "nome": data.nome,
+            "invite_token": invite.token,
         }
 
     @audit_operation
@@ -91,6 +128,7 @@ class StudentService:
         self,
         student_id: str,
         data: StudentUpdateRequest,
+        user: CurrentUser,
     ) -> dict:
         await self._students.update(
             student_id,
@@ -106,6 +144,7 @@ class StudentService:
     async def delete_student(
         self,
         student_id: str,
+        user: CurrentUser,
     ) -> dict:
         await self._students.delete(student_id)
 
@@ -119,6 +158,7 @@ class StudentService:
         self,
         student_id: str,
         data: QualificacaoRequest,
+        user: CurrentUser,
     ) -> dict:
         await self._students.update(
             student_id,
@@ -139,6 +179,7 @@ class StudentService:
         self,
         student_id: str,
         data: ProficienciaRequest,
+        user: CurrentUser,
     ) -> dict:
         await self._students.update(
             student_id,
@@ -158,11 +199,13 @@ class StudentService:
         self,
         student_id: str,
         data: SituacaoRequest,
+        user: CurrentUser,
     ) -> dict:
         await self._students.update(
             student_id,
             {
                 "situacao_registrada": data.situacao_registrada,
+                "situacao_observacao": data.observacao,
             },
         )
 
@@ -170,10 +213,11 @@ class StudentService:
             "message": "Situação atualizada",
             "historico_criado": True,
         }
-    
+
     async def get_student(
         self,
         student_id: str,
+        user: CurrentUser,
     ) -> dict:
 
         student = await self._students.get(student_id)
@@ -185,5 +229,11 @@ class StudentService:
             )
 
         student["id"] = student_id
+
+        if user.role == "aluno" and student.get("uid") != user.uid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado ao aluno",
+            )
 
         return student

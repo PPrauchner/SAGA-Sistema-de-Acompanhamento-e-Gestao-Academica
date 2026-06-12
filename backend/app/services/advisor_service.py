@@ -16,29 +16,32 @@ from __future__ import annotations
 
 from fastapi import HTTPException, status
 
-from backend.app.repositories.student_repository import StudentRepository
-
 from backend.app.aspects.audit import audit_operation
+from backend.app.core.auth import CurrentUser
 from backend.app.models.advisor import (
     AdvisorCreateRequest,
     AdvisorUpdateRequest,
 )
+from backend.app.models.user import InviteRequest
 from backend.app.repositories.advisor_repository import (
     AdvisorRepository,
 )
+from backend.app.repositories.student_repository import StudentRepository
+from backend.app.services.auth_service import AuthService
 
 
 class AdvisorService:
-    def __init__(self) -> None:
+    def __init__(self, auth_service: AuthService | None = None) -> None:
         self._advisors = AdvisorRepository()
+        self._auth = auth_service
 
-    async def list_advisors(self):
+    async def list_advisors(self) -> list[dict]:
         return await self._advisors.get_advisors_with_student_count()
 
     async def get_advisor(
         self,
         advisor_id: str,
-    ):
+    ) -> dict:
         advisor = await self._advisors.get(
             advisor_id,
         )
@@ -57,17 +60,30 @@ class AdvisorService:
     async def create_advisor(
         self,
         data: AdvisorCreateRequest,
-    ):
-        advisor_id = data.email
-
-        await self._advisors.set(
-            advisor_id,
+        user: CurrentUser,
+    ) -> dict:
+        advisor_id = await self._advisors.create(
             data.model_dump(),
         )
+        auth = self._auth or AuthService()
+        try:
+            invite = await auth.create_invite(
+                InviteRequest(
+                    email=data.email,
+                    role="orientador",
+                    nome=data.nome,
+                ),
+                user,
+                {"advisor_id": advisor_id},
+            )
+        except Exception:
+            await self._advisors.delete(advisor_id)
+            raise
 
         return {
             "id": advisor_id,
             "nome": data.nome,
+            "invite_token": invite.token,
         }
 
     @audit_operation
@@ -75,7 +91,8 @@ class AdvisorService:
         self,
         advisor_id: str,
         data: AdvisorUpdateRequest,
-    ):
+        user: CurrentUser,
+    ) -> dict:
         await self._advisors.update(
             advisor_id,
             data.model_dump(exclude_none=True),
@@ -89,7 +106,8 @@ class AdvisorService:
     async def delete_advisor(
         self,
         advisor_id: str,
-    ):
+        user: CurrentUser,
+    ) -> dict:
         students = await StudentRepository().list_all()
 
         has_students = any(
