@@ -4,26 +4,22 @@ Serviço de negócio para gestão de discentes.
 Responsabilidades:
 - Implementar CRUD completo de alunos delegando persistência ao StudentRepository.
 - create_student(): cria aluno no Firestore e dispara convite de primeiro acesso.
-  Decorado com @requires_role('coordenacao') e @audit_operation.
 - update_student(): atualiza campos editáveis do aluno.
-  Decorado com @requires_role('coordenacao') e @audit_operation.
 - delete_student(): remove aluno verificando ausência de dependências ativas.
-  Decorado com @requires_role('coordenacao') e @audit_operation.
 - update_qualificacao(): registra aprovação na qualificação. Gera fato qualificacao_aprovada
-  para o motor. Decorado com @requires_role('coordenacao'), @audit_operation e @track_history.
+  para o motor.
 - update_proficiencia(): registra comprovação de proficiência em língua estrangeira.
-  Decorado com @requires_role('coordenacao'), @audit_operation e @track_history.
 - update_situacao_registrada(): atualiza situação registrada manualmente.
-  Decorado com @requires_role('coordenacao'), @audit_operation e @track_history.
-  Coberto pelo aspecto A03 (histórico) via metaclasse HistoryMeta ou decorador @track_history.
+- A01/A02/A03 são aplicados nos endpoints, conforme ordem canônica do projeto.
 """
 
 from __future__ import annotations
 
+from calendar import monthrange
+from datetime import datetime
+
 from fastapi import HTTPException, status
 
-from backend.app.aspects.audit import audit_operation
-from backend.app.aspects.history import track_history
 from backend.app.core.auth import CurrentUser
 from backend.app.models.student import (
     ProficienciaRequest,
@@ -45,6 +41,35 @@ class StudentService:
         self._students = StudentRepository()
         self._auth = auth_service
 
+    @staticmethod
+    def _add_months(date_value: datetime, months: int) -> datetime:
+        month_index = date_value.month - 1 + months
+        year = date_value.year + month_index // 12
+        month = month_index % 12 + 1
+        day = min(date_value.day, monthrange(year, month)[1])
+
+        return date_value.replace(year=year, month=month, day=day)
+
+    async def _get_advisor_id_for_user(
+        self,
+        user: CurrentUser,
+    ) -> str | None:
+        advisors = await AdvisorRepository().list_all()
+
+        advisor = next(
+            (
+                item
+                for item in advisors
+                if item.get("uid") == user.uid
+            ),
+            None,
+        )
+
+        if advisor is None:
+            return None
+
+        return advisor["id"]
+
     async def list_students(
         self,
         user: CurrentUser,
@@ -56,21 +81,10 @@ class StudentService:
             return students
 
         if user.role == "orientador":
-            advisors = await AdvisorRepository().list_all()
+            advisor_id = await self._get_advisor_id_for_user(user)
 
-            advisor = next(
-                (
-                    item
-                    for item in advisors
-                    if item.get("uid") == user.uid
-                ),
-                None,
-            )
-
-            if advisor is None:
+            if advisor_id is None:
                 return []
-
-            advisor_id = advisor["id"]
 
             return [
                 student
@@ -84,7 +98,6 @@ class StudentService:
             if student.get("uid") == user.uid
         ]
 
-    @audit_operation
     async def create_student(
         self,
         data: StudentCreateRequest,
@@ -96,6 +109,7 @@ class StudentService:
                 "uid": None,
                 "situacao_registrada": "regular",
                 "situacao_inferida": "regular",
+                "prazo_final": self._add_months(data.data_ingresso, 24),
                 "qualificacao_aprovada": False,
                 "proficiencia_comprovada": False,
                 "qualificacao_data": None,
@@ -123,7 +137,6 @@ class StudentService:
             "invite_token": invite.token,
         }
 
-    @audit_operation
     async def update_student(
         self,
         student_id: str,
@@ -140,7 +153,6 @@ class StudentService:
             "message": "Aluno atualizado",
         }
 
-    @audit_operation
     async def delete_student(
         self,
         student_id: str,
@@ -152,8 +164,6 @@ class StudentService:
             "message": "Aluno removido",
         }
 
-    @audit_operation
-    @track_history
     async def update_qualificacao(
         self,
         student_id: str,
@@ -173,8 +183,6 @@ class StudentService:
             "situacao_inferida_atualizada": False,
         }
 
-    @audit_operation
-    @track_history
     async def update_proficiencia(
         self,
         student_id: str,
@@ -193,8 +201,6 @@ class StudentService:
             "message": "Proficiência registrada",
         }
 
-    @audit_operation
-    @track_history
     async def update_situacao(
         self,
         student_id: str,
@@ -205,7 +211,6 @@ class StudentService:
             student_id,
             {
                 "situacao_registrada": data.situacao_registrada,
-                "situacao_observacao": data.observacao,
             },
         )
 
@@ -235,5 +240,14 @@ class StudentService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Acesso negado ao aluno",
             )
+
+        if user.role == "orientador":
+            advisor_id = await self._get_advisor_id_for_user(user)
+
+            if advisor_id is None or student.get("orientador_id") != advisor_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Acesso negado ao orientando",
+                )
 
         return student

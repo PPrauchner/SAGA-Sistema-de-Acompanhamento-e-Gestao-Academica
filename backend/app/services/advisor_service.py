@@ -4,19 +4,18 @@ Serviço de negócio para gestão de orientadores.
 Responsabilidades:
 - Implementar CRUD de orientadores delegando persistência ao AdvisorRepository.
 - create_advisor(): cria orientador no Firestore e dispara convite de primeiro acesso via
-  AuthService. Decorado com @requires_role('coordenacao') e @audit_operation.
+  AuthService.
 - update_advisor(): atualiza dados do orientador (nome, departamento, lattes, limite).
-  Decorado com @requires_role('coordenacao') e @audit_operation.
 - get_advisors_with_count(): lista orientadores enriquecendo cada registro com contagem
   de orientandos_ativos calculada por query na coleção students/.
 - Verificar limite_orientandos antes de permitir associação de novo orientando ao orientador.
+- A01/A02 são aplicados nos endpoints, conforme ordem canônica do projeto.
 """
 
 from __future__ import annotations
 
 from fastapi import HTTPException, status
 
-from backend.app.aspects.audit import audit_operation
 from backend.app.core.auth import CurrentUser
 from backend.app.models.advisor import (
     AdvisorCreateRequest,
@@ -53,10 +52,12 @@ class AdvisorService:
             )
 
         advisor["id"] = advisor_id
+        advisor["orientandos_ativos"] = await self._advisors.count_active_students(
+            advisor_id,
+        )
 
         return advisor
 
-    @audit_operation
     async def create_advisor(
         self,
         data: AdvisorCreateRequest,
@@ -86,7 +87,6 @@ class AdvisorService:
             "invite_token": invite.token,
         }
 
-    @audit_operation
     async def update_advisor(
         self,
         advisor_id: str,
@@ -102,7 +102,6 @@ class AdvisorService:
             "message": "Orientador atualizado",
         }
 
-    @audit_operation
     async def delete_advisor(
         self,
         advisor_id: str,
