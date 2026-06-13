@@ -12,3 +12,27 @@ Responsabilidades:
 - Casos de teste: elegivel (4 fatos presentes), sem_comprovante, tipo_inativo,
   excede_limite_tecnologico.
 """
+
+from __future__ import annotations
+
+from inference_engine.terms import Variable, Compound
+from inference_engine.knowledge_base import RuleBase
+
+
+def register(rb: RuleBase) -> None:
+    """Registra RL04 na RuleBase fornecida.
+
+    Args:
+        rb: RuleBase onde a regra será adicionada.
+    """
+    Atv = Variable("Atv")
+    A   = Variable("A")
+
+    head = Compound("atividade_elegivel", [Atv, A])
+    body = [
+        Compound("dentro_periodo_curso",       [Atv, A]),
+        Compound("tem_comprovante",             [Atv]),
+        Compound("tipo_ativo",                  [Atv]),
+        Compound("nao_excede_limite_categoria", [Atv, A]),
+    ]
+    rb.add_rule(head, body)
