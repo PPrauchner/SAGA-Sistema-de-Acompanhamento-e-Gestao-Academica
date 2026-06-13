@@ -12,3 +12,25 @@ Responsabilidades:
   calculados e inseridos na FactBase pelo InferenceService antes de cada consulta.
 - Casos de teste: em_risco_prazo, em_risco_qualificacao, em_risco_plano_atrasado, regular.
 """
+
+from __future__ import annotations
+
+from inference_engine.terms import Variable, Compound
+from inference_engine.knowledge_base import RuleBase
+
+
+def register(rb: RuleBase) -> None:
+    """Registra RL03 (4 cláusulas) na RuleBase fornecida.
+
+    Args:
+        rb: RuleBase onde as regras serão adicionadas.
+    """
+    A = Variable("A")
+
+    rb.add_rule(Compound("em_risco", [A]), [Compound("prazo_estourado",          [A])])
+    rb.add_rule(Compound("em_risco", [A]), [Compound("creditos_insuficientes",   [A])])
+    rb.add_rule(Compound("em_risco", [A]), [
+        Compound("qualificacao_pendente",      [A]),
+        Compound("prazo_qualificacao_proximo", [A]),
+    ])
+    rb.add_rule(Compound("em_risco", [A]), [Compound("plano_atrasado", [A])])

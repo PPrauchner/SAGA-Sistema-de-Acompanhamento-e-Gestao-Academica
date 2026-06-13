@@ -12,3 +12,49 @@ Responsabilidades:
 - Definir o tipo union Term = Atom | Variable | Compound.
 - Módulo completamente isolado — sem imports de FastAPI, Firebase ou qualquer ORM.
 """
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Union
+
+
+@dataclass(frozen=True)
+class Atom:
+    """Valor concreto imutável. Igualdade por valor."""
+
+    value: str | int | float | bool
+
+    def __repr__(self) -> str:
+        return repr(self.value)
+
+
+@dataclass(frozen=True)
+class Variable:
+    """Incógnita identificada por nome. Igualdade por nome."""
+
+    name: str
+
+    def __repr__(self) -> str:
+        return self.name
+
+
+@dataclass(frozen=True)
+class Compound:
+    """Predicado com functor e lista de argumentos."""
+
+    functor: str
+    args: tuple["Term", ...] = field(default_factory=tuple)
+
+    def __init__(self, functor: str, args: list["Term"] | tuple["Term", ...] = ()) -> None:
+        object.__setattr__(self, "functor", functor)
+        object.__setattr__(self, "args", tuple(args))
+
+    def __repr__(self) -> str:
+        if not self.args:
+            return self.functor
+        args_str = ", ".join(repr(a) for a in self.args)
+        return f"{self.functor}({args_str})"
+
+
+Term = Union[Atom, Variable, Compound]

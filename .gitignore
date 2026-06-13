@@ -223,6 +223,7 @@ __marimo__/
 # Frontend (Vite + Node)
 # -----------------------------------------------------------------------
 node_modules/
+pnpm-debug.log*
 dist-ssr/
 *.local
 
