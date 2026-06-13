@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Plus, X, Check, Upload, FileText, Award, BookOpen, Users,
   GraduationCap, Code2, Lightbulb, Clock, Search, CheckCircle2,
@@ -7,6 +7,14 @@ import {
   BarChart2, Layers, Clipboard,
 } from "lucide-react";
 import { useApp } from "../../context/AppContext";
+import {
+  getActivities,
+  getActivityTypes,
+  createActivity,
+  uploadComprovante,
+  validateActivity,
+  type ActivityType as ApiActivityType,
+} from "@/api/activitiesApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -533,7 +541,8 @@ function ValidateModal({ activity, onClose, onApprove, onReject }: {
 const RELEVANCE_OPTIONS: RelevanceLevel[] = ["A1","A2","A3","A4","B1","B2","B3","B4","C","N/A"];
 
 function RegisterModal({ editing, onClose, onSave }: {
-  editing?: Activity; onClose: () => void; onSave: (a: Omit<Activity, "id" | "steps">) => void;
+  editing?: Activity; onClose: () => void;
+  onSave: (a: Omit<Activity, "id" | "steps">, file?: File) => void;
 }) {
   const [tipo, setTipo] = useState<ActivityType>(editing?.tipo ?? "artigo-publicado");
   const [titulo, setTitulo] = useState(editing?.titulo ?? "");
@@ -546,6 +555,7 @@ function RegisterModal({ editing, onClose, onSave }: {
   const [doi, setDoi] = useState(editing?.doi ?? "");
   const [hasFile, setHasFile] = useState(!!editing?.comprovante);
   const [fileName, setFileName] = useState(editing?.comprovante ?? "");
+  const fileRef = useRef<File | undefined>(undefined);
 
   const needsRelevance = tipo === "artigo-publicado" || tipo === "artigo-submetido";
 
@@ -558,14 +568,17 @@ function RegisterModal({ editing, onClose, onSave }: {
 
   const handleSubmit = () => {
     if (!titulo.trim()) return;
-    onSave({
-      tipo, titulo, veiculo, nivelRelevancia: relevancia, observacao,
-      comprovante: hasFile ? (fileName || "comprovante.pdf") : null,
-      creditos, semestre, status: hasFile ? "enviado" : "rascunho",
-      dataSubmissao: new Date().toLocaleDateString("pt-BR"),
-      coautores: coautores.split(",").map(s => s.trim()).filter(Boolean),
-      doi: doi || undefined,
-    });
+    onSave(
+      {
+        tipo, titulo, veiculo, nivelRelevancia: relevancia, observacao,
+        comprovante: hasFile ? (fileName || "comprovante.pdf") : null,
+        creditos, semestre, status: hasFile ? "enviado" : "rascunho",
+        dataSubmissao: new Date().toLocaleDateString("pt-BR"),
+        coautores: coautores.split(",").map(s => s.trim()).filter(Boolean),
+        doi: doi || undefined,
+      },
+      fileRef.current,
+    );
   };
 
   return (
@@ -663,7 +676,7 @@ function RegisterModal({ editing, onClose, onSave }: {
                 <Upload size={24} style={{ color: "var(--muted-foreground)", marginBottom: 8 }} />
                 <p style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>Arraste ou clique para enviar</p>
                 <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 4 }}>PDF, JPG ou PNG · Máx. 10MB</p>
-                <input type="file" className="hidden" onChange={e => { if (e.target.files?.[0]) { setHasFile(true); setFileName(e.target.files[0].name); } }} />
+                <input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) { fileRef.current = f; setHasFile(true); setFileName(f.name); } }} />
               </label>
             )}
           </div>
@@ -828,6 +841,8 @@ const TABS: { id: TabKey; label: string; icon: React.ReactNode }[] = [
 export function ActivitiesPage() {
   const { currentUser } = useApp();
   const [activities, setActivities] = useState<Activity[]>(INITIAL_ACTIVITIES);
+  const [apiTypes, setApiTypes] = useState<ApiActivityType[]>([]);
+  const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState<TabKey>("registro");
   const [modal, setModal] = useState<ModalState>(null);
   const [search, setSearch] = useState("");
@@ -837,6 +852,52 @@ export function ActivitiesPage() {
   const isCoord = currentUser?.role === "coordenacao";
   const isOrientador = currentUser?.role === "orientador";
   const canValidate = isCoord || isOrientador;
+
+  // Carrega atividades e tipos da API ao montar
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoading(true);
+      try {
+        const [acts, types] = await Promise.all([
+          getActivities(),
+          getActivityTypes(),
+        ]);
+        if (cancelled) return;
+        setApiTypes(types);
+        if (acts.length > 0) {
+          // Mapeia ActivityResponse da API para o formato local Activity
+          const mapped: Activity[] = acts.map((a) => ({
+            id: a.id,
+            tipo: (a.tipo_nome?.toLowerCase().replace(/\s+/g, "-") ?? "disciplina") as ActivityType,
+            titulo: a.descricao,
+            veiculo: a.categoria ?? "",
+            nivelRelevancia: "N/A" as RelevanceLevel,
+            observacao: "",
+            comprovante: a.comprovante_url,
+            creditos: a.creditos_gerados,
+            semestre: a.data_realizacao?.slice(0, 7) ?? "",
+            status: (a.status as ActivityStatus) ?? "rascunho",
+            dataSubmissao: a.data_realizacao ?? "",
+            coautores: [],
+            steps: [
+              { stage: "envio" as const,       label: "Envio",          responsavel: "Aluno",          status: "concluido" as StepStatus },
+              { stage: "orientador" as const,  label: "Orientador",     responsavel: "Orientador",     status: a.parecer_orientador ? "concluido" as StepStatus : "pendente" as StepStatus },
+              { stage: "coordenacao" as const, label: "Coordenação",    responsavel: "Coordenação",    status: a.status === "aprovado" || a.status === "rejeitado" ? "concluido" as StepStatus : "pendente" as StepStatus },
+              { stage: "conclusao" as const,   label: "Conclusão",      responsavel: "Sistema",        status: a.status === "aprovado" || a.status === "rejeitado" ? a.status === "aprovado" ? "concluido" as StepStatus : "rejeitado" as StepStatus : "pendente" as StepStatus },
+            ],
+          }));
+          setActivities(mapped);
+        }
+      } catch {
+        // API indisponível: mantém dados mock
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, []);
 
   // Credit summary
   const approved = useMemo(() => activities.filter(a => a.status === "aprovado"), [activities]);
@@ -867,24 +928,95 @@ export function ActivitiesPage() {
   }, [activities, tab, filterTipo, search]);
 
   // Actions
-  function saveActivity(data: Omit<Activity, "id" | "steps">) {
+  async function saveActivity(data: Omit<Activity, "id" | "steps">, file?: File) {
     const newSteps: ValidationStep[] = [
       { stage: "envio",       label: "Envio pelo Aluno",       responsavel: currentUser?.name ?? "Aluno", status: data.status === "rascunho" ? "pendente" : "concluido", data: data.dataSubmissao },
       { stage: "orientador",  label: "Análise do Orientador",  responsavel: "Profa. Dra. Carla Mendes",  status: "pendente" },
       { stage: "coordenacao", label: "Análise da Coordenação", responsavel: "Prof. Dr. Roberto Almeida", status: "pendente" },
       { stage: "conclusao",   label: "Conclusão",              responsavel: "Sistema",                   status: "pendente" },
     ];
+
     if (modal?.kind === "register" && modal.editing) {
       setActivities(prev => prev.map(a => a.id === modal.editing!.id ? { ...a, ...data } : a));
-    } else {
-      const newActivity: Activity = { id: `a${Date.now()}`, ...data, steps: data.status === "enviado" ? [{ ...newSteps[0], status: "concluido" }, { ...newSteps[1], status: "em-andamento" }, newSteps[2], newSteps[3]] : newSteps };
-      setActivities(prev => [newActivity, ...prev]);
+      setModal(null);
+      return;
     }
-    if (data.status === "enviado") showToast("Atividade enviada para validação!");
+
+    // Tenta criar via API; se falhar, cria localmente
+    try {
+      // Determina tipo_id: usa o primeiro tipo da API que bate com o tipo local,
+      // ou usa o nome do tipo diretamente como id
+      const matchedType = apiTypes.find(
+        (t) => t.nome.toLowerCase().replace(/\s+/g, "-") === data.tipo ||
+               t.categoria === data.tipo
+      );
+      const tipo_id = matchedType?.id ?? data.tipo;
+
+      const result = await createActivity({
+        tipo_id,
+        descricao: data.titulo,
+        data_realizacao: data.dataSubmissao
+          ? new Date().toISOString().slice(0, 10)
+          : new Date().toISOString().slice(0, 10),
+        status: data.status === "enviado" ? "enviado" : "rascunho",
+      });
+
+      let comprovanteUrl = data.comprovante;
+
+      if (file && result.id && currentUser?.id) {
+        try {
+          const uploaded = await uploadComprovante(result.id, currentUser.id, file);
+          comprovanteUrl = uploaded.comprovante_url;
+        } catch {
+          // upload falhou — mantém sem comprovante
+        }
+      }
+
+      const newActivity: Activity = {
+        id: result.id,
+        ...data,
+        comprovante: comprovanteUrl ?? null,
+        steps: data.status === "enviado"
+          ? [{ ...newSteps[0], status: "concluido" }, { ...newSteps[1], status: "em-andamento" }, newSteps[2], newSteps[3]]
+          : newSteps,
+      };
+      setActivities(prev => [newActivity, ...prev]);
+
+      if (result.elegibilidade_preliminar === false) {
+        showToast("Atividade registrada (não elegível pelo motor RL04)", "#D4A017");
+      } else if (data.status === "enviado") {
+        showToast("Atividade enviada para validação!");
+      }
+    } catch {
+      // API indisponível — cria localmente
+      const newActivity: Activity = {
+        id: `a${Date.now()}`,
+        ...data,
+        steps: data.status === "enviado"
+          ? [{ ...newSteps[0], status: "concluido" }, { ...newSteps[1], status: "em-andamento" }, newSteps[2], newSteps[3]]
+          : newSteps,
+      };
+      setActivities(prev => [newActivity, ...prev]);
+      if (data.status === "enviado") showToast("Atividade enviada para validação!");
+    }
+
     setModal(null);
   }
 
-  function handleApprove(activityId: string, comment: string) {
+  async function handleApprove(activityId: string, comment: string) {
+    // Tenta validar via API
+    const activity = activities.find(a => a.id === activityId);
+    if (activity) {
+      try {
+        await validateActivity(activityId, currentUser?.id ?? "", {
+          acao: "aprovar",
+          observacao: comment || null,
+        });
+      } catch {
+        // API indisponível — aplica localmente
+      }
+    }
+
     setActivities(prev => prev.map(a => {
       if (a.id !== activityId) return a;
       const steps = a.steps.map((s, i) => {
@@ -899,7 +1031,16 @@ export function ActivitiesPage() {
     setModal(null);
   }
 
-  function handleReject(activityId: string, reason: string) {
+  async function handleReject(activityId: string, reason: string) {
+    try {
+      await validateActivity(activityId, currentUser?.id ?? "", {
+        acao: "rejeitar",
+        observacao: reason,
+      });
+    } catch {
+      // API indisponível — aplica localmente
+    }
+
     setActivities(prev => prev.map(a => {
       if (a.id !== activityId) return a;
       const steps = a.steps.map(s => s.status === "em-andamento" ? { ...s, status: "rejeitado" as StepStatus, data: new Date().toLocaleDateString("pt-BR"), comentario: reason } : s === a.steps[3] ? { ...s, status: "rejeitado" as StepStatus } : s);
