@@ -12,7 +12,10 @@ Inicia o trabalho na issue `#$ARGUMENTS`.
 ### 1. Registrar issue ativa
 ```bash
 echo "$ARGUMENTS" > .claude/current-issue
+echo "$ARGUMENTS" > .claude/root-issue
 ```
+
+`root-issue` sempre armazena a issue pai (raiz da sessão de trabalho). Nunca sobrescreva `root-issue` ao trocar para uma sub-issue — apenas `current-issue` deve ser atualizado.
 
 ### 2. Ler a issue
 ```bash
@@ -48,6 +51,9 @@ bash .claude/hooks/create-subtasks.sh $ARGUMENTS
 
 ### 6. Iniciar implementação
 Comece pela primeira sub-tarefa (ou pela issue diretamente, se simples).
+
+Ao trocar para uma sub-issue, atualize **apenas** `current-issue` — `root-issue` permanece com o número da issue pai:
 ```bash
 echo "NUMERO_DA_SUBISSUE" > .claude/current-issue
+# NÃO altere .claude/root-issue
 ```

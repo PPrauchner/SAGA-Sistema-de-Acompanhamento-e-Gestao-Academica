@@ -25,6 +25,7 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  student_id?: string;
   matricula?: string;
   programa?: string;
   orientador?: string;
