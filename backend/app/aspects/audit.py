@@ -35,7 +35,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
-from backend.app.aspects.aspect_config import AUDIT_ENABLED
+from backend.app.aspects import aspect_config
 from backend.app.core.firebase import get_firestore_client
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def audit_operation(
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            if not AUDIT_ENABLED:
+            if not aspect_config.AUDIT_ENABLED:
                 return await func(*args, **kwargs)
 
             # Extrai current_user dos kwargs/args
@@ -77,7 +77,11 @@ def audit_operation(
             entity_id = None
             if get_entity_id_fn:
                 try:
-                    entity_id = get_entity_id_fn(kwargs)
+                    res = get_entity_id_fn(kwargs)
+                    if inspect.isawaitable(res):
+                        entity_id = await res
+                    else:
+                        entity_id = res
                 except Exception:
                     pass
 

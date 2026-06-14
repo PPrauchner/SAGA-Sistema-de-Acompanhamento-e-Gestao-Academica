@@ -48,11 +48,12 @@ Weaving:
 
 import asyncio
 import functools
+import inspect
 import logging
 from datetime import datetime, timezone
 from typing import Any, Callable, Optional
 
-from backend.app.aspects.aspect_config import ALERTS_ENABLED
+from backend.app.aspects import aspect_config
 from backend.app.core.firebase import get_firestore_client
 
 logger = logging.getLogger(__name__)
@@ -89,22 +90,36 @@ def trigger_alerts(
             # Executa a função original primeiro (advice After)
             result = await func(*args, **kwargs)
 
-            if not ALERTS_ENABLED:
+            if not aspect_config.ALERTS_ENABLED:
                 return result
 
             try:
-                destinatario_id = get_destinatario_fn(kwargs)
+                # support sync or async resolvers
+                res_dest = get_destinatario_fn(kwargs)
+                if inspect.isawaitable(res_dest):
+                    destinatario_id = await res_dest
+                else:
+                    destinatario_id = res_dest
+
                 if not destinatario_id:
                     logger.warning(
                         "[A05] Destinatário não encontrado para notificação tipo='%s'",
                         tipo,
                     )
                     return result
+                res_msg = get_mensagem_fn(result, kwargs)
+                if inspect.isawaitable(res_msg):
+                    mensagem = await res_msg
+                else:
+                    mensagem = res_msg
 
-                mensagem = get_mensagem_fn(result, kwargs)
                 entidade_id = None
                 if get_entidade_id_fn:
-                    entidade_id = get_entidade_id_fn(kwargs)
+                    res_eid = get_entidade_id_fn(kwargs)
+                    if inspect.isawaitable(res_eid):
+                        entidade_id = await res_eid
+                    else:
+                        entidade_id = res_eid
 
                 await _gravar_notificacao(
                     tipo=tipo,
@@ -177,7 +192,7 @@ async def disparar_alerta_prazo(
     - dias_restantes: quantidade de dias restantes
     - student_id: ID do aluno no Firestore (usado como entidade_id)
     """
-    if not ALERTS_ENABLED:
+    if not aspect_config.ALERTS_ENABLED:
         return
 
     tipo_label = "qualificação" if tipo_prazo == "qualificacao" else "entrega final"

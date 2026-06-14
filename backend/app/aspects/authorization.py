@@ -31,12 +31,13 @@ Conceitos AOP:
 """
 
 import functools
+import inspect
 import logging
 from typing import Callable
 
 from fastapi import HTTPException, status
 
-from backend.app.aspects.aspect_config import AUTHORIZATION_ENABLED
+from backend.app.aspects import aspect_config
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +52,7 @@ def requires_role(*allowed_roles: str) -> Callable:
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            if not AUTHORIZATION_ENABLED:
+            if not aspect_config.AUTHORIZATION_ENABLED:
                 return await func(*args, **kwargs)
 
             current_user: dict = kwargs.get("current_user") or (
@@ -108,7 +109,7 @@ def requires_ownership(get_owner_uid_fn: Callable) -> Callable:
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            if not AUTHORIZATION_ENABLED:
+            if not aspect_config.AUTHORIZATION_ENABLED:
                 return await func(*args, **kwargs)
 
             current_user: dict | None = None
@@ -127,7 +128,15 @@ def requires_ownership(get_owner_uid_fn: Callable) -> Callable:
             if current_user["role"] == "coordenacao":
                 return await func(*args, **kwargs)
 
-            owner_uid = await get_owner_uid_fn(kwargs)
+            # Support sync or async get_owner_uid_fn
+            try:
+                res = get_owner_uid_fn(kwargs)
+                if inspect.isawaitable(res):
+                    owner_uid = await res
+                else:
+                    owner_uid = res
+            except Exception:
+                owner_uid = None
 
             if owner_uid is None:
                 raise HTTPException(
