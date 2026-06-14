@@ -24,7 +24,7 @@ class ProgramService:
         """
         self.repository = repository or ProgramRepository()
 
-    def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
+    async def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
         """Fetches the configuration for a given program.
 
         Args:
@@ -33,9 +33,9 @@ class ProgramService:
         Returns:
             The program configuration as a dictionary or None.
         """
-        return self.repository.get_config(programa_id)
+        return await self.repository.get_config(programa_id)
 
-    def update_config(self, programa_id: str, data: ProgramConfigUpdate) -> bool:
+    async def update_config(self, programa_id: str, data: ProgramConfigUpdate) -> bool:
         """Updates the configuration for a given program.
 
         Args:
@@ -46,9 +46,9 @@ class ProgramService:
             True if the update was successful.
         """
         update_dict = data.model_dump(exclude_unset=True)
-        return self.repository.update_config(programa_id, update_dict)
+        return await self.repository.update_config(programa_id, update_dict)
 
-    def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
+    async def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
         """Fetches all vehicle relevance levels for a program.
 
         Args:
@@ -57,9 +57,9 @@ class ProgramService:
         Returns:
             A list of vehicle level mappings.
         """
-        return self.repository.get_vehicle_levels(programa_id)
+        return await self.repository.get_vehicle_levels(programa_id)
 
-    def update_vehicle_level(
+    async def update_vehicle_level(
         self, 
         programa_id: str, 
         veiculo_id: str, 
@@ -76,4 +76,4 @@ class ProgramService:
             True if the update was successful.
         """
         update_dict = data.model_dump(exclude_unset=True)
-        return self.repository.update_vehicle_level(programa_id, veiculo_id, update_dict)
+        return await self.repository.update_vehicle_level(programa_id, veiculo_id, update_dict)

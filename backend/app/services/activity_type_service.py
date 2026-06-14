@@ -23,7 +23,7 @@ class ActivityTypeService:
         """
         self.repository = repository or ActivityTypeRepository()
 
-    def get_all_by_program(self, programa_id: str) -> List[Dict[str, Any]]:
+    async def get_all_by_program(self, programa_id: str) -> List[Dict[str, Any]]:
         """Fetches all activity types belonging to a specific program.
 
         Args:
@@ -32,9 +32,9 @@ class ActivityTypeService:
         Returns:
             A list of activity type documents.
         """
-        return self.repository.get_all_by_program(programa_id)
+        return await self.repository.get_all_by_program(programa_id)
 
-    def create_type(self, data: ActivityTypeCreate) -> str:
+    async def create_type(self, data: ActivityTypeCreate) -> str:
         """Creates a new activity type.
 
         Args:
@@ -43,9 +43,9 @@ class ActivityTypeService:
         Returns:
             The ID of the created document.
         """
-        return self.repository.create_type(data.model_dump())
+        return await self.repository.create_type(data.model_dump())
 
-    def update_type(self, type_id: str, data: ActivityTypeUpdate) -> bool:
+    async def update_type(self, type_id: str, data: ActivityTypeUpdate) -> bool:
         """Updates an existing activity type.
 
         Args:
@@ -56,9 +56,9 @@ class ActivityTypeService:
             True if the update was successful.
         """
         update_dict = data.model_dump(exclude_unset=True)
-        return self.repository.update_type(type_id, update_dict)
+        return await self.repository.update_type(type_id, update_dict)
 
-    def toggle_active(self, type_id: str) -> bool:
+    async def toggle_active(self, type_id: str) -> bool:
         """Toggles the active status of an activity type.
 
         Args:
@@ -67,9 +67,9 @@ class ActivityTypeService:
         Returns:
             True if the toggle was successful.
         """
-        current_type = self.repository.get_type(type_id)
+        current_type = await self.repository.get_type(type_id)
         if not current_type:
             return False
         
         new_status = not current_type.get("ativo", True)
-        return self.repository.update_type(type_id, {"ativo": new_status})
+        return await self.repository.update_type(type_id, {"ativo": new_status})
