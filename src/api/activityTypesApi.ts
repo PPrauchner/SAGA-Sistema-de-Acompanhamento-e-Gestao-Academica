@@ -4,25 +4,21 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
-async function getAuthHeader() {
-  return { 'Authorization': `Bearer ${localStorage.getItem('token')}` };
-}
-
 export const activityTypesApi = {
-  getActivityTypes: async () => {
+  getActivityTypes: async (token: string) => {
     const response = await fetch(`${API_BASE_URL}/activity-types`, {
-      headers: await getAuthHeader()
+      headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!response.ok) throw new Error('Failed to fetch activity types');
     return response.json();
   },
 
-  createActivityType: async (data: any) => {
+  createActivityType: async (token: string, data: any) => {
     const response = await fetch(`${API_BASE_URL}/activity-types`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getAuthHeader())
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(data)
     });
@@ -30,12 +26,12 @@ export const activityTypesApi = {
     return response.json();
   },
 
-  updateActivityType: async (id: string, data: any) => {
+  updateActivityType: async (token: string, id: string, data: any) => {
     const response = await fetch(`${API_BASE_URL}/activity-types/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        ...(await getAuthHeader())
+        'Authorization': `Bearer ${token}`
       },
       body: JSON.stringify(data)
     });
@@ -43,10 +39,10 @@ export const activityTypesApi = {
     return response.json();
   },
 
-  toggleActivityType: async (id: string) => {
+  toggleActivityType: async (token: string, id: string) => {
     const response = await fetch(`${API_BASE_URL}/activity-types/${id}/toggle`, {
       method: 'PATCH',
-      headers: await getAuthHeader()
+      headers: { 'Authorization': `Bearer ${token}` }
     });
     if (!response.ok) throw new Error('Failed to toggle activity type');
     return response.json();
