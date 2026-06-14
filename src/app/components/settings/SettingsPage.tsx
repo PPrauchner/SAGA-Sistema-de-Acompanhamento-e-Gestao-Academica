@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
+import { useAuth } from "../../../hooks/useAuth";
 import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building, Plus, CheckCircle2, XCircle, Edit } from "lucide-react";
 import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
@@ -15,6 +16,7 @@ const BASE_TABS = [
 
 export function SettingsPage() {
   const { currentUser, darkMode, toggleDarkMode } = useApp();
+  const { token } = useAuth();
   const [activeTab, setActiveTab] = useState("perfil");
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -37,11 +39,12 @@ export function SettingsPage() {
   }, [activeTab, currentUser?.role]);
 
   const fetchProgramData = async () => {
+    if (!token) return;
     setLoading(true);
     try {
       const [config, types] = await Promise.all([
-        programsApi.getProgramConfig(),
-        activityTypesApi.getActivityTypes()
+        programsApi.getProgramConfig(token),
+        activityTypesApi.getActivityTypes(token)
       ]);
       setProgramConfig(config);
       setActivityTypes(types);
@@ -54,9 +57,10 @@ export function SettingsPage() {
 
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token) return;
     setLoading(true);
     try {
-      await programsApi.updateProgramConfig(programConfig);
+      await programsApi.updateProgramConfig(token, programConfig);
       setSaved(true);
       toast.success("Configurações atualizadas");
       setTimeout(() => setSaved(false), 2000);
@@ -68,8 +72,9 @@ export function SettingsPage() {
   };
 
   const handleToggleActivity = async (id: string) => {
+    if (!token) return;
     try {
-      await activityTypesApi.toggleActivityType(id);
+      await activityTypesApi.toggleActivityType(token, id);
       setActivityTypes(activityTypes.map(t => t.id === id ? { ...t, ativo: !t.ativo } : t));
       toast.success("Status atualizado");
     } catch (error) {
@@ -79,13 +84,14 @@ export function SettingsPage() {
 
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token) return;
     try {
       if (currentActivity.id) {
-        const updated = await activityTypesApi.updateActivityType(currentActivity.id, currentActivity);
+        const updated = await activityTypesApi.updateActivityType(token, currentActivity.id, currentActivity);
         setActivityTypes(activityTypes.map(t => t.id === updated.id ? updated : t));
         toast.success("Tipo de atividade atualizado!");
       } else {
-        const created = await activityTypesApi.createActivityType(currentActivity);
+        const created = await activityTypesApi.createActivityType(token, currentActivity);
         setActivityTypes([...activityTypes, created]);
         toast.success("Tipo de atividade criado!");
       }
@@ -97,8 +103,9 @@ export function SettingsPage() {
 
   const handleSaveVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!token) return;
     try {
-      const updatedConfig = await programsApi.updateVehicleLevel(currentVehicle.id, {
+      const updatedConfig = await programsApi.updateVehicleLevel(token, currentVehicle.id, {
         nivel: currentVehicle.nivel,
         peso: currentVehicle.peso
       });
