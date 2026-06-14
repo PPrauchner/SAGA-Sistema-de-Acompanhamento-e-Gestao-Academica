@@ -28,7 +28,7 @@ async def get_config(
     service: ProgramService = Depends(ProgramService)
 ):
     """Fetches the configuration for the user's program."""
-    config = service.get_config(user.programa_id)
+    config = await service.get_config(user.programa_id)
     if not config:
         raise HTTPException(status_code=404, detail="Configuração não encontrada")
     return config
@@ -44,7 +44,7 @@ async def update_config(
     service: ProgramService = Depends(ProgramService)
 ):
     """Updates the program configuration."""
-    success = service.update_config(user.programa_id, data)
+    success = await service.update_config(user.programa_id, data)
     if not success:
         raise HTTPException(status_code=500, detail="Falha ao atualizar configuração")
     return {"message": "Configuração atualizada com sucesso"}

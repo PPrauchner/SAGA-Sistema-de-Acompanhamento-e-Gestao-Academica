@@ -26,7 +26,7 @@ async def get_activity_types(
     service: ActivityTypeService = Depends(ActivityTypeService)
 ):
     """Lists activity types for the program."""
-    return service.get_all_by_program(user.programa_id)
+    return await service.get_all_by_program(user.programa_id)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
@@ -38,7 +38,7 @@ async def create_activity_type(
     service: ActivityTypeService = Depends(ActivityTypeService)
 ):
     """Creates a new activity type."""
-    type_id = service.create_type(data)
+    type_id = await service.create_type(data)
     return {"id": type_id, "message": "Tipo de atividade criado com sucesso"}
 
 
@@ -53,7 +53,7 @@ async def update_activity_type(
     service: ActivityTypeService = Depends(ActivityTypeService)
 ):
     """Updates an existing activity type."""
-    success = service.update_type(type_id, data)
+    success = await service.update_type(type_id, data)
     if not success:
         raise HTTPException(status_code=404, detail="Tipo de atividade não encontrado")
     return {"message": "Tipo de atividade atualizado com sucesso"}
@@ -69,7 +69,7 @@ async def toggle_activity_type(
     service: ActivityTypeService = Depends(ActivityTypeService)
 ):
     """Toggles the active status of an activity type."""
-    success = service.toggle_active(type_id)
+    success = await service.toggle_active(type_id)
     if not success:
         raise HTTPException(status_code=404, detail="Tipo de atividade não encontrado")
     return {"message": "Status do tipo de atividade alterado com sucesso"}
