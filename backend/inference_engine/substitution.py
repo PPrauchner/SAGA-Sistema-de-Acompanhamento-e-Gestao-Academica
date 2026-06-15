@@ -23,8 +23,6 @@ Comportamento por tipo de termo:
 Isolamento: depende apenas de terms.py. Sem imports de FastAPI, Firebase ou
 qualquer ORM.
 """
-from __future__ import annotations
-
 from inference_engine.terms import Atom, Variable, Compound, Term
 
 
