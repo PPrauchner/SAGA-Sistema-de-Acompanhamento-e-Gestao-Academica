@@ -230,3 +230,41 @@ class ActivityRepository(FirebaseRepository):
             return None
 
         return await asyncio.to_thread(_search)
+
+    async def list_all_activities(
+        self,
+        status_filter: str | None = None,
+        categoria_filter: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Lista TODAS as atividades de TODOS os alunos (para coordenação).
+
+        Custo: O(n) onde n = número de alunos. Use com cuidado em produção.
+
+        Args:
+            status_filter: Filtra por status.
+            categoria_filter: Filtra por categoria do tipo de atividade.
+
+        Returns:
+            Lista de dicts de atividades com student_id incluído.
+        """
+        def _list_all() -> list[dict[str, Any]]:
+            all_activities = []
+            students = list(self.client.collection("students").stream())
+            for student_doc in students:
+                student_id = student_doc.id
+                activities = self.client.collection("students").document(student_id).collection("activities").stream()
+                for activity_doc in activities:
+                    activity = activity_doc.to_dict() or {}
+                    activity["id"] = activity_doc.id
+                    activity["student_id"] = student_id
+
+                    # Aplica filtros
+                    if status_filter and activity.get("status") != status_filter:
+                        continue
+                    if categoria_filter and activity.get("categoria") != categoria_filter:
+                        continue
+
+                    all_activities.append(activity)
+            return all_activities
+
+        return await asyncio.to_thread(_list_all)
