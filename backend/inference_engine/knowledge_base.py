@@ -14,7 +14,7 @@ Restrições:
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from inference_engine.terms import Atom, Compound, Variable, Term
+from inference_engine.terms import Compound, Variable, Term
 from inference_engine.substitution import apply as subst_apply
 from inference_engine.resolver import solve
 

@@ -13,3 +13,23 @@ Responsabilidades:
 - save_inferred_status(student_id, result): persiste snapshot em
   students/{id}/inferred_status/{auto_id} e atualiza students/{id}.situacao_inferida.
 """
+
+from __future__ import annotations
+
+from typing import Any
+
+from backend.app.repositories.firebase_repository import FirebaseRepository
+
+
+class StudentRepository(FirebaseRepository):
+    """Repositório específico da coleção students."""
+
+    def __init__(self) -> None:
+        super().__init__("students")
+
+    async def save_history_snapshot(
+        self,
+        student_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        return await self.set_subcollection_auto(student_id, "history", snapshot)

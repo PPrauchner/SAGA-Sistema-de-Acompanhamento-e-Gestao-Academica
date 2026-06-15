@@ -10,7 +10,6 @@ Responsabilidades:
 - Testar unify(Compound, Compound) com mesmo functor e aridade → unifica argumentos par a par.
 - Testar unify(Compound, Compound) com functores ou aridades diferentes → retorna None.
 """
-import pytest
 
 from inference_engine.terms import Atom, Variable, Compound
 from inference_engine.unification import unify
