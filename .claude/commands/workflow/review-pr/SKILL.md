@@ -19,7 +19,7 @@ Anote: número do PR, branch de origem, estado (OPEN/MERGED), issues referenciad
 ```bash
 gh issue view N --json number,title,body,labels,assignees,milestone
 ```
-Extraia o número da sprint do título: `[Sprint N]` → formatar com dois dígitos (`01`, `02`...).
+Os títulos das issues **não contêm mais o número da sprint**. O número da sprint é determinado no Passo 6.
 
 ### 3. Ler o modelo de dados e identificar specs relevantes
 
@@ -51,10 +51,25 @@ Compare issue + specs + data-model + diff. Categorize incongruências:
 ### 6. Determinar caminho do relatório
 `docs/relatorios/[BRANCH]/Sprint_[SPRINT]/Relatorio_PR_[N]_[ITERAÇÃO].md`
 
+**Regras para determinar `[SPRINT]`:**
+
 ```bash
-ls docs/relatorios/[BRANCH]/Sprint_[SPRINT]/ 2>/dev/null || echo "(pasta ainda não existe)"
+# 1. Listar todas as pastas de sprint existentes para a branch
+ls docs/relatorios/[BRANCH]/ 2>/dev/null | sort
+
+# 2. Verificar se já existe relatório para a issue referenciada nesta PR
+find docs/relatorios/[BRANCH]/ -name "Relatorio_PR_[N]_*.md" 2>/dev/null
 ```
-Conte os arquivos `Relatorio_PR_[N]_*.md` existentes + 1 = iteração.
+
+- **Mesma issue já revisada antes** (encontrou arquivos `Relatorio_PR_[N]_*.md`): use a **mesma sprint** onde ela já foi revisada. É uma nova iteração da mesma issue.
+- **Issue nova** (nenhum arquivo encontrado): sprint = `n+1`, onde `n` é o número da sprint mais recente listada em `docs/relatorios/[BRANCH]/`. Formate com dois dígitos (`01`, `02`...).
+
+**Determinar `[ITERAÇÃO]`:**
+Conte os arquivos `Relatorio_PR_[N]_*.md` existentes na pasta `Sprint_[SPRINT]` + 1.
+
+```bash
+ls docs/relatorios/[BRANCH]/Sprint_[SPRINT]/ 2>/dev/null | grep "Relatorio_PR_[N]_" || echo "(nenhum ainda)"
+```
 
 ### 7. Gerar e salvar o relatório
 Siga o [template de relatório](./report-template.md). Use como referência visual qualquer relatório existente em `docs/relatorios/`.
