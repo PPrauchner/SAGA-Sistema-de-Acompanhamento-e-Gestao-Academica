@@ -70,6 +70,9 @@ def _override_user(role: str) -> None:
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr("backend.app.api.v1.auth.AuthService", _FakeAuthService)
+    # Desliga o aspecto A02 (@audit_operation) para isolar a rota do Firestore;
+    # a auditoria em si é coberta pelos testes do próprio aspecto.
+    monkeypatch.setattr("backend.app.aspects.aspect_config.AUDIT_ENABLED", False)
     _FakeAuthService.chamadas = []
     yield TestClient(app)
     app.dependency_overrides.clear()
