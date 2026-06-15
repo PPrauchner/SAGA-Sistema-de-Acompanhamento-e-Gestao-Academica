@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 export type UserRole = "aluno" | "orientador" | "coordenacao";
 
 export type PageId =
-  | "login" | "register" | "password-recovery" | "change-password" | "first-access"
+  | "login" | "register" | "password-recovery" | "first-access"
   | "dashboard"
   | "alunos" | "aluno-detail"
   | "orientadores" | "orientador-detail"
@@ -55,7 +55,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 // Páginas de autenticação (acessíveis sem sessão). Fora deste conjunto, toda
 // página exige usuário autenticado.
 const AUTH_PAGES: PageId[] = [
-  "login", "register", "password-recovery", "change-password", "first-access",
+  "login", "register", "password-recovery", "first-access",
 ];
 
 // Guarda de rota por papel — espelha os `roles` de NAV_ITEMS no Sidebar. Páginas

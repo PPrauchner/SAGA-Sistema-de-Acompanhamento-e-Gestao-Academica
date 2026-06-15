@@ -119,9 +119,7 @@ class AuthService:
         Raises:
             HTTPException: 400 se o token for inválido, expirado ou já utilizado.
         """
-        invite = await self._invites.get(token)
-        self._validar_convite(invite)
-        assert invite is not None  # garantido por _validar_convite
+        invite = self._validar_convite(await self._invites.get(token))
 
         user_record = self._auth.create_user(email=invite["email"], password=senha)
         uid = user_record.uid
@@ -204,8 +202,18 @@ class AuthService:
         return True
 
     @staticmethod
-    def _validar_convite(invite: dict[str, Any] | None) -> None:
-        """Garante que o convite existe, não foi usado e não expirou."""
+    def _validar_convite(invite: dict[str, Any] | None) -> dict[str, Any]:
+        """Garante que o convite existe, não foi usado e não expirou.
+
+        Args:
+            invite: Documento do convite lido do Firestore, ou None se ausente.
+
+        Returns:
+            O convite validado (garantidamente não-None).
+
+        Raises:
+            HTTPException: 400 se o token for inválido, expirado ou já utilizado.
+        """
         if invite is None or invite.get("usado"):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -216,3 +224,4 @@ class AuthService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Token inválido, expirado ou já utilizado",
             )
+        return invite
