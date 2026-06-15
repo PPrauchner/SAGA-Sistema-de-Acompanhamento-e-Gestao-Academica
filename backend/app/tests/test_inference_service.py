@@ -2,7 +2,7 @@
 Testes do InferenceService sobre o FixtureRepository (costura de dados de #43).
 
 Cobre os três cenários de situação inferida produzidos pelas fixtures:
-- aluno_apto    → fase_defesa (apto_defesa, creditos_validos, sem risco).
+- aluno_apto    → em_fase_de_defesa (apto_defesa, creditos_validos, sem risco).
 - aluno_risco   → em_risco (prazo estourado + créditos insuficientes).
 - aluno_regular → qualificado (créditos válidos, mas sem produção/plano concluído).
 """
@@ -18,12 +18,12 @@ def service() -> InferenceService:
     return InferenceService(FixtureRepository())
 
 
-async def test_aluno_apto_fase_defesa(service: InferenceService):
+async def test_aluno_apto_em_fase_de_defesa(service: InferenceService):
     result = await service.run_inference("aluno_apto", "prog_default")
     assert result.apto_defesa is True
     assert result.creditos_validos is True
     assert result.em_risco is False
-    assert result.situacao_inferida == "fase_defesa"
+    assert result.situacao_inferida == "em_fase_de_defesa"
     assert result.snapshot_id != ""
     # Todas as 3 atividades são elegíveis (comprovante + tipo ativo + dentro do período).
     assert set(result.atividades_elegiveis) == {"atv_apto_b", "atv_apto_e", "atv_apto_t"}
