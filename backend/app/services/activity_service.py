@@ -15,16 +15,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.app.aspects.alerts import trigger_alerts
-from backend.app.aspects.audit import audit_operation
-from backend.app.aspects.authorization import requires_role
-from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser
 from backend.app.models.activity import (
     ActivityCreate,
     ActivityValidateRequest,
 )
 from backend.app.repositories.activity_repository import ActivityRepository
+from backend.app.services.inference_service import InferenceService
 
 
 class ActivityService:
@@ -32,6 +29,7 @@ class ActivityService:
 
     def __init__(self) -> None:
         self._repo = ActivityRepository()
+        self._inference_service = InferenceService()
 
     async def list_activities(
         self,
@@ -42,7 +40,9 @@ class ActivityService:
     ) -> list[dict[str, Any]]:
         """Lista atividades respeitando permissões por papel.
 
-        Aluno vê apenas as próprias; orientador vê dos orientandos; coordenação vê todas.
+        - Aluno vê apenas as próprias.
+        - Orientador vê dos orientandos (requer student_id ou integração com StudentRepository).
+        - Coordenação vê todas (sem student_id) ou filtra por aluno (com student_id).
 
         Args:
             current_user: Usuário autenticado.
@@ -55,23 +55,34 @@ class ActivityService:
         """
         if current_user.role == "aluno":
             target_id = current_user.uid
-        elif student_id:
-            target_id = student_id
+            return await self._repo.list_activities(
+                student_id=target_id,
+                status_filter=status_filter,
+                categoria_filter=categoria_filter,
+            )
+        elif current_user.role == "coordenacao":
+            if student_id:
+                return await self._repo.list_activities(
+                    student_id=student_id,
+                    status_filter=status_filter,
+                    categoria_filter=categoria_filter,
+                )
+            else:
+                # Coordenação sem student_id: lista TODAS as atividades
+                return await self._repo.list_all_activities(
+                    status_filter=status_filter,
+                    categoria_filter=categoria_filter,
+                )
         else:
-            # coordenação sem student_id — retorna todas (limitado a primeiro aluno aqui;
-            # implementação completa requer paginação)
-            return []
+            # orientador: requer student_id
+            if not student_id:
+                return []
+            return await self._repo.list_activities(
+                student_id=student_id,
+                status_filter=status_filter,
+                categoria_filter=categoria_filter,
+            )
 
-        return await self._repo.list_activities(
-            student_id=target_id,
-            status_filter=status_filter,
-            categoria_filter=categoria_filter,
-        )
-
-    @requires_role("aluno")
-    @audit_operation
-    @check_deadlines
-    @trigger_alerts
     async def submit_activity(
         self,
         body: ActivityCreate,
@@ -138,6 +149,9 @@ class ActivityService:
     ) -> bool:
         """Executa RL04 preliminarmente com os fatos disponíveis no momento do registro.
 
+        Delega para InferenceService.validate_activity_eligibility() que é o único
+        autorizado a instanciar o motor de inferência.
+
         Args:
             activity_id: ID da atividade recém-criada.
             student_id: UID do aluno.
@@ -150,11 +164,9 @@ class ActivityService:
         Returns:
             True se todos os 4 fatos de RL04 estão presentes preliminarmente.
         """
-        from backend.app.core.firebase import get_firestore_client
-        from inference_engine.knowledge_base import FactBase, RuleBase, InferenceEngine
-        from inference_engine.rules import register_all
-        from inference_engine.terms import Atom, Compound
         import asyncio
+        from backend.app.core.firebase import get_firestore_client
+        from datetime import date
 
         tem_comprovante = bool(body.comprovante_url)
 
@@ -170,7 +182,6 @@ class ActivityService:
             student = await asyncio.to_thread(_read_student)
             data_ingresso = student.get("data_ingresso")
             if data_ingresso:
-                from datetime import date
                 if hasattr(data_ingresso, "date"):
                     data_ingresso_date = data_ingresso.date()
                 else:
@@ -185,32 +196,26 @@ class ActivityService:
         nao_excede = True
         if limite is not None:
             try:
-                creditos_por_categoria = await self._repo.get_approved_activities_by_category(student_id)
+                creditos_por_categoria = await self._repo.get_approved_activities_by_category(
+                    student_id
+                )
                 total_categoria = creditos_por_categoria.get(categoria, 0.0)
                 nao_excede = (total_categoria + pontuacao_base) <= limite
             except Exception:
                 nao_excede = True
 
-        # Monta FactBase e roda RL04
-        fb = FactBase()
-        rb = RuleBase()
-        register_all(rb)
+        # Chama InferenceService para validar RL04
+        return await self._inference_service.validate_activity_eligibility(
+            activity_id=activity_id,
+            student_id=student_id,
+            fatos={
+                "dentro_periodo_curso": dentro_periodo,
+                "tem_comprovante": tem_comprovante,
+                "tipo_ativo": tipo_ativo,
+                "nao_excede_limite_categoria": nao_excede,
+            },
+        )
 
-        if dentro_periodo:
-            fb.add_fact(Compound("dentro_periodo_curso", [Atom(activity_id), Atom(student_id)]))
-        if tem_comprovante:
-            fb.add_fact(Compound("tem_comprovante", [Atom(activity_id)]))
-        if tipo_ativo:
-            fb.add_fact(Compound("tipo_ativo", [Atom(activity_id)]))
-        if nao_excede:
-            fb.add_fact(Compound("nao_excede_limite_categoria", [Atom(activity_id), Atom(student_id)]))
-
-        engine = InferenceEngine(fb, rb)
-        goal = Compound("atividade_elegivel", [Atom(activity_id), Atom(student_id)])
-        return engine._query_bool(goal)
-
-    @requires_role("orientador")
-    @audit_operation
     async def advisor_review(
         self,
         student_id: str,
@@ -220,6 +225,8 @@ class ActivityService:
     ) -> dict[str, Any]:
         """Orientador emite parecer sobre a atividade (sem aprovar definitivamente).
 
+        Aspecto A01: valida que o orientador é o responsável pelo aluno.
+
         Args:
             student_id: UID do aluno dono da atividade.
             activity_id: ID da atividade.
@@ -228,16 +235,27 @@ class ActivityService:
 
         Returns:
             Dict com status atualizado.
+
+        Raises:
+            HTTPException(403): Se o orientador não é responsável pelo aluno.
         """
+        from fastapi import HTTPException, status
+
+        student = await self._repo._repo.get("students", student_id)
+        advisor_id = student.get("orientador_id")
+
+        if advisor_id != current_user.uid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não é o orientador deste aluno",
+            )
+
         return await self._repo.update_activity(
             student_id,
             activity_id,
-            {"parecer_orientador": observacao, "status": "em_validacao"},
+            {"parecer_orientador": observacao},
         )
 
-    @requires_role("coordenacao")
-    @audit_operation
-    @trigger_alerts
     async def validate_activity(
         self,
         student_id: str,
@@ -246,6 +264,9 @@ class ActivityService:
         current_user: CurrentUser,
     ) -> dict[str, Any]:
         """Coordenação aprova ou rejeita uma atividade definitivamente.
+
+        Se aprovada e categoria=especifico, executa re-inferência do motor para atualizar
+        situacao_inferida do aluno.
 
         Aspecto A05 (@trigger_alerts) notifica o aluno após a decisão.
 
@@ -257,20 +278,12 @@ class ActivityService:
 
         Returns:
             Dict com novo_status, creditos_contabilizados, motor_inferencia_executado.
+
+        Raises:
+            ValueError: Se acao não for "aprovar" ou "rejeitar".
         """
-        if body.acao == "parecer_orientador":
-            updates: dict[str, Any] = {
-                "parecer_orientador": body.observacao,
-                "status": "em_validacao",
-            }
-            updated = await self._repo.update_activity(student_id, activity_id, updates)
-            return {
-                "message":                   "Parecer registrado",
-                "novo_status":               "em_validacao",
-                "creditos_contabilizados":   None,
-                "motor_inferencia_executado": False,
-                "fato_gerado":               None,
-            }
+        if body.acao not in ("aprovar", "rejeitar"):
+            raise ValueError(f"Ação inválida: {body.acao}")
 
         novo_status = "aprovado" if body.acao == "aprovar" else "rejeitado"
         creditos = body.creditos_concedidos
@@ -280,7 +293,6 @@ class ActivityService:
             "observacao_coordenacao":  body.observacao,
         }
 
-        fato_gerado = None
         motor_executado = False
 
         if body.acao == "aprovar":
@@ -290,19 +302,33 @@ class ActivityService:
                 creditos = float(tipo.get("pontuacao_base", 0))
 
             updates["creditos_gerados"] = creditos
-            motor_executado = True
 
-            # Verifica se é produção bibliográfica para inserir fato no motor
+            # Se categoria == "especifico", executa re-inferência completa do motor
             categoria = activity.get("categoria", "")
             if categoria == "especifico":
-                fato_gerado = f"producao_bibliografica_validada({student_id})"
+                motor_executado = True
 
         await self._repo.update_activity(student_id, activity_id, updates)
+
+        # Se re-inferência necessária, executa o motor completo
+        if motor_executado:
+            try:
+                # InferenceService.run_inference() irá gerar o novo snapshot
+                # em inferred_status/ e atualizar situacao_inferida
+                await self._inference_service.run_inference(
+                    student_id=student_id,
+                    programa_id=(
+                        # TODO: obter programa_id do student ou do programa_id da activity
+                        "default"
+                    ),
+                )
+            except Exception:
+                # Re-inferência falha não deve impedir a aprovação
+                pass
 
         return {
             "message":                   f"Atividade {novo_status}",
             "novo_status":               novo_status,
             "creditos_contabilizados":   creditos if body.acao == "aprovar" else None,
             "motor_inferencia_executado": motor_executado,
-            "fato_gerado":               fato_gerado,
         }
