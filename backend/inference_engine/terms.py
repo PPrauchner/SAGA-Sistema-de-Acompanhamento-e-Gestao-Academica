@@ -14,7 +14,6 @@ Responsabilidades:
 """
 
 from __future__ import annotations
-from typing import Union
 
 
 class Atom:
@@ -65,9 +64,9 @@ class Compound:
 
     __slots__ = ("functor", "args")
 
-    def __init__(self, functor: str, args: list[Term]) -> None:
+    def __init__(self, functor: str, args: list[Term] | tuple[Term, ...]) -> None:
         object.__setattr__(self, "functor", functor)
-        object.__setattr__(self, "args", list(args))
+        object.__setattr__(self, "args", tuple(args))
 
     def __setattr__(self, name: str, value: object) -> None:
         raise AttributeError("Compound é imutável")
@@ -86,5 +85,4 @@ class Compound:
         return f"Compound({self.functor!r}, {self.args!r})"
 
 
-# Tipo union para anotações de tipo
-Term = Union[Atom, Variable, Compound]
+Term = Atom | Variable | Compound

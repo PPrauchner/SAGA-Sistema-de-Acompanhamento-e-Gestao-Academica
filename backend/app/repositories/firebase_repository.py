@@ -78,6 +78,7 @@ class FirebaseRepository:
                 self._document(doc_id).set(data)
                 return doc_id
             
+            # Usando add() para auto-id se não fornecido
             _, doc_ref = get_firestore_client().collection(self.collection).add(data)
             return doc_ref.id
 
@@ -107,6 +108,23 @@ class FirebaseRepository:
         """
         await asyncio.to_thread(self._document(doc_id).delete)
         return True
+
+    async def list_all(self) -> list[dict[str, Any]]:
+        """Lista todos os documentos da coleção."""
+
+        def _list() -> list[dict[str, Any]]:
+            docs = get_firestore_client().collection(self.collection).stream()
+
+            result = []
+
+            for doc in docs:
+                item = doc.to_dict() or {}
+                item["id"] = doc.id
+                result.append(item)
+
+            return result
+
+        return await asyncio.to_thread(_list)
 
     async def query(
         self, 
@@ -150,3 +168,18 @@ class FirebaseRepository:
             return results
 
         return await asyncio.to_thread(_execute_query)
+
+    async def set_subcollection_auto(
+        self,
+        doc_id: str,
+        subcollection: str,
+        data: dict[str, Any],
+    ) -> str:
+        """Cria um documento com auto-id em uma subcoleção."""
+
+        def _create() -> str:
+            doc_ref = self._document(doc_id).collection(subcollection).document()
+            doc_ref.set(data)
+            return doc_ref.id
+
+        return await asyncio.to_thread(_create)

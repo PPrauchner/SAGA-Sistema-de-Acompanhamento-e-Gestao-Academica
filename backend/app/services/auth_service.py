@@ -56,7 +56,10 @@ class AuthService:
         self._auth = auth_client if auth_client is not None else get_auth_client()
 
     async def create_invite(
-        self, data: InviteRequest, current_user: CurrentUser
+        self,
+        data: InviteRequest,
+        current_user: CurrentUser,
+        extra_fields: dict[str, Any] | None = None,
     ) -> InviteResponse:
         """Cria um convite de primeiro acesso para o e-mail informado.
 
@@ -80,9 +83,7 @@ class AuthService:
         agora = datetime.now(timezone.utc)
         expira_em = agora + _INVITE_TTL
 
-        await self._invites.set(
-            token,
-            {
+        invite_data = {
                 "email": data.email,
                 "role": data.role,
                 "nome": data.nome,
@@ -91,8 +92,11 @@ class AuthService:
                 "expira_em": expira_em,
                 "criado_por": current_user.uid,
                 "criado_em": agora,
-            },
-        )
+        }
+        if extra_fields:
+            invite_data.update(extra_fields)
+
+        await self._invites.set(token, invite_data)
 
         return InviteResponse(
             message=f"Convite enviado para {data.email}",
@@ -126,20 +130,31 @@ class AuthService:
         self._auth.set_custom_user_claims(uid, claims)
 
         agora = datetime.now(timezone.utc)
+        user_data = {
+            "uid": uid,
+            "email": invite["email"],
+            "nome": invite["nome"],
+            "role": invite["role"],
+            "programa_id": invite["programa_id"],
+            "ativo": True,
+            "primeiro_acesso_completo": True,
+            "criado_em": agora,
+            "atualizado_em": agora,
+        }
+        if invite.get("student_id"):
+            user_data["student_id"] = invite["student_id"]
+        if invite.get("advisor_id"):
+            user_data["advisor_id"] = invite["advisor_id"]
+
         await self._users.set(
             uid,
-            {
-                "uid": uid,
-                "email": invite["email"],
-                "nome": invite["nome"],
-                "role": invite["role"],
-                "programa_id": invite["programa_id"],
-                "ativo": True,
-                "primeiro_acesso_completo": True,
-                "criado_em": agora,
-                "atualizado_em": agora,
-            },
+            user_data,
         )
+
+        if invite.get("student_id"):
+            await FirebaseRepository("students").update(invite["student_id"], {"uid": uid})
+        if invite.get("advisor_id"):
+            await FirebaseRepository("advisors").update(invite["advisor_id"], {"uid": uid})
 
         await self._invites.update(token, {"usado": True})
 

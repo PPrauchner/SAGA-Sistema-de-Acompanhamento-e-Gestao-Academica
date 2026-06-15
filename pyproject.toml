@@ -28,3 +28,11 @@ pythonpath = ["backend"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["backend"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.16",
+]
+
+[tool.ruff.lint]
+ignore = ["E402"]
