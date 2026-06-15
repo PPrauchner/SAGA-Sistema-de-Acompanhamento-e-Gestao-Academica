@@ -20,3 +20,63 @@ Responsabilidades:
 - É o único módulo que instancia o InferenceEngine — outros serviços não acessam o motor
   diretamente.
 """
+
+from __future__ import annotations
+
+from typing import Any
+
+from inference_engine.knowledge_base import FactBase, RuleBase, InferenceEngine
+from inference_engine.rules import register_all
+from inference_engine.terms import Atom, Compound
+
+
+class InferenceService:
+    """Orquestrador do motor de inferência."""
+
+    async def validate_activity_eligibility(
+        self,
+        activity_id: str,
+        student_id: str,
+        fatos: dict[str, bool],
+    ) -> bool:
+        """Valida RL04 (elegibilidade de atividade) com os 4 fatos preliminares.
+
+        Join Point: chamado por ActivityService.submit_activity() após validações básicas.
+        Fatos esperados em `fatos`:
+        - dentro_periodo_curso: bool
+        - tem_comprovante: bool
+        - tipo_ativo: bool
+        - nao_excede_limite_categoria: bool
+
+        Args:
+            activity_id: ID da atividade.
+            student_id: UID do aluno.
+            fatos: Dict com os 4 booleanos dos fatos de RL04.
+
+        Returns:
+            True se atividade_elegivel(activity_id, student_id) é verdadeiro.
+        """
+        fb = FactBase()
+        rb = RuleBase()
+        register_all(rb)
+
+        if fatos.get("dentro_periodo_curso"):
+            fb.add_fact(
+                Compound("dentro_periodo_curso", [Atom(activity_id), Atom(student_id)])
+            )
+        if fatos.get("tem_comprovante"):
+            fb.add_fact(Compound("tem_comprovante", [Atom(activity_id)]))
+        if fatos.get("tipo_ativo"):
+            fb.add_fact(Compound("tipo_ativo", [Atom(activity_id)]))
+        if fatos.get("nao_excede_limite_categoria"):
+            fb.add_fact(
+                Compound(
+                    "nao_excede_limite_categoria",
+                    [Atom(activity_id), Atom(student_id)],
+                )
+            )
+
+        engine = InferenceEngine(fb, rb)
+        goal = Compound("atividade_elegivel", [Atom(activity_id), Atom(student_id)])
+        results = engine.query(goal)
+        return len(results) > 0
