@@ -14,32 +14,37 @@ Responsabilidades:
   spec 02_aspectos_aop.json > aspecto A01.
 - Paradigma AOP aplicado: decorador Python como mecanismo de weaving explícito.
 """
-"""
-A01 — Aspecto de Autorização
-
-Advice: Before
-Mecanismo: Decorador @requires_role e @requires_ownership
-
-Join Points:
-- Qualquer operação sensível que exija papel específico
-- Operações que exigem que o usuário seja o orientador do aluno (por propriedade)
-
-Conceitos AOP:
-- Join Point: chamada da função decorada
-- Advice (Before): verifica permissão antes de executar a função
-- Weaving: aplicado via decorador em tempo de definição
-"""
 
 import functools
-import inspect
 import logging
 from typing import Callable
 
 from fastapi import HTTPException, status
 
-from backend.app.aspects import aspect_config
+from backend.app.aspects.aspect_config import AUTHORIZATION_ENABLED
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_current_user(args, kwargs) -> dict | None:
+    """
+    Extrai o current_user de args/kwargs aceitando dict ou objeto com atributo 'role'.
+    Garante compatibilidade com CurrentUser (Pydantic/dataclass) e dict simples.
+
+    Suporta:
+    - dict com chave 'role' (contrato antigo e testes)
+    - Qualquer objeto com atributos .role e .uid (CurrentUser Pydantic/dataclass)
+    """
+    for v in list(kwargs.values()) + list(args):
+        if isinstance(v, dict) and "role" in v:
+            return v
+        if hasattr(v, "role") and hasattr(v, "uid"):
+            return {
+                "uid": v.uid,
+                "email": getattr(v, "email", None),
+                "role": v.role,
+            }
+    return None
 
 
 def requires_role(*allowed_roles: str) -> Callable:
@@ -52,17 +57,10 @@ def requires_role(*allowed_roles: str) -> Callable:
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            if not aspect_config.AUTHORIZATION_ENABLED:
+            if not AUTHORIZATION_ENABLED:
                 return await func(*args, **kwargs)
 
-            current_user: dict = kwargs.get("current_user") or (
-                args[0] if args else None
-            )
-            # Busca current_user em kwargs independente da posição
-            for v in list(kwargs.values()) + list(args):
-                if isinstance(v, dict) and "role" in v:
-                    current_user = v
-                    break
+            current_user = _extract_current_user(args, kwargs)
 
             if current_user is None:
                 raise HTTPException(
@@ -109,14 +107,10 @@ def requires_ownership(get_owner_uid_fn: Callable) -> Callable:
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         async def wrapper(*args, **kwargs):
-            if not aspect_config.AUTHORIZATION_ENABLED:
+            if not AUTHORIZATION_ENABLED:
                 return await func(*args, **kwargs)
 
-            current_user: dict | None = None
-            for v in list(kwargs.values()) + list(args):
-                if isinstance(v, dict) and "role" in v:
-                    current_user = v
-                    break
+            current_user = _extract_current_user(args, kwargs)
 
             if current_user is None:
                 raise HTTPException(
@@ -128,15 +122,7 @@ def requires_ownership(get_owner_uid_fn: Callable) -> Callable:
             if current_user["role"] == "coordenacao":
                 return await func(*args, **kwargs)
 
-            # Support sync or async get_owner_uid_fn
-            try:
-                res = get_owner_uid_fn(kwargs)
-                if inspect.isawaitable(res):
-                    owner_uid = await res
-                else:
-                    owner_uid = res
-            except Exception:
-                owner_uid = None
+            owner_uid = await get_owner_uid_fn(kwargs)
 
             if owner_uid is None:
                 raise HTTPException(
