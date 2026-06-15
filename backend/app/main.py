@@ -7,7 +7,7 @@ Responsabilidades:
   via backend/app/core/firebase.py.
 - Registrar os routers de cada domínio (auth, students, advisors, work_plan, activities,
   activity_types, productions, vehicles, extensions, checklist, inference, reports,
-  dashboard, audit_logs) sob o prefixo /api/v1.
+  dashboard, audit_logs, notifications) sob o prefixo /api/v1.
 - Configurar middlewares globais: CORS, tratamento de exceções HTTP e logging de requests.
 - Expor endpoint público GET /api/v1/health para health check da API e conectividade Firebase.
 """
@@ -28,6 +28,7 @@ from backend.app.api.v1 import (
     dashboard,
     extensions,
     inference,
+    notifications,
     productions,
     reports,
     students,
@@ -83,3 +84,4 @@ app.include_router(inference.router, prefix=_PREFIX, tags=["inference"])
 app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
 app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
 app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
+app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
