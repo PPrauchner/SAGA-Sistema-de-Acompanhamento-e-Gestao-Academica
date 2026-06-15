@@ -14,3 +14,64 @@ Responsabilidades:
 - Weaving via HistoryMeta: envolve automaticamente todos os métodos update_* de subclasses
   de EntityService. Alternativa: @track_history aplicado explicitamente.
 """
+
+from __future__ import annotations
+
+import functools
+import inspect
+from datetime import datetime, timezone
+
+from backend.app.aspects import aspect_config
+from backend.app.core.auth import CurrentUser
+from backend.app.repositories.student_repository import StudentRepository
+
+
+def track_history(func):
+    @functools.wraps(func)
+    async def wrapper(*args, **kwargs):
+        if not aspect_config.HISTORY_ENABLED:
+            return await func(*args, **kwargs)
+
+        bound = inspect.signature(func).bind_partial(*args, **kwargs)
+        student_id = bound.arguments.get("student_id")
+        payload = bound.arguments.get("data") or bound.arguments.get("body")
+        user = next(
+            (
+                value
+                for value in bound.arguments.values()
+                if isinstance(value, CurrentUser)
+            ),
+            None,
+        )
+
+        repo = StudentRepository()
+
+        previous = None
+
+        if student_id:
+            previous = await repo.get(student_id)
+
+        result = await func(*args, **kwargs)
+
+        if student_id and previous:
+            current = await repo.get(student_id)
+
+            snapshot = {
+                "entidade_tipo": "student",
+                "entidade_id": student_id,
+                "valor_anterior": previous,
+                "valor_novo": current,
+                "usuario_id": user.uid if user else None,
+                "role": user.role if user else None,
+                "timestamp": datetime.now(timezone.utc),
+            }
+
+            observacao = getattr(payload, "observacao", None)
+            if observacao is not None:
+                snapshot["observacao"] = observacao
+
+            await repo.save_history_snapshot(student_id, snapshot)
+
+        return result
+
+    return wrapper

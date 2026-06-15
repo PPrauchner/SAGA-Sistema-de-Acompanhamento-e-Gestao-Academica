@@ -8,7 +8,6 @@ Responsabilidades:
 - Testar apply(Compound, subst) → retorna Compound com args aplicados recursivamente.
 - Testar substituição encadeada: Variable(X) → Variable(Y), Variable(Y) → Atom.
 """
-import pytest
 
 from inference_engine.terms import Atom, Variable, Compound
 from inference_engine.substitution import apply

@@ -29,7 +29,6 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-import pytest
 from inference_engine.terms import Atom, Variable, Compound
 from inference_engine.knowledge_base import FactBase, RuleBase, InferenceEngine
 from inference_engine.rules import register_all
