@@ -15,46 +15,74 @@ Responsabilidades:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Union
 
-
-@dataclass(frozen=True)
 class Atom:
-    """Valor concreto imutável. Igualdade por valor."""
+    """Valor concreto imutável. Aceita str, int, float ou bool."""
 
-    value: str | int | float | bool
+    __slots__ = ("value",)
+
+    def __init__(self, value: str | int | float | bool) -> None:
+        object.__setattr__(self, "value", value)
+
+    # Imutabilidade: impede atribuição após criação
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Atom é imutável")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Atom) and self.value == other.value
+
+    def __hash__(self) -> int:
+        return hash(("Atom", self.value))
 
     def __repr__(self) -> str:
-        return repr(self.value)
+        return f"Atom({self.value!r})"
 
 
-@dataclass(frozen=True)
 class Variable:
-    """Incógnita identificada por nome. Igualdade por nome."""
+    """Incógnita identificada por nome string. Igualdade por nome."""
 
-    name: str
+    __slots__ = ("name",)
+
+    def __init__(self, name: str) -> None:
+        object.__setattr__(self, "name", name)
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Variable é imutável")
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Variable) and self.name == other.name
+
+    def __hash__(self) -> int:
+        return hash(("Variable", self.name))
 
     def __repr__(self) -> str:
-        return self.name
+        return f"Variable({self.name!r})"
 
 
-@dataclass(frozen=True)
 class Compound:
-    """Predicado com functor e lista de argumentos."""
+    """Functor (string) + lista de argumentos (Term). Representa predicados/fatos."""
 
-    functor: str
-    args: tuple["Term", ...] = field(default_factory=tuple)
+    __slots__ = ("functor", "args")
 
-    def __init__(self, functor: str, args: list["Term"] | tuple["Term", ...] = ()) -> None:
+    def __init__(self, functor: str, args: list[Term] | tuple[Term, ...]) -> None:
         object.__setattr__(self, "functor", functor)
         object.__setattr__(self, "args", tuple(args))
 
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError("Compound é imutável")
+
+    def __eq__(self, other: object) -> bool:
+        return (
+            isinstance(other, Compound)
+            and self.functor == other.functor
+            and self.args == other.args
+        )
+
+    def __hash__(self) -> int:
+        return hash(("Compound", self.functor, tuple(self.args)))
+
     def __repr__(self) -> str:
-        if not self.args:
-            return self.functor
-        args_str = ", ".join(repr(a) for a in self.args)
-        return f"{self.functor}({args_str})"
+        return f"Compound({self.functor!r}, {self.args!r})"
 
 
-Term = Union[Atom, Variable, Compound]
+Term = Atom | Variable | Compound

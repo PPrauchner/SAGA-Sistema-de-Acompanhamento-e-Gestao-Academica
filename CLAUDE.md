@@ -67,6 +67,7 @@ VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_PROJECT_ID=
 VITE_AUTH_DOMAIN=
 VITE_FIRESTORE_DB=
+VITE_API_URL=        # base da API do backend; default http://localhost:8000 se ausente
 ```
 
 ---
@@ -135,19 +136,13 @@ Regras de acesso:
 
 ## Convenções de Código
 
-- **Python**: docstrings em todos os módulos; tipagem explícita; sem lógica
-  nos arquivos de rota (delegar para services)
-- **TypeScript**: um arquivo de API por domínio em `src/api/`; hooks em
-  `src/hooks/`; alias `@` aponta para `src/`
-- **Commits**: atômicos, seguir template em `guidelines/CommitConventions.md`
-- **Testes**: pytest para o motor de inferência; cobertura obrigatória de
-  todos os cenários apto/risco/inapto das 5 regras
+Ver [`.claude/rules/code-conventions.md`](./.claude/rules/code-conventions.md) para: docstrings Google Style, type hints Python 3.10+, restrições do enunciado (isolamento do motor, AOP, routers), convenções TypeScript e Clean Code.
 
 Resumo das regras críticas:
 - **inference_engine/**: isolado, sem imports externos, ponto de entrada único `InferenceEngine.query()`
 - **Aspectos**: sem bibliotecas externas; documentar Join Point, Advice e Weaving em cada docstring
 - **Routers**: apenas receber request → chamar service → retornar response; sem lógica de negócio
-- **Commits**: atômicos, seguir `guidelines/CommitConventions.md`
+- **Commits**: menor mudança funcional possível — progredir camada a camada (model → repository → service → router), nunca agrupar arquivos de etapas distintas; testes **sempre** em commit separado (`feat`/`fix` primeiro, `test` depois); ver `guidelines/CommitConventions.md`
 - **Testes**: pytest, cobrir todos os cenários apto/risco/inapto das 5 regras
 ---
 
@@ -167,3 +162,37 @@ Documentação detalhada de cada módulo em `docs/specs/`:
 | `08_checklist_prorrogacoes.json`| Checklist + prorrogações              |
 | `09_relatorios_dashboard.json`  | Dashboards e relatórios               |
 | `10_integracao_frontend.json`   | Substituição dos dados hardcoded      |
+
+---
+
+## Workflow de Issues (GitHub Projects)
+
+### Ao iniciar trabalho em uma issue
+
+O **primeiro comando obrigatório** ao começar qualquer issue é registrá-la:
+
+```bash
+echo "NUMERO_DA_ISSUE" > .claude/current-issue
+```
+
+Substitua `NUMERO_DA_ISSUE` pelo número real (ex: `echo "42" > .claude/current-issue`).
+Esse arquivo é lido automaticamente pelo hook ao abrir o PR.
+
+### Quando o usuário confirmar que o trabalho está pronto
+
+1. Faça commit de tudo seguindo `guidelines/CommitConventions.md`
+2. Abra o PR com:
+
+```bash
+gh pr create \
+  --title "tipo: descrição curta (#NUMERO)" \
+  --body "Closes #NUMERO" \
+  --base main
+```
+
+O hook `.claude/hooks/post-bash.sh` detecta o `gh pr create` automaticamente
+e move a issue para **In Review** no GitHub Projects (projeto #4).
+
+### Regras Gerais
+
+ver descrições de regras gerais em [`CONTEXT.md → Regras Gerais`]
