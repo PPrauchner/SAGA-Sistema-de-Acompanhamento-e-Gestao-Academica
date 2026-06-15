@@ -12,6 +12,10 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
+from backend.app.aspects.alerts import trigger_alerts
+from backend.app.aspects.audit import audit_operation
+from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
     ActivityCreate,
@@ -42,6 +46,10 @@ async def list_activities(
 
 
 @router.post("/activities", response_model=ActivitySubmitResponse, status_code=201)
+@requires_role("aluno")
+@audit_operation
+@check_deadlines
+@trigger_alerts
 async def create_activity(
     body: ActivityCreate,
     current_user: CurrentUser = Depends(get_current_user),
@@ -53,6 +61,8 @@ async def create_activity(
     "/activities/{activity_id}/validate",
     response_model=ActivityValidateResponse,
 )
+@audit_operation
+@trigger_alerts
 async def validate_activity(
     activity_id: str,
     body: ActivityValidateRequest,
@@ -60,12 +70,14 @@ async def validate_activity(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     if body.acao == "parecer_orientador":
+        # Orientador emite parecer
         return await _service.advisor_review(
             student_id=student_id,
             activity_id=activity_id,
             observacao=body.observacao or "",
             current_user=current_user,
         )
+    # Coordenação aprova/rejeita
     return await _service.validate_activity(
         student_id=student_id,
         activity_id=activity_id,
