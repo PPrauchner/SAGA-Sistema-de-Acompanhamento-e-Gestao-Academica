@@ -4,25 +4,30 @@ Aspecto A02 — Auditoria das Operações (Around advice).
 Responsabilidades:
 - Implementar o decorador @audit_operation usando inspect para captura de metadados em
   tempo de execução, sem bibliotecas externas de AOP.
-- Before (captura): usa inspect.signature(func).bind(*args, **kwargs).arguments para
-  extrair parâmetros nomeados; registra timestamp_inicio, usuario_id, role, programa_id, operacao e
-  entidade_afetada_id.
+- Before (captura): usa inspect.signature(func).bind_partial(*args, **kwargs).arguments para
+  extrair parâmetros nomeados (valor_entrada); registra timestamp_inicio, usuario_id, role,
+  programa_id, operacao e modulo (via inspect.getmodule).
 - Executa a função original (await func(*args, **kwargs)).
-- After (persiste): monta documento AuditLog com {usuario_id, role, programa_id, operacao, modulo
-  (via inspect.getmodule), recurso, valor_entrada, resultado_status, erro_mensagem,
-  timestamp, duracao_ms} e persiste em audit_logs/{auto_id} no Firestore.
+- After (persiste): monta documento AuditLog com {usuario_id, role, programa_id, operacao,
+  modulo, recurso, valor_entrada, resultado_status, erro_mensagem, timestamp, duracao_ms}
+  e persiste em audit_logs/{auto_id} no Firestore.
 - Em caso de exceção: registra erro no AuditLog e re-lança a exceção.
 - Paradigma AOP: decorador Python + inspect como mecanismo de weaving explícito.
 """
 from __future__ import annotations
 
 import functools
+import inspect
 from datetime import datetime, timezone
 from typing import Any
+
+from pydantic import BaseModel
 
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
 from backend.app.repositories.firebase_repository import FirebaseRepository
+
+_ENTITY_SUFFIXES = ("_service", "_repository")
 
 
 def _find_user(
@@ -35,6 +40,83 @@ def _find_user(
     return None
 
 
+def _serializar(value: Any) -> Any:
+    """Converte um argumento em uma forma persistível no Firestore.
+
+    Modelos Pydantic viram dict (sem campos de identidade sensíveis do usuário,
+    que já são capturados à parte); tipos nativos passam direto; o restante é
+    convertido para string para evitar valores não serializáveis.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {str(key): _serializar(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serializar(item) for item in value]
+    return str(value)
+
+
+def _build_valor_entrada(
+    func: Any,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Extrai os argumentos nomeados da chamada via inspect, ignorando self e o usuário."""
+    try:
+        bound = inspect.signature(func).bind_partial(*args, **kwargs)
+    except TypeError:
+        return {}
+
+    return {
+        name: _serializar(value)
+        for name, value in bound.arguments.items()
+        if name != "self" and not isinstance(value, CurrentUser)
+    }
+
+
+def _entity_name(func: Any) -> str | None:
+    """Deriva o nome da entidade a partir do módulo da função (ex: student_service → student)."""
+    module = inspect.getmodule(func)
+    if module is None:
+        return None
+
+    short = module.__name__.rsplit(".", 1)[-1]
+    for suffix in _ENTITY_SUFFIXES:
+        if short.endswith(suffix):
+            return short[: -len(suffix)]
+    return short
+
+
+def _build_recurso(
+    func: Any,
+    valor_entrada: dict[str, Any],
+    result: Any,
+) -> str | None:
+    """Monta o path soft do recurso afetado (ex: students/aluno_001).
+
+    Usa o primeiro argumento terminado em '_id'; na ausência (ex: criação),
+    recorre ao 'id' presente no resultado da operação.
+    """
+    entity = _entity_name(func)
+
+    id_value: Any = next(
+        (
+            value
+            for name, value in valor_entrada.items()
+            if name.endswith("_id") and isinstance(value, (str, int))
+        ),
+        None,
+    )
+    if id_value is None and isinstance(result, dict):
+        id_value = result.get("id")
+
+    if id_value is None:
+        return entity
+    return f"{entity}/{id_value}" if entity else str(id_value)
+
+
 def audit_operation(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
@@ -42,6 +124,9 @@ def audit_operation(func):
             return await func(*args, **kwargs)
 
         user = _find_user(args, kwargs)
+        valor_entrada = _build_valor_entrada(func, args, kwargs)
+        module = inspect.getmodule(func)
+        modulo = module.__name__ if module else None
 
         repo = FirebaseRepository("audit_logs")
 
@@ -58,7 +143,11 @@ def audit_operation(func):
                     "role": user.role if user else None,
                     "programa_id": user.programa_id if user else None,
                     "operacao": func.__name__,
+                    "modulo": modulo,
+                    "recurso": _build_recurso(func, valor_entrada, result),
+                    "valor_entrada": valor_entrada,
                     "resultado_status": "sucesso",
+                    "erro_mensagem": None,
                     "timestamp": finished_at,
                     "duracao_ms": int(
                         (finished_at - started_at).total_seconds() * 1000
@@ -77,6 +166,9 @@ def audit_operation(func):
                     "role": user.role if user else None,
                     "programa_id": user.programa_id if user else None,
                     "operacao": func.__name__,
+                    "modulo": modulo,
+                    "recurso": _build_recurso(func, valor_entrada, None),
+                    "valor_entrada": valor_entrada,
                     "resultado_status": "erro",
                     "erro_mensagem": str(exc),
                     "timestamp": finished_at,
