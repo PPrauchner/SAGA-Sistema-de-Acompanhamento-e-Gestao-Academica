@@ -6,7 +6,6 @@ const PAGE_LABELS: Record<PageId, string> = {
   login: "Login",
   register: "Cadastro",
   "password-recovery": "Recuperar Senha",
-  "change-password": "Alterar Senha",
   "first-access": "Primeiro Acesso",
   dashboard: "Dashboard",
   alunos: "Alunos",

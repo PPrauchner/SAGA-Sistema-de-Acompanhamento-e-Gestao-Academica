@@ -2,7 +2,9 @@
  * Hook React para autenticação Firebase e identidade do usuário logado.
  *
  * Responsabilidades:
- * - Assinar onAuthStateChanged do Firebase Auth para rastrear estado de autenticação.
+ * - Assinar onIdTokenChanged do Firebase Auth para rastrear o estado de autenticação
+ *   e manter o ID token sempre atual: o SDK renova o token automaticamente (~a cada
+ *   1h) e re-dispara o listener, evitando 401 em chamadas à API após a expiração.
  * - Após login bem-sucedido, chamar GET /api/v1/auth/me para obter role, programa_id,
  *   student_id (se aluno) ou advisor_id (se orientador) — dados não disponíveis no
  *   token sem chamada à API.
@@ -12,13 +14,13 @@
  *   Authorization: Bearer <token> em todas as chamadas à API do backend.
  * - `login(email, senha)`: chama Firebase Auth signInWithEmailAndPassword.
  * - `logout()`: chama Firebase Auth signOut e limpa estado local.
- * - `loading`: true enquanto onAuthStateChanged ainda não resolveu o estado inicial
+ * - `loading`: true enquanto onIdTokenChanged ainda não resolveu o estado inicial
  *   (evita flash de tela de login para usuários já autenticados).
  */
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  onAuthStateChanged,
+  onIdTokenChanged,
   signInWithEmailAndPassword,
   signOut,
   type User as FirebaseUser,
@@ -49,7 +51,7 @@ export function useAuth(): UseAuthResult {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    const unsubscribe = onIdTokenChanged(auth, async (user) => {
       try {
         if (user) {
           const idToken = await user.getIdToken();
@@ -70,7 +72,7 @@ export function useAuth(): UseAuthResult {
   }, []);
 
   const login = useCallback(async (email: string, senha: string): Promise<void> => {
-    // onAuthStateChanged dispara em seguida e carrega o perfil.
+    // onIdTokenChanged dispara em seguida e carrega o perfil.
     await signInWithEmailAndPassword(auth, email, senha);
   }, []);
 

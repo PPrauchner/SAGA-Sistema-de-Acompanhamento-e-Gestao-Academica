@@ -22,8 +22,19 @@ echo "$ARGUMENTS" > .claude/root-issue
 gh issue view $ARGUMENTS --json number,title,body,labels,assignees
 ```
 
-### 3. Identificar spec correspondente
-Com base no título e descrição, identifique os specs relevantes em `docs/specs/` usando a tabela do `CLAUDE.md`. Leia cada spec relevante com Read antes de qualquer implementação.
+### 3. Ler o modelo de dados e identificar specs correspondentes
+
+**Sempre** leia o modelo de dados canônico:
+```
+Read docs/data-model.md
+```
+
+Use-o para:
+- Identificar quais coleções e sub-coleções serão tocadas pela issue
+- Confirmar nomes exatos de campos, enums e tipos antes de implementar (ex: `situacao_registrada`, não `status`; `orientador_id` aponta para `advisors` auto-id, não para `uid`)
+- Verificar quais entidades estão ✅ implementadas vs. 🔲 planejadas — issues em entidades planejadas exigem criação do modelo completo
+
+Em seguida, identifique os specs relevantes em `docs/specs/` usando a tabela do `CLAUDE.md`. Leia cada spec relevante com Read antes de qualquer implementação. Onde `data-model.md` e `03_firebase_schema.json` divergirem, o `data-model.md` vence (é a fonte mais atualizada).
 
 ### 4. Ler arquivos de código relevantes
 Leia os arquivos diretamente relacionados à issue para entender o que já existe.

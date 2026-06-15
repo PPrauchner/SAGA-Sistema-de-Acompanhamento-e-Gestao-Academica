@@ -3,10 +3,11 @@ Router FastAPI para os endpoints de autenticação e gestão de convites.
 
 Responsabilidades:
 - POST /api/v1/auth/invite: coordenação cria convite de primeiro acesso gerando UUID token,
-  persistindo em invites/{token} com TTL de 48h. Protegido por @requires_role('coordenacao').
+  persistindo em invites/{token} com TTL de 48h. Protegido por @requires_role('coordenacao')
+  e auditado por @audit_operation (A02).
 - POST /api/v1/auth/first-access: usuário convidado define senha e ativa conta via Firebase
   Admin SDK (create_user + set_custom_user_claims). Cria documento users/{uid} no Firestore.
-  Público — não requer JWT.
+  Público — não requer JWT; auditado por @audit_operation (A02).
 - GET /api/v1/auth/me: retorna perfil do usuário autenticado (uid, email, nome, role,
   programa_id, student_id ou advisor_id conforme papel). Protegido por @requires_role para
   todos os papéis.
@@ -15,6 +16,7 @@ Responsabilidades:
 
 from fastapi import APIRouter, Depends, status
 
+from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.core.config import settings
@@ -33,6 +35,7 @@ router = APIRouter()
 
 @router.post("/auth/invite", status_code=status.HTTP_201_CREATED)
 @requires_role("coordenacao")
+@audit_operation
 async def create_invite(
     body: InviteRequest,
     user: CurrentUser = Depends(get_current_user),
@@ -42,6 +45,7 @@ async def create_invite(
 
 
 @router.post("/auth/first-access")
+@audit_operation
 async def first_access(body: FirstAccessRequest) -> FirstAccessResponse:
     """Endpoint público: usuário convidado define a senha e ativa a conta."""
     return await AuthService().activate_first_access(body.token, body.senha)

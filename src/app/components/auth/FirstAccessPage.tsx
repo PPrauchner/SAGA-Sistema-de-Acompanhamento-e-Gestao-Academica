@@ -145,7 +145,7 @@ export function FirstAccessPage() {
               id="token"
               type="text"
               value={token}
-              onChange={(e) => { setToken(e.target.value.toUpperCase()); setTokenError(""); }}
+              onChange={(e) => { setToken(e.target.value); setTokenError(""); }}
               placeholder="Ex: PPGCC-2024-XXXXX"
               className="w-full rounded-xl px-4 py-3 outline-none transition-all tracking-widest"
               style={{
