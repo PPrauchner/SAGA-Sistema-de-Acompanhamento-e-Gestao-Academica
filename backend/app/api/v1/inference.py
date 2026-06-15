@@ -14,14 +14,14 @@ Responsabilidades:
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.app.models.inference import InferenceResult
-from backend.app.repositories.fixtures import FixtureRepository
+from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.services.inference_service import InferenceService, StudentNotFoundError
 
 router = APIRouter()
 
 
 def _get_inference_service() -> InferenceService:
-    return InferenceService(FixtureRepository())
+    return InferenceService(InferenceRepository())
 
 
 # TODO: adicionar @requires_role('aluno', 'orientador', 'coordenacao') e @audit_operation
