@@ -1,74 +1,73 @@
 """
-Repository for academic program configurations and vehicle levels.
+Repositório para configurações de programas acadêmicos e níveis de veículos.
 
 Responsabilidades:
-- Implement CRUD operations for the 'programs' collection.
-- Manage vehicle relevance levels as sub-collections of a program.
+- Implementar operações CRUD para a coleção 'programs'.
+- Gerenciar níveis de relevância de veículos como sub-coleções de um programa.
 """
 
+import asyncio
 from typing import Any, Dict, List, Optional
 from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.core.firebase import get_firestore_client
 
 
 class ProgramRepository(FirebaseRepository):
-    """Concrete repository for program-related data in Firestore."""
+    """Repositório concreto para dados relacionados a programas no Firestore."""
 
     def __init__(self):
-        """Initializes the ProgramRepository."""
+        """Inicializa o ProgramRepository."""
         super().__init__("programs")
 
     async def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
-        """Fetches the configuration for a given program.
+        """Busca a configuração de um determinado programa.
 
         Args:
-            programa_id: The unique identifier of the program.
+            programa_id: O identificador único do programa.
 
         Returns:
-            The program configuration data or None.
+            Os dados de configuração do programa ou None.
         """
         return await self.get(programa_id)
 
     async def update_config(self, programa_id: str, data: Dict[str, Any]) -> bool:
-        """Updates the configuration for a given program.
+        """Atualiza a configuração de um determinado programa.
 
         Args:
-            programa_id: The unique identifier of the program.
-            data: The fields to update.
+            programa_id: O identificador único do programa.
+            data: Os campos a serem atualizados.
 
         Returns:
-            True if the update was successful.
+            True se a atualização foi bem-sucedida.
         """
         return await self.update(programa_id, data)
 
     async def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
-        """Fetches all vehicle relevance levels for a program.
+        """Busca todos os níveis de relevância de veículos de um programa.
 
         Args:
-            programa_id: The unique identifier of the program.
+            programa_id: O identificador único do programa.
 
         Returns:
-            A list of vehicle level mappings.
+            Uma lista de mapeamentos de níveis de veículos.
         """
         collection_path = f"{self.collection}/{programa_id}/vehicle_levels"
         return await self.query(subcollection_path=collection_path)
 
     async def update_vehicle_level(self, programa_id: str, veiculo_id: str, data: Dict[str, Any]) -> bool:
-        """Updates or creates a vehicle relevance level mapping.
+        """Atualiza ou cria um mapeamento de nível de relevância de veículo.
 
         Args:
-            programa_id: The unique identifier of the program.
-            veiculo_id: The unique identifier of the vehicle.
-            data: The level and weight data.
+            programa_id: O identificador único do programa.
+            veiculo_id: O identificador único do veículo.
+            data: Os dados de nível e peso.
 
         Returns:
-            True if the update was successful.
+            True se a atualização foi bem-sucedida.
         """
-        import asyncio
-        from backend.app.core.firebase import get_firestore_client
         collection_path = f"{self.collection}/{programa_id}/vehicle_levels"
         
         def _update():
-            # Using the vehicle ID as the document ID for the mapping
             get_firestore_client().collection(collection_path).document(veiculo_id).set(data, merge=True)
             return True
             
