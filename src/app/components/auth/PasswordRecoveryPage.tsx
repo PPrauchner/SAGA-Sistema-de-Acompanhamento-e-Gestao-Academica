@@ -28,7 +28,10 @@ export function PasswordRecoveryPage() {
       // página de ação do Firebase, fora do app.
       await sendPasswordResetEmail(auth, email);
       setStage("sent");
-    } catch {
+    } catch (error) {
+      // Loga o código do Firebase (ex: auth/invalid-email) para diagnóstico;
+      // a mensagem ao usuário permanece genérica por segurança.
+      console.error("Falha ao enviar e-mail de redefinição:", (error as { code?: string }).code);
       setEmailError("Não foi possível enviar o e-mail de redefinição. Tente novamente.");
     } finally {
       setFormState("idle");
