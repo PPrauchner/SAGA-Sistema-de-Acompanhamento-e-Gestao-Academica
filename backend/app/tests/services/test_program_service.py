@@ -1,15 +1,14 @@
 """
-Tests for ProgramService.
+Testes para ProgramService.
 
 Responsabilidades:
-- Verify business logic for program configurations.
-- Ensure proper interaction with the ProgramRepository.
+- Verificar a lógica de negócio para configurações de programas.
+- Garantir a interação correta com o ProgramRepository.
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-# Set dummy environment variables to satisfy pydantic-settings
 os.environ["FIREBASE_PROJECT_ID"] = "test-project"
 os.environ["FIREBASE_PRIVATE_KEY"] = "test-key"
 os.environ["FIREBASE_CLIENT_EMAIL"] = "test-email"
@@ -21,19 +20,19 @@ from backend.app.models.program_config import ProgramConfigUpdate
 
 @pytest.fixture
 def mock_repo():
-    """Fixture for mocked ProgramRepository."""
-    return MagicMock()
+    """Fixture para ProgramRepository mockado."""
+    return AsyncMock()
 
 
 @pytest.fixture
 def service(mock_repo):
-    """Fixture for ProgramService with mocked repository."""
+    """Fixture para ProgramService com repositório mockado."""
     return ProgramService(repository=mock_repo)
 
 
-def test_get_config_returns_model(service, mock_repo):
-    """Should fetch config from repo and return as dictionary."""
-    # Setup mock
+@pytest.mark.anyio
+async def test_get_config_returns_model(service, mock_repo):
+    """Deve buscar a configuração do repositório e retornar como dicionário."""
     mock_repo.get_config.return_value = {
         "id": "prog_default",
         "creditos_grupo_basico_min": 12,
@@ -45,26 +44,23 @@ def test_get_config_returns_model(service, mock_repo):
         "meses_ate_qualificacao": 12
     }
 
-    # Execute
-    result = service.get_config("prog_default")
+    result = await service.get_config("prog_default")
 
-    # Assert
     assert result["creditos_total_min"] == 24
     mock_repo.get_config.assert_called_with("prog_default")
 
 
-def test_update_config_calls_repo(service, mock_repo):
-    """Should call repo to update config with validated data."""
-    # Setup
+@pytest.mark.anyio
+async def test_update_config_calls_repo(service, mock_repo):
+    """Deve chamar o repositório para atualizar a configuração com dados validados."""
     update_data = ProgramConfigUpdate(creditos_total_min=30)
     mock_repo.update_config.return_value = True
 
-    # Execute
-    result = service.update_config("prog_default", update_data)
+    result = await service.update_config("prog_default", update_data)
 
-    # Assert
     assert result is True
     mock_repo.update_config.assert_called_once()
-    # Check that it passed the dictionary, not the model
+    # Verifica se passou o dicionário, não o modelo
     args, _ = mock_repo.update_config.call_args
     assert args[1] == {"creditos_total_min": 30}
+
