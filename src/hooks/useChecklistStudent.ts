@@ -1,24 +1,22 @@
 /**
- * Hook que centraliza a lógica de "qual studentId usar" na ChecklistPage,
- * variando conforme o papel do usuário logado.
+ * Hook que centraliza a lógica de "qual studentId usar" nas páginas de Checklist
+ * e Inferência, variando conforme o papel do usuário logado.
  *
  * - aluno: usa student_id do próprio currentUser (sem seletor exposto)
- * - orientador / coordenacao: usa selectedStudentId do AppContext com fallback
- *   para o primeiro aluno da lista
+ * - orientador / coordenacao: busca a lista real via GET /api/v1/students
+ *   (o backend já filtra pelo papel via A01 — orientador vê só seus orientandos,
+ *   coordenação vê todos)
  */
 
+import { useEffect, useState } from "react";
 import { useApp } from "@/app/context/AppContext";
+import { useAuth } from "@/hooks/useAuth";
+import { getStudents } from "@/api/studentsApi";
 
 export interface ChecklistStudent {
   id: string;
   label: string;
 }
-
-const FIXTURE_STUDENTS: ChecklistStudent[] = [
-  { id: "aluno_apto", label: "Ana Apta" },
-  { id: "aluno_risco", label: "Rui Risco" },
-  { id: "aluno_regular", label: "Rita Regular" },
-];
 
 export interface UseChecklistStudentResult {
   studentId: string | null;
@@ -28,18 +26,33 @@ export interface UseChecklistStudentResult {
 
 export function useChecklistStudent(): UseChecklistStudentResult {
   const { currentUser, selectedStudentId, setSelectedStudentId } = useApp();
+  const { token } = useAuth();
+  const [students, setStudents] = useState<ChecklistStudent[]>([]);
 
-  if (currentUser?.role === "aluno") {
+  const isAluno = currentUser?.role === "aluno";
+
+  useEffect(() => {
+    if (isAluno || !token) return;
+    getStudents(token)
+      .then((list) =>
+        setStudents(list.map((s) => ({ id: s.id, label: s.nome })))
+      )
+      .catch(() => setStudents([]));
+  }, [isAluno, token]);
+
+  if (isAluno) {
     return {
       studentId: currentUser.student_id ?? currentUser.id,
       students: null,
-      setStudentId: (_id: string) => {},
+      setStudentId: () => {},
     };
   }
 
+  const studentId = selectedStudentId ?? students[0]?.id ?? null;
+
   return {
-    studentId: selectedStudentId ?? FIXTURE_STUDENTS[0].id,
-    students: FIXTURE_STUDENTS,
+    studentId,
+    students,
     setStudentId: (id: string) => setSelectedStudentId(id),
   };
 }
