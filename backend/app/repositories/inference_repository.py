@@ -102,6 +102,7 @@ class InferenceRepository:
                 "max_creditos_tecnologico": 4,
                 "min_creditos_total": 24,
                 "max_prorrogacoes": 1,
+                "meses_ate_qualificacao": 12,
                 "relevancia_pesos": dict(_DEFAULT_RELEVANCIA_PESOS),
             }
         return {
@@ -111,6 +112,7 @@ class InferenceRepository:
             "max_creditos_tecnologico": int(data.get("creditos_grupo_tecnologico_max", 4)),
             "min_creditos_total": int(data.get("creditos_total_min", 24)),
             "max_prorrogacoes": int(data.get("max_prorrogacoes", 1)),
+            "meses_ate_qualificacao": int(data.get("meses_ate_qualificacao", 12)),
             # TODO: carregar de programs/{id}/vehicle_levels/ quando VehicleRepository estiver pronto
             "relevancia_pesos": dict(_DEFAULT_RELEVANCIA_PESOS),
         }
