@@ -26,6 +26,7 @@ esperado pelos repositórios concretos.
 
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date, datetime, timezone
 from typing import Any, Protocol
 
@@ -78,6 +79,15 @@ def _parse_date(value: Any) -> date | None:
         return date.fromisoformat(str(value))
     except (ValueError, TypeError):
         return None
+
+
+def _add_months(start: date, months: int) -> date:
+    """Soma `months` meses a `start`, ajustando o dia ao ultimo dia do mes de destino."""
+    month_index = start.month - 1 + months
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(start.day, monthrange(year, month)[1])
+    return start.replace(year=year, month=month, day=day)
 
 
 class InferenceService:
@@ -230,6 +240,8 @@ class InferenceService:
             facts.append(Compound("creditos_insuficientes", [sid]))
             risk_flags["creditos_insuficientes"] = True
         prazo_qual = _parse_date(student.get("prazo_qualificacao"))
+        if prazo_qual is None:
+            prazo_qual = self._derive_prazo_qualificacao(student, program)
         if (
             not student.get("qualificacao_aprovada")
             and prazo_qual is not None
@@ -449,6 +461,29 @@ class InferenceService:
         elapsed = (date.today() - ingresso).days
         span = (prazo - ingresso).days
         return max(0.0, min(1.0, elapsed / span))
+
+    def _derive_prazo_qualificacao(
+        self, student: dict[str, Any], program: dict[str, Any]
+    ) -> date | None:
+        """Deriva o prazo de qualificação de data_ingresso + meses_ate_qualificacao.
+
+        Usado quando o aluno não traz prazo_qualificacao explícito: os dados reais do
+        Firestore não armazenam esse campo — o data-model define apenas
+        programs.meses_ate_qualificacao. Sem essa derivação o risco de qualificação
+        (RL03) nunca dispararia em produção.
+
+        Args:
+            student: Documento do aluno (fonte de data_ingresso).
+            program: Configuração do programa (fonte de meses_ate_qualificacao).
+
+        Returns:
+            Data derivada, ou None se faltar data_ingresso ou meses_ate_qualificacao.
+        """
+        ingresso = _parse_date(student.get("data_ingresso"))
+        meses = program.get("meses_ate_qualificacao")
+        if ingresso is None or meses is None:
+            return None
+        return _add_months(ingresso, int(meses))
 
     def _is_plano_concluido(self, tasks: list[dict[str, Any]]) -> bool:
         """True se todas as tasks não-defesa estiverem concluídas (e houver ao menos uma)."""
