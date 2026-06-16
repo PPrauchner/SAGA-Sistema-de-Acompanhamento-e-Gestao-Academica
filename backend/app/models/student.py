@@ -26,7 +26,7 @@ SituacaoRegistrada = Literal[
     "em_prorrogacao",
     "em_risco",
     "qualificado",
-    "fase_defesa",
+    "em_fase_de_defesa",
     "concluido",
     "desligado",
 ]

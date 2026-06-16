@@ -14,7 +14,7 @@ Responsabilidades:
 from fastapi import APIRouter, Depends, HTTPException
 
 from backend.app.models.checklist import ChecklistResponse
-from backend.app.repositories.fixtures import FixtureRepository
+from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.services.checklist_service import ChecklistService
 from backend.app.services.inference_service import InferenceService, StudentNotFoundError
 
@@ -22,7 +22,7 @@ router = APIRouter()
 
 
 def _get_checklist_service() -> ChecklistService:
-    repo = FixtureRepository()
+    repo = InferenceRepository()
     return ChecklistService(InferenceService(repo), repo)
 
 
