@@ -20,12 +20,34 @@ from typing import Any
 
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
+# Valores de situacao_registrada renomeados após o rename fase_defesa → em_fase_de_defesa.
+# Documentos gravados antes do rename ainda carregam o valor legado; normalizamos na
+# leitura para não quebrar consumidores (frontend e validação de StudentResponse).
+_SITUACAO_LEGADA: dict[str, str] = {"fase_defesa": "em_fase_de_defesa"}
+
+
+def _normalize_situacao_registrada(student: dict[str, Any]) -> dict[str, Any]:
+    """Substitui in-place o valor legado de situacao_registrada pelo nome atual."""
+    atual = _SITUACAO_LEGADA.get(student.get("situacao_registrada"))
+    if atual is not None:
+        student["situacao_registrada"] = atual
+    return student
+
 
 class StudentRepository(FirebaseRepository):
     """Repositório específico da coleção students."""
 
     def __init__(self) -> None:
         super().__init__("students")
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        """Lê o aluno normalizando situacao_registrada legada (rename fase_defesa)."""
+        student = await super().get(doc_id)
+        return _normalize_situacao_registrada(student) if student is not None else None
+
+    async def list_all(self) -> list[dict[str, Any]]:
+        """Lista alunos normalizando situacao_registrada legada (rename fase_defesa)."""
+        return [_normalize_situacao_registrada(student) for student in await super().list_all()]
 
     async def save_history_snapshot(
         self,
