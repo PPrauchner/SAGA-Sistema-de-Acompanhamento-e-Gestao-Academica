@@ -82,7 +82,7 @@ def _parse_date(value: Any) -> date | None:
 
 
 def _add_months(start: date, months: int) -> date:
-    """Soma `months` meses a `start`, ajustando o dia ao ultimo dia do mes de destino."""
+    """Soma `months` meses a `start`, ajustando o dia ao último dia do mês de destino."""
     month_index = start.month - 1 + months
     year = start.year + month_index // 12
     month = month_index % 12 + 1
@@ -109,6 +109,37 @@ class InferenceService:
         if student is None:
             raise StudentNotFoundError(student_id)
         return await self.run_inference(student_id, student.get("programa_id", ""))
+
+    def score_production(self, nivel: str, peso: float, pontuacao_base: float) -> float:
+        """Calcula a pontuação RL05 de uma única produção via motor de inferência.
+
+        Monta os fatos RL05 (producao_veiculo, nivel_relevancia, relevancia_peso,
+        pontuacao_base) para uma produção isolada e resolve pontuacao_producao. Usado por
+        ProductionService.create_production() para gravar pontuacao_calculada no registro,
+        mantendo o cálculo dentro do motor (e não como aritmética no service).
+
+        Args:
+            nivel: Nível de relevância do veículo (ex: 'A1').
+            peso: Peso associado ao nível (ex: 2.0).
+            pontuacao_base: Pontuação base da produção.
+
+        Returns:
+            Pontuação ponderada resolvida pelo motor, ou 0.0 se não houver solução.
+        """
+        prod = Atom("p")
+        veiculo = Atom("v")
+        facts = [
+            Compound("producao_veiculo", [prod, veiculo]),
+            Compound("nivel_relevancia", [veiculo, Atom("prog"), Atom(nivel)]),
+            Compound("relevancia_peso", [Atom(nivel), Atom(float(peso))]),
+            Compound("pontuacao_base", [prod, Atom(float(pontuacao_base))]),
+        ]
+        engine = self._build_engine(facts)
+        results = engine.query(Compound("pontuacao_producao", [prod, Variable("Score")]))
+        if not results:
+            return 0.0
+        score_term = results[0].get("Score")
+        return float(score_term.value) if isinstance(score_term, Atom) else 0.0
 
     async def run_inference(self, student_id: str, programa_id: str) -> InferenceResult:
         """Executa todas as inferências para o aluno e persiste o snapshot.
