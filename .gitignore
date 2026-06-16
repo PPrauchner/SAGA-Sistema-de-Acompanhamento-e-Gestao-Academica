@@ -239,6 +239,7 @@ Thumbs.db
 
 # Claude Code — arquivo de estado local
 .claude/current-issue
+.claude/root-issue
 
 .claude/subtasks-pending.json
 

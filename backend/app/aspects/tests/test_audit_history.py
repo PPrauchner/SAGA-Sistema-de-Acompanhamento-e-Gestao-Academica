@@ -79,6 +79,50 @@ async def test_audit_operation_registra_autoria_e_status_pt_br(
     assert log["resultado_status"] == "sucesso"
 
 
+async def test_audit_operation_captura_modulo_recurso_e_valor_entrada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _AuditRepo.store = {}
+    _AuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _AuditRepo)
+
+    @audit_operation
+    async def update_situacao(
+        student_id: str,
+        body: dict[str, str],
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        return {"id": student_id, "message": "ok"}
+
+    await update_situacao("s1", {"situacao_registrada": "concluido"}, _user())
+
+    log = next(iter(_AuditRepo.store.values()))
+    assert log["modulo"] == update_situacao.__module__
+    # recurso usa o primeiro argumento *_id encontrado nos argumentos capturados.
+    assert log["recurso"].endswith("/s1")
+    # valor_entrada captura os argumentos nomeados via inspect, exceto o CurrentUser.
+    assert log["valor_entrada"]["student_id"] == "s1"
+    assert log["valor_entrada"]["body"] == {"situacao_registrada": "concluido"}
+    assert "user" not in log["valor_entrada"]
+
+
+async def test_audit_operation_deriva_recurso_do_id_no_resultado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _AuditRepo.store = {}
+    _AuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _AuditRepo)
+
+    @audit_operation
+    async def create_something(body: dict[str, str], user: CurrentUser) -> dict[str, str]:
+        return {"id": "novo123"}
+
+    await create_something({"nome": "X"}, _user())
+
+    log = next(iter(_AuditRepo.store.values()))
+    assert log["recurso"].endswith("/novo123")
+
+
 async def test_audit_operation_respeita_flag_desativada(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
