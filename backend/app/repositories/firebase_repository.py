@@ -134,3 +134,21 @@ class FirebaseRepository:
         """Persiste snapshot do aspecto A03 (history.py) em {collection}/{doc_id}/history/."""
 
         return await self.set_subcollection_auto(doc_id, "history", snapshot)
+
+    async def list_subcollection(
+        self,
+        doc_id: str,
+        subcollection: str,
+    ) -> list[dict[str, Any]]:
+        """Lista os documentos de {collection}/{doc_id}/{subcollection}/ com o id injetado."""
+
+        def _list() -> list[dict[str, Any]]:
+            docs = self._document(doc_id).collection(subcollection).stream()
+            result = []
+            for doc in docs:
+                item = doc.to_dict()
+                item["id"] = doc.id
+                result.append(item)
+            return result
+
+        return await asyncio.to_thread(_list)
