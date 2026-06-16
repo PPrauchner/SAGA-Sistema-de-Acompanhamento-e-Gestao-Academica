@@ -9,6 +9,8 @@ Responsabilidades:
   reutilizado por todos os repositórios.
 - Expor função `get_auth_client()` retornando o cliente firebase_admin.auth para verificação de
   tokens e gestão de custom claims.
+- Expor função `get_storage_bucket()` retornando o bucket do Firebase Storage (configurado via
+  FIREBASE_STORAGE_BUCKET) usado pelo upload de comprovantes.
 - Garantir que o SDK seja encerrado corretamente no shutdown do lifespan.
 """
 
@@ -17,8 +19,9 @@ from __future__ import annotations
 from typing import Any
 
 import firebase_admin
-from firebase_admin import App, auth, credentials, firestore
+from firebase_admin import App, auth, credentials, firestore, storage
 from google.cloud.firestore import Client
+from google.cloud.storage import Bucket
 
 from backend.app.core.config import settings
 
@@ -90,3 +93,19 @@ def get_auth_client() -> auth.Client:
     """Retorna o cliente Firebase Auth associado à app default."""
 
     return auth.Client(init_firebase())
+
+
+def get_storage_bucket() -> Bucket:
+    """Retorna o bucket do Firebase Storage (FIREBASE_STORAGE_BUCKET) da app default.
+
+    Raises:
+        RuntimeError: Se FIREBASE_STORAGE_BUCKET não estiver configurado — falha com
+            mensagem explícita em vez do ValueError opaco do firebase_admin.
+    """
+
+    if not settings.firebase_storage_bucket:
+        raise RuntimeError(
+            "FIREBASE_STORAGE_BUCKET não configurado: upload de arquivos indisponível",
+        )
+
+    return storage.bucket(app=init_firebase())
