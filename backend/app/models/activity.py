@@ -16,7 +16,47 @@ Responsabilidades:
 
 from __future__ import annotations
 
+from datetime import datetime
+from typing import Literal
+
 from pydantic import BaseModel
+
+ActivityStatus = Literal["rascunho", "enviado", "aprovado", "rejeitado"]
+ActivityCreateStatus = Literal["rascunho", "enviado"]
+
+
+class ActivityCreateRequest(BaseModel):
+    tipo_id: str
+    descricao: str
+    data_realizacao: datetime
+    comprovante_url: str | None = None
+    status: ActivityCreateStatus = "enviado"
+
+
+class ActivityCreateResponse(BaseModel):
+    id: str
+    elegibilidade_preliminar: bool
+    notificacao_enviada: bool
+
+
+class ActivityResponse(BaseModel):
+    id: str
+
+    tipo_id: str
+    tipo_nome: str | None = None
+    categoria: str | None = None
+
+    descricao: str
+    data_realizacao: datetime | None = None
+    comprovante_url: str | None = None
+
+    creditos_gerados: float = 0.0
+    status: ActivityStatus | str = "rascunho"
+
+    parecer_orientador: str | None = None
+    observacao_coordenacao: str | None = None
+
+    elegivel: bool | None = None
 
 
 class ComprovanteUploadResponse(BaseModel):
