@@ -12,3 +12,39 @@ Responsabilidades:
   fluxo de validação (rascunho → enviado → aprovado | rejeitado).
 - Mapear a sub-coleção Firestore students/{id}/productions.
 """
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel
+
+TipoProducao = Literal["artigo_publicado", "artigo_submetido", "livro", "capitulo"]
+
+StatusPublicacao = Literal["publicado", "submetido", "aceito"]
+
+
+class ProductionCreate(BaseModel):
+    titulo: str
+    doi: str | None = None
+    veiculo_id: str
+    tipo_producao: TipoProducao
+    status_publicacao: StatusPublicacao
+    observacao: str | None = None
+    data_realizacao: datetime
+    comprovante_url: str | None = None
+
+
+class ProductionResponse(BaseModel):
+    id: str
+    titulo: str
+    doi: str | None = None
+    veiculo_nome: str
+    nivel_veiculo: str
+    tipo_producao: TipoProducao
+    status_publicacao: StatusPublicacao
+    observacao: str | None = None
+    pontuacao_calculada: float
+    peso_aplicado: float
+    status_atividade: str
