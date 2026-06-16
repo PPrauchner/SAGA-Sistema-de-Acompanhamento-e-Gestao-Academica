@@ -20,7 +20,21 @@ Restrição: sem lógica de negócio — apenas dados e leitura.
 from __future__ import annotations
 
 import uuid
+from datetime import date, timedelta
 from typing import Any
+
+_TODAY = date.today()
+
+
+def _iso(days_from_today: int) -> str:
+    """Data ISO (YYYY-MM-DD) deslocada de hoje.
+
+    Mantém os cenários temporais (recém-ingresso, metade do prazo, ~75% decorrido)
+    determinísticos em qualquer data de execução — sem isso a suíte só passaria na
+    data do commit.
+    """
+    return (_TODAY + timedelta(days=days_from_today)).isoformat()
+
 
 _PROGRAM: dict[str, Any] = {
     "id": "prog_default",
@@ -84,9 +98,10 @@ _STUDENTS: dict[str, dict[str, Any]] = {
         "nome": "Novo Aluno",
         "programa_id": "prog_default",
         "situacao_registrada": "regular",
-        "data_ingresso": "2026-06-15",
-        "prazo_final": "2028-06-15",
-        "prazo_qualificacao": "2027-12-15",
+        # Primeiro dia do programa: fração decorrida = 0 → nenhum risco de crédito.
+        "data_ingresso": _iso(0),
+        "prazo_final": _iso(730),
+        "prazo_qualificacao": _iso(545),
         "proficiencia_comprovada": False,
         "proficiencia_data": None,
         "qualificacao_aprovada": False,
@@ -97,9 +112,10 @@ _STUDENTS: dict[str, dict[str, Any]] = {
         "nome": "Carlos Crédito",
         "programa_id": "prog_default",
         "situacao_registrada": "regular",
-        "data_ingresso": "2025-06-15",
-        "prazo_final": "2027-06-15",
-        "prazo_qualificacao": "2028-12-15",
+        # ~Metade do prazo decorrida (fração 0.5), 0 créditos → creditos_insuficientes.
+        "data_ingresso": _iso(-365),
+        "prazo_final": _iso(365),
+        "prazo_qualificacao": _iso(900),
         "proficiencia_comprovada": True,
         "proficiencia_data": "2025-09-01",
         "qualificacao_aprovada": True,
@@ -110,9 +126,10 @@ _STUDENTS: dict[str, dict[str, Any]] = {
         "nome": "Queiroz Qualificação",
         "programa_id": "prog_default",
         "situacao_registrada": "regular",
-        "data_ingresso": "2024-06-15",
-        "prazo_final": "2026-12-15",
-        "prazo_qualificacao": "2026-08-14",
+        # Prazo de qualificação a 60 dias (< 90) com qualificação pendente → risco de qual.
+        "data_ingresso": _iso(-700),
+        "prazo_final": _iso(180),
+        "prazo_qualificacao": _iso(60),
         "proficiencia_comprovada": True,
         "proficiencia_data": "2024-09-01",
         "qualificacao_aprovada": False,
@@ -123,9 +140,10 @@ _STUDENTS: dict[str, dict[str, Any]] = {
         "nome": "Pedro Plano",
         "programa_id": "prog_default",
         "situacao_registrada": "regular",
-        "data_ingresso": "2024-12-15",
-        "prazo_final": "2026-12-15",
-        "prazo_qualificacao": "2028-12-15",
+        # ~75% do prazo decorrido (fração 0.75) com plano 0% concluído → plano_atrasado.
+        "data_ingresso": _iso(-547),
+        "prazo_final": _iso(183),
+        "prazo_qualificacao": _iso(900),
         "proficiencia_comprovada": True,
         "proficiencia_data": "2025-03-01",
         "qualificacao_aprovada": True,
@@ -154,13 +172,13 @@ _ACTIVITIES: dict[str, list[dict[str, Any]]] = {
     "aluno_credito_risco": [],
     # 15 básico + 9 específico = 24 créditos (≥ min_total=24 e > expected ~19.2 com fracao ~0.80).
     "aluno_qual_risco": [
-        {"id": "atv_qr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": "2024-09-01"},
-        {"id": "atv_qr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": "2024-12-01"},
+        {"id": "atv_qr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": _iso(-650)},
+        {"id": "atv_qr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": _iso(-600)},
     ],
     # 15 básico + 9 específico = 24 créditos (≥ min_total=24 e > expected ~18 com fracao ~0.75).
     "aluno_plano_risco": [
-        {"id": "atv_pr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": "2025-03-01"},
-        {"id": "atv_pr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": "2025-06-01"},
+        {"id": "atv_pr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": _iso(-500)},
+        {"id": "atv_pr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": _iso(-450)},
     ],
 }
 
