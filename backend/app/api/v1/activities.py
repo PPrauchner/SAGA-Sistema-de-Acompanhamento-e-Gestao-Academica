@@ -16,17 +16,77 @@ Responsabilidades:
   e @trigger_alerts (notifica aluno após decisão). Motor verifica elegibilidade (RL04).
 """
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from typing import Any
 
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+
+from backend.app.aspects.alerts import trigger_alerts
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
-from backend.app.models.activity import ComprovanteUploadResponse
+from backend.app.models.activity import (
+    ActivityCreateRequest,
+    ActivityCreateResponse,
+    ComprovanteUploadResponse,
+)
+from backend.app.services.activity_service import ActivityService
 from backend.app.services.comprovante_service import ComprovanteService
 
 router = APIRouter()
 
+service = ActivityService()
 comprovante_service = ComprovanteService()
+
+
+def _build_submission_alert(
+    result: dict[str, Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Builder do aspecto A05: notifica o orientador quando a atividade é submetida.
+
+    Retorna None quando a atividade ficou em rascunho ou não há orientador resolvido —
+    nesses casos nenhuma notificação é emitida.
+    """
+    if not result.get("notificacao_enviada") or not result.get("orientador_uid"):
+        return None
+    return {
+        "tipo": "atividade_submetida",
+        "titulo": "Nova atividade submetida",
+        "mensagem": f"Aluno {result.get('aluno_nome', '')} submeteu atividade para validação",
+        "destinatario_id": result["orientador_uid"],
+        "entidade_tipo": "activity",
+        "entidade_id": result["id"],
+        "programa_id": result.get("programa_id"),
+    }
+
+
+@router.get("/activities")
+@requires_role("aluno", "orientador", "coordenacao")
+async def list_activities(
+    student_id: str | None = Query(None),
+    status: str | None = Query(None),
+    categoria: str | None = Query(None),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    return await service.list_activities(user, student_id, status, categoria)
+
+
+@router.post(
+    "/activities",
+    response_model=ActivityCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@requires_role("aluno")
+@audit_operation
+@check_deadlines
+@trigger_alerts(_build_submission_alert)
+async def create_activity(
+    body: ActivityCreateRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    return await service.submit_activity(body, user)
 
 
 @router.post("/activities/{activity_id}/comprovante")
