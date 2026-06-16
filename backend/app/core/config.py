@@ -21,6 +21,10 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # O .env do projeto reúne variáveis do backend e do frontend (VITE_*)
+        # no mesmo arquivo (ver .env.example); ignorar chaves não mapeadas
+        # evita que essas variáveis do frontend quebrem o startup do backend.
+        extra="ignore",
     )
 
     # Firebase Admin SDK

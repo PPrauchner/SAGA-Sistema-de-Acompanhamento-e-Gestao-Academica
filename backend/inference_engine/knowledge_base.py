@@ -1,11 +1,20 @@
 """
 Agregador de FactBase e RuleBase — interface única de consulta do motor de inferência.
-knowledge_base.py
+
+Responsabilidades:
+- FactBase: armazena fatos lógicos (Compounds) e os expõe ao resolver.
+- RuleBase: armazena cláusulas (head, body) e as expõe ao resolver.
+- InferenceEngine: ponto de entrada público — recebe uma FactBase e RuleBase e expõe
+  query(goal) para execução de consultas sobre a base combinada.
+
+Restrições:
+- Sem imports de FastAPI, Firebase ou qualquer ORM.
+- Único ponto de entrada externo: InferenceEngine.query(goal: Term) -> list[dict].
 """
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from inference_engine.terms import Atom, Compound, Variable, Term
+from inference_engine.terms import Compound, Variable, Term
 from inference_engine.substitution import apply as subst_apply
 from inference_engine.resolver import solve
 
@@ -23,6 +32,8 @@ class Clause:
 
 
 class FactBase:
+    """Repositório de fatos lógicos (Compounds) consultados pelo resolver."""
+
     def __init__(self) -> None:
         self._facts: list[Compound] = []
 
@@ -45,6 +56,8 @@ class FactBase:
 
 
 class RuleBase:
+    """Repositório de cláusulas lógicas (head :- body) consultadas pelo resolver."""
+
     def __init__(self) -> None:
         self._rules: list[Clause] = []
 
@@ -67,6 +80,13 @@ class RuleBase:
 
 
 class InferenceEngine:
+    """Motor de inferência: ponto de entrada único para consultas lógicas.
+
+    Attributes:
+        fact_base: Base de fatos carregada pelo InferenceService antes de cada consulta.
+        rule_base: Base de regras populada por register_all() com RL01-RL05.
+    """
+
     def __init__(self, fact_base: FactBase, rule_base: RuleBase) -> None:
         self.fact_base = fact_base
         self.rule_base = rule_base

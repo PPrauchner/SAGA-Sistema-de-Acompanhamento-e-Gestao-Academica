@@ -67,6 +67,7 @@ VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_PROJECT_ID=
 VITE_AUTH_DOMAIN=
 VITE_FIRESTORE_DB=
+VITE_API_URL=        # base da API do backend; default http://localhost:8000 se ausente
 ```
 
 ---
@@ -147,7 +148,7 @@ Resumo das regras críticas:
 - **inference_engine/**: isolado, sem imports externos, ponto de entrada único `InferenceEngine.query()`
 - **Aspectos**: sem bibliotecas externas; documentar Join Point, Advice e Weaving em cada docstring
 - **Routers**: apenas receber request → chamar service → retornar response; sem lógica de negócio
-- **Commits**: atômicos, seguir `guidelines/CommitConventions.md`
+- **Commits**: menor mudança funcional possível — progredir camada a camada (model → repository → service → router), nunca agrupar arquivos de etapas distintas; testes **sempre** em commit separado (`feat`/`fix` primeiro, `test` depois); ver `guidelines/CommitConventions.md`
 - **Testes**: pytest, cobrir todos os cenários apto/risco/inapto das 5 regras
 ---
 

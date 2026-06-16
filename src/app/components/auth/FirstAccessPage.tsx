@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { useApp, DEMO_USERS, UserRole } from "../../context/AppContext";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { useApp, UserRole } from "../../context/AppContext";
+import { auth } from "@/lib/firebase";
+import { activateFirstAccess } from "@/api/authApi";
 import { AuthLayout } from "./AuthLayout";
 import { PasswordStrength, calcPasswordStrength } from "./PasswordStrength";
 import {
@@ -38,13 +41,16 @@ const THEME_OPTIONS = [
 ];
 
 export function FirstAccessPage() {
-  const { setCurrentUser, setCurrentPage } = useApp();
+  const { setCurrentPage } = useApp();
   const [step, setStep] = useState<Step>(1);
   const [formState, setFormState] = useState<FormState>("idle");
+  const [apiError, setApiError] = useState("");
 
-  // Step 1 — identity
+  // Step 1 — identity. O papel NÃO é escolhido aqui: vem do convite e é
+  // retornado por /first-access; o e-mail também vem da resposta da API.
   const [token, setToken] = useState("");
   const [role, setRole] = useState<UserRole>("aluno");
+  const [activatedEmail, setActivatedEmail] = useState("");
   const [tokenError, setTokenError] = useState("");
 
   // Step 2 — password
@@ -74,20 +80,36 @@ export function FirstAccessPage() {
       setSenhaError("");
     }
     if (step === 3) {
+      // Ativa a conta no backend: cria o usuário no Firebase Auth e define os
+      // custom claims a partir do convite. O papel real volta na resposta.
       setFormState("loading");
-      await new Promise((r) => setTimeout(r, 1200));
-      setFormState("idle");
-      setStep(4);
+      setApiError("");
+      try {
+        const result = await activateFirstAccess(token, senha);
+        setRole(result.role);
+        setActivatedEmail(result.email);
+        setFormState("idle");
+        setStep(4);
+      } catch (err) {
+        setFormState("idle");
+        setApiError(err instanceof Error ? err.message : "Falha ao ativar a conta.");
+      }
       return;
     }
     setStep((s) => (s < 4 ? s + 1 : s) as Step);
   };
 
   const handleComplete = async () => {
+    // Faz o primeiro login com a senha recém-definida; o AppContext redireciona
+    // para a área do papel quando o perfil chega.
     setFormState("loading");
-    await new Promise((r) => setTimeout(r, 900));
-    setCurrentUser(DEMO_USERS[role]);
-    setCurrentPage("dashboard");
+    setApiError("");
+    try {
+      await signInWithEmailAndPassword(auth, activatedEmail, senha);
+    } catch {
+      setFormState("idle");
+      setApiError("Conta ativada, mas o login automático falhou. Faça login manualmente.");
+    }
   };
 
   const { icon, title, sub } = STEP_META[step];
@@ -113,47 +135,6 @@ export function FirstAccessPage() {
       {/* ── STEP 1 — Identity ── */}
       {step === 1 && (
         <div className="space-y-5">
-          {/* Role selector */}
-          <div>
-            <p style={{ fontSize: "12px", fontWeight: 700, color: "#374151", textTransform: "uppercase",
-              letterSpacing: "0.06em", marginBottom: "10px" }}>
-              Seu Perfil
-            </p>
-            <div className="grid grid-cols-3 gap-2">
-              {(Object.entries(ROLES_META) as [UserRole, typeof ROLES_META[UserRole]][]).map(([key, info]) => {
-                const active = role === key;
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setRole(key)}
-                    className="rounded-2xl p-3 text-center transition-all duration-200"
-                    style={{
-                      background: active ? info.bg : "#f8fafc",
-                      border: `2px solid ${active ? info.color : "#e2e8f0"}`,
-                      transform: active ? "translateY(-1px)" : "none",
-                    }}
-                  >
-                    <div className="flex items-center justify-center mb-2"
-                      style={{ color: active ? info.color : "#94a3b8" }}>
-                      {info.icon}
-                    </div>
-                    <p style={{ fontSize: "11px", fontWeight: 700, color: active ? info.color : "#374151" }}>
-                      {info.label}
-                    </p>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Role context */}
-          <div className="rounded-2xl p-3 flex items-start gap-3"
-            style={{ background: roleInfo.bg, border: `1px solid ${roleInfo.color}30` }}>
-            <span style={{ color: roleInfo.color, marginTop: 1 }}>{roleInfo.icon}</span>
-            <p style={{ fontSize: "12px", color: roleInfo.color, lineHeight: 1.5 }}>{roleInfo.desc}</p>
-          </div>
-
           {/* Access token */}
           <div>
             <label htmlFor="token"
@@ -164,7 +145,7 @@ export function FirstAccessPage() {
               id="token"
               type="text"
               value={token}
-              onChange={(e) => { setToken(e.target.value.toUpperCase()); setTokenError(""); }}
+              onChange={(e) => { setToken(e.target.value); setTokenError(""); }}
               placeholder="Ex: PPGCC-2024-XXXXX"
               className="w-full rounded-xl px-4 py-3 outline-none transition-all tracking-widest"
               style={{
@@ -389,6 +370,14 @@ export function FirstAccessPage() {
             </div>
           </div>
 
+          {apiError && (
+            <div className="flex items-start gap-2 rounded-xl p-3"
+              style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+              <AlertCircle size={14} style={{ color: "#dc2626", flexShrink: 0, marginTop: 1 }} />
+              <p style={{ fontSize: "13px", color: "#dc2626" }}>{apiError}</p>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button onClick={() => setStep(2)}
               className="flex items-center gap-2 rounded-xl px-5 py-3"
@@ -399,7 +388,7 @@ export function FirstAccessPage() {
               className="flex-1 rounded-xl py-3 flex items-center justify-center gap-2.5"
               style={{ background: "linear-gradient(135deg,#0d2d5e,#123C7A)", color: "#fff", fontWeight: 700, fontSize: "14px" }}>
               {formState === "loading"
-                ? <><Loader2 size={16} className="animate-spin" /> Configurando…</>
+                ? <><Loader2 size={16} className="animate-spin" /> Ativando conta…</>
                 : <>Finalizar Configuração <ChevronRight size={16} /></>}
             </button>
           </div>
@@ -438,6 +427,14 @@ export function FirstAccessPage() {
               Você já pode acessar todas as funcionalidades disponíveis para o seu perfil.
             </p>
           </div>
+
+          {apiError && (
+            <div className="flex items-start gap-2 rounded-xl p-3 mb-4 text-left"
+              style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+              <AlertCircle size={14} style={{ color: "#dc2626", flexShrink: 0, marginTop: 1 }} />
+              <p style={{ fontSize: "13px", color: "#dc2626" }}>{apiError}</p>
+            </div>
+          )}
 
           <button
             onClick={handleComplete}

@@ -10,3 +10,28 @@ Responsabilidades:
   Aplica @requires_role('aluno' apenas próprio, 'orientador' apenas orientandos,
   'coordenacao') e @audit_operation.
 """
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from backend.app.models.inference import InferenceResult
+from backend.app.repositories.inference_repository import InferenceRepository
+from backend.app.services.inference_service import InferenceService, StudentNotFoundError
+
+router = APIRouter()
+
+
+def _get_inference_service() -> InferenceService:
+    return InferenceService(InferenceRepository())
+
+
+# TODO: adicionar @requires_role('aluno', 'orientador', 'coordenacao') e @audit_operation
+@router.get("/inference/{student_id}", response_model=InferenceResult)
+async def get_inference(
+    student_id: str,
+    service: InferenceService = Depends(_get_inference_service),
+) -> InferenceResult:
+    """Retorna o resultado completo da inferência lógica do aluno."""
+    try:
+        return await service.evaluate_student(student_id)
+    except StudentNotFoundError:
+        raise HTTPException(status_code=404, detail="Aluno não encontrado")

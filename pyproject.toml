@@ -1,7 +1,7 @@
 [project]
 name = "saga-sistema-de-acompanhamento-e-gestao-academica"
-version = "0.1.0"
-description = "Sistema de Acompanhamento e Gestão Acadêmica"
+version = "1.0.0"
+description = "Sistema de Acompanhamento e Gestão Acadêmica para programas de pós-graduação"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -16,8 +16,31 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=7.4",
-    "pytest-asyncio>=0.21",
-    "black>=23.0",
-    "ruff>=0.1",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.0",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+
+testpaths = ["backend/inference_engine/tests", "backend/app"]
+asyncio_mode = "auto"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.16",
+]
+
+[tool.ruff.lint]
+ignore = ["E402"]
+
+testpaths = ["backend/inference_engine/tests", "backend/app/tests"]
+asyncio_mode = "auto"
+pythonpath = ["backend"]

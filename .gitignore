@@ -242,4 +242,13 @@ Thumbs.db
 # Claude Code — arquivo de estado local
 .claude/current-issue
 .claude/root-issue
+
 .claude/subtasks-pending.json
+
+# Comando local de atualização do Google Doc
+.claude/commands/workflow/update-doc
+
+# Relatórios de revisão de PR (gerados internamente)
+docs/relatorios/
+# Google API credentials
+.credentials/
