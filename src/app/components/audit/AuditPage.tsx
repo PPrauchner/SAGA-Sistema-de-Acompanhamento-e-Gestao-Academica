@@ -1,227 +1,296 @@
-import { useState } from "react";
-import { Search, Filter, Shield, User, FileText, Settings, Trash2, Eye, Edit3, Plus, Download } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { CheckCircle, ChevronLeft, ChevronRight, Search, XCircle } from "lucide-react";
 
-const AUDIT_LOGS = [
-  { id: "1", timestamp: "2025-03-01 14:32:18", usuario: "roberto.almeida@ppg.ufx.br", role: "coordenacao", acao: "UPDATE", modulo: "alunos", recurso: "Aluno #2023001", detalhes: "Alterou status de 'regular' para 'atenção'", ip: "192.168.1.10", severity: "medium" },
-  { id: "2", timestamp: "2025-03-01 13:21:45", usuario: "carla.mendes@ppg.ufx.br", role: "orientador", acao: "CREATE", modulo: "relatorios", recurso: "Relatório Semestral #RS-2025-001", detalhes: "Submeteu relatório semestral para aprovação", ip: "192.168.1.25", severity: "low" },
-  { id: "3", timestamp: "2025-03-01 11:05:33", usuario: "ana.costa@pos.ufx.br", role: "aluno", acao: "UPLOAD", modulo: "producoes", recurso: "Produção #P-2025-015", detalhes: "Enviou comprovante de publicação IEEE Transactions", ip: "192.168.2.50", severity: "low" },
-  { id: "4", timestamp: "2025-03-01 10:45:12", usuario: "roberto.almeida@ppg.ufx.br", role: "coordenacao", acao: "APPROVE", modulo: "prorrogacoes", recurso: "Prorrogação #PRO-2025-003", detalhes: "Aprovou solicitação de prorrogação de Ana Paula Costa", ip: "192.168.1.10", severity: "high" },
-  { id: "5", timestamp: "2025-03-01 09:30:00", usuario: "sistema@ppg.ufx.br", role: "sistema", acao: "AUTO", modulo: "inferencia", recurso: "Análise #INF-20250301", detalhes: "Motor de inferência processou 248 alunos automaticamente", ip: "127.0.0.1", severity: "info" },
-  { id: "6", timestamp: "2025-02-28 16:55:22", usuario: "carlos.lima@pos.ufx.br", role: "aluno", acao: "LOGIN", modulo: "autenticacao", recurso: "Sessão #S-2025-10231", detalhes: "Login realizado com sucesso", ip: "192.168.3.75", severity: "info" },
-  { id: "7", timestamp: "2025-02-28 15:10:08", usuario: "roberto.almeida@ppg.ufx.br", role: "coordenacao", acao: "DELETE", modulo: "atividades", recurso: "Atividade #A-2025-021", detalhes: "Removeu atividade duplicada do aluno Marcos Oliveira", ip: "192.168.1.10", severity: "high" },
-  { id: "8", timestamp: "2025-02-28 14:00:00", usuario: "sistema@ppg.ufx.br", role: "sistema", acao: "BACKUP", modulo: "sistema", recurso: "Backup Automático", detalhes: "Backup completo realizado com sucesso", ip: "127.0.0.1", severity: "info" },
-];
+import {
+  getAuditLogs,
+  type AuditLog,
+  type AuditLogFilters,
+  type AuditLogPage,
+} from "@/api/auditApi";
+import { useAuth } from "@/hooks/useAuth";
 
-const ACAO_MAP: Record<string, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  CREATE: { label: "Criação", icon: <Plus size={12} />, color: "#1F8A70", bg: "#dcfce7" },
-  UPDATE: { label: "Atualização", icon: <Edit3 size={12} />, color: "#123C7A", bg: "#eef3fc" },
-  DELETE: { label: "Exclusão", icon: <Trash2 size={12} />, color: "#dc2626", bg: "#fee2e2" },
-  VIEW: { label: "Visualização", icon: <Eye size={12} />, color: "#8b5cf6", bg: "#ede9fe" },
-  APPROVE: { label: "Aprovação", icon: <Shield size={12} />, color: "#D4A017", bg: "#fef9c3" },
-  LOGIN: { label: "Login", icon: <User size={12} />, color: "#3b82f6", bg: "#dbeafe" },
-  UPLOAD: { label: "Upload", icon: <FileText size={12} />, color: "#1F8A70", bg: "#dcfce7" },
-  AUTO: { label: "Automático", icon: <Settings size={12} />, color: "#94a3b8", bg: "#f1f5f9" },
-  BACKUP: { label: "Backup", icon: <Shield size={12} />, color: "#94a3b8", bg: "#f1f5f9" },
+const PAGE_SIZE = 20;
+
+const emptyFilters: AuditLogFilters = {
+  usuario_id: "",
+  operacao: "",
+  modulo: "",
+  resultado_status: "",
+  data_inicio: "",
+  data_fim: "",
 };
 
-const SEVERITY_MAP = {
-  high: { label: "Alto", color: "#dc2626", bg: "#fee2e2" },
-  medium: { label: "Médio", color: "#D4A017", bg: "#fef9c3" },
-  low: { label: "Baixo", color: "#1F8A70", bg: "#dcfce7" },
-  info: { label: "Info", color: "#3b82f6", bg: "#dbeafe" },
-};
+function formatTimestamp(value?: string | null): string {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
 
-const ROLE_MAP: Record<string, { label: string; color: string }> = {
-  coordenacao: { label: "Coordenação", color: "#123C7A" },
-  orientador: { label: "Orientador", color: "#1F8A70" },
-  aluno: { label: "Aluno", color: "#D4A017" },
-  sistema: { label: "Sistema", color: "#94a3b8" },
-};
+function StatusBadge({ status }: { status: AuditLog["resultado_status"] }) {
+  const erro = status === "erro";
+  const color = erro ? "#dc2626" : "#1F8A70";
+  const bg = erro ? "#fee2e2" : "#dcfce7";
+  return (
+    <span
+      className="flex items-center gap-1 px-2 py-0.5 rounded-lg"
+      style={{ background: bg, color, fontSize: "10px", fontWeight: 600 }}
+    >
+      {erro ? <XCircle size={11} /> : <CheckCircle size={11} />}
+      {erro ? "Erro" : "Sucesso"}
+    </span>
+  );
+}
 
 export function AuditPage() {
-  const [search, setSearch] = useState("");
-  const [filterAcao, setFilterAcao] = useState("todas");
-  const [filterModulo, setFilterModulo] = useState("todos");
-  const [filterSeverity, setFilterSeverity] = useState("todos");
+  const { token } = useAuth();
+  const [form, setForm] = useState<AuditLogFilters>(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useState<AuditLogFilters>(emptyFilters);
+  const [page, setPage] = useState(1);
+  const [data, setData] = useState<AuditLogPage | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const filtered = AUDIT_LOGS.filter((log) => {
-    const matchSearch = log.usuario.toLowerCase().includes(search.toLowerCase()) ||
-      log.detalhes.toLowerCase().includes(search.toLowerCase()) ||
-      log.recurso.toLowerCase().includes(search.toLowerCase());
-    const matchAcao = filterAcao === "todas" || log.acao === filterAcao;
-    const matchModulo = filterModulo === "todos" || log.modulo === filterModulo;
-    const matchSeverity = filterSeverity === "todos" || log.severity === filterSeverity;
-    return matchSearch && matchAcao && matchModulo && matchSeverity;
-  });
+  const loadData = useCallback(
+    async (authToken: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await getAuditLogs(authToken, {
+          ...appliedFilters,
+          page,
+          page_size: PAGE_SIZE,
+        });
+        setData(result);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Falha ao carregar logs");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [appliedFilters, page],
+  );
 
-  const modulos = [...new Set(AUDIT_LOGS.map(l => l.modulo))];
+  useEffect(() => {
+    if (token) void loadData(token);
+  }, [token, loadData]);
+
+  function applyFilters(event: FormEvent): void {
+    event.preventDefault();
+    setPage(1);
+    setAppliedFilters(form);
+  }
+
+  function clearFilters(): void {
+    setForm(emptyFilters);
+    setAppliedFilters(emptyFilters);
+    setPage(1);
+  }
+
+  const total = data?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const logs = data?.items ?? [];
+
+  const inputStyle = {
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    fontSize: "13px",
+    color: "var(--foreground)",
+  } as const;
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Logs de Auditoria</h1>
-          <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>Registro completo de atividades do sistema</p>
-        </div>
-        <button className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#1F8A70", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
-          <Download size={16} /> Exportar Logs
-        </button>
+      <div className="mb-6">
+        <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Logs de Auditoria</h1>
+        <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
+          Registro imutável das operações do sistema (aspecto A02)
+        </p>
       </div>
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {[
-          { label: "Total de Logs", value: AUDIT_LOGS.length, color: "#123C7A", bg: "#eef3fc" },
-          { label: "Ações Críticas", value: AUDIT_LOGS.filter(l => l.severity === "high").length, color: "#dc2626", bg: "#fee2e2" },
-          { label: "Hoje", value: AUDIT_LOGS.filter(l => l.timestamp.startsWith("2025-03-01")).length, color: "#1F8A70", bg: "#dcfce7" },
-          { label: "Usuários Únicos", value: new Set(AUDIT_LOGS.map(l => l.usuario)).size, color: "#D4A017", bg: "#fef9c3" },
-        ].map((stat) => (
-          <div key={stat.label} className="rounded-2xl p-4" style={{ background: stat.bg }}>
-            <p style={{ fontSize: "26px", fontWeight: 800, color: stat.color }}>{stat.value}</p>
-            <p style={{ fontSize: "12px", color: stat.color, fontWeight: 600 }}>{stat.label}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-4 flex-wrap">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
+      <form onSubmit={applyFilters} className="flex items-end gap-3 mb-4 flex-wrap">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search
+            size={14}
+            className="absolute left-3 top-1/2 -translate-y-1/2"
+            style={{ color: "var(--muted-foreground)" }}
+          />
           <input
-            placeholder="Buscar nos logs..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Operação (ex: create_student)"
+            value={form.operacao}
+            onChange={(e) => setForm({ ...form, operacao: e.target.value })}
             className="w-full rounded-xl pl-9 pr-4 py-2 outline-none"
-            style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
+            style={inputStyle}
           />
         </div>
-        {[
-          { value: filterAcao, onChange: setFilterAcao, options: [["todas", "Todas as Ações"], ...Object.keys(ACAO_MAP).map(k => [k, ACAO_MAP[k].label])], label: "Ação" },
-          { value: filterModulo, onChange: setFilterModulo, options: [["todos", "Todos os Módulos"], ...modulos.map(m => [m, m])], label: "Módulo" },
-          { value: filterSeverity, onChange: setFilterSeverity, options: [["todos", "Severidade"], ...Object.entries(SEVERITY_MAP).map(([k, v]) => [k, v.label])], label: "Severidade" },
-        ].map((filter, i) => (
-          <select
-            key={i}
-            value={filter.value}
-            onChange={(e) => filter.onChange(e.target.value)}
-            className="rounded-xl px-3 py-2 outline-none"
-            style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
-          >
-            {filter.options.map(([val, lbl]) => <option key={val} value={val}>{lbl}</option>)}
-          </select>
-        ))}
-      </div>
+        <input
+          placeholder="usuario_id"
+          value={form.usuario_id}
+          onChange={(e) => setForm({ ...form, usuario_id: e.target.value })}
+          className="rounded-xl px-3 py-2 outline-none min-w-[140px]"
+          style={inputStyle}
+        />
+        <input
+          placeholder="módulo"
+          value={form.modulo}
+          onChange={(e) => setForm({ ...form, modulo: e.target.value })}
+          className="rounded-xl px-3 py-2 outline-none min-w-[140px]"
+          style={inputStyle}
+        />
+        <select
+          value={form.resultado_status}
+          onChange={(e) =>
+            setForm({ ...form, resultado_status: e.target.value as AuditLogFilters["resultado_status"] })
+          }
+          className="rounded-xl px-3 py-2 outline-none"
+          style={inputStyle}
+        >
+          <option value="">Todos os status</option>
+          <option value="sucesso">Sucesso</option>
+          <option value="erro">Erro</option>
+        </select>
+        <input
+          type="date"
+          value={form.data_inicio}
+          onChange={(e) => setForm({ ...form, data_inicio: e.target.value })}
+          className="rounded-xl px-3 py-2 outline-none"
+          style={inputStyle}
+        />
+        <input
+          type="date"
+          value={form.data_fim}
+          onChange={(e) => setForm({ ...form, data_fim: e.target.value })}
+          className="rounded-xl px-3 py-2 outline-none"
+          style={inputStyle}
+        />
+        <button
+          type="submit"
+          className="rounded-xl px-4 py-2"
+          style={{ background: "#1F8A70", color: "#fff", fontWeight: 600, fontSize: "13px" }}
+        >
+          Filtrar
+        </button>
+        <button
+          type="button"
+          onClick={clearFilters}
+          className="rounded-xl px-4 py-2"
+          style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "13px", fontWeight: 600 }}
+        >
+          Limpar
+        </button>
+      </form>
+
+      {error && (
+        <div
+          className="rounded-xl px-4 py-3 mb-4"
+          style={{ background: "#fee2e2", color: "#dc2626", fontSize: "13px" }}
+        >
+          {error}
+        </div>
+      )}
 
       <div className="rounded-2xl overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-        <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)", background: "var(--muted)" }}>
-          <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>{filtered.length} registros encontrados</p>
-          <p className="hidden sm:block" style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Última atualização: 01/03/2025 14:32</p>
+        <div
+          className="px-4 py-3 flex items-center justify-between"
+          style={{ borderBottom: "1px solid var(--border)", background: "var(--muted)" }}
+        >
+          <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+            {loading ? "Carregando…" : `${total} registro(s)`}
+          </p>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+            Página {page} de {totalPages}
+          </p>
         </div>
 
-        {/* Mobile card layout */}
-        <div className="md:hidden divide-y" style={{ borderColor: "var(--border)" }}>
-          {filtered.map((log) => {
-            const acao = ACAO_MAP[log.acao] || ACAO_MAP.AUTO;
-            const severity = SEVERITY_MAP[log.severity as keyof typeof SEVERITY_MAP];
-            const role = ROLE_MAP[log.role] || { label: log.role, color: "#94a3b8" };
-            return (
-              <div key={log.id} className="p-4" style={{ borderBottom: "1px solid var(--border)" }}>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ background: acao.bg, color: acao.color, fontSize: "10px", fontWeight: 700 }}>
-                      {acao.icon} {acao.label}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded-lg" style={{ background: severity.bg, color: severity.color, fontSize: "10px", fontWeight: 600 }}>
-                      {severity.label}
-                    </span>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p style={{ fontSize: "10px", fontWeight: 600, color: "var(--foreground)" }}>{log.timestamp.split(" ")[1]}</p>
-                    <p style={{ fontSize: "9px", color: "var(--muted-foreground)" }}>{new Date(log.timestamp.split(" ")[0]).toLocaleDateString("pt-BR")}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                  <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>{log.usuario}</p>
-                  <span className="px-1.5 py-0.5 rounded" style={{ background: `${role.color}18`, color: role.color, fontSize: "9px", fontWeight: 600 }}>
-                    {role.label}
-                  </span>
-                </div>
-                <p style={{ fontSize: "12px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>{log.detalhes}</p>
-                <div className="flex items-center justify-between mt-2">
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{log.modulo} › {log.recurso}</p>
-                  <p style={{ fontSize: "10px", fontFamily: "monospace", color: "var(--muted-foreground)" }}>{log.ip}</p>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Desktop table layout */}
-        <div className="hidden md:block divide-y" style={{ borderColor: "var(--border)" }}>
-          {filtered.map((log) => {
-            const acao = ACAO_MAP[log.acao] || ACAO_MAP.AUTO;
-            const severity = SEVERITY_MAP[log.severity as keyof typeof SEVERITY_MAP];
-            const role = ROLE_MAP[log.role] || { label: log.role, color: "#94a3b8" };
-
-            return (
-              <div
-                key={log.id}
-                className="flex items-start gap-4 px-4 py-3 transition-colors"
-                style={{ borderBottom: "1px solid var(--border)" }}
-                onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--muted)"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-              >
-                {/* Severity indicator */}
-                <div className="flex-shrink-0 mt-1">
-                  <div className="w-2 h-2 rounded-full" style={{ background: severity.color }} />
-                </div>
-
-                {/* Timestamp */}
-                <div className="flex-shrink-0" style={{ minWidth: 80 }}>
+        {!loading && logs.length === 0 ? (
+          <div className="p-12 text-center" style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
+            Nenhum registro encontrado.
+          </div>
+        ) : (
+          <div className="divide-y" style={{ borderColor: "var(--border)" }}>
+            {logs.map((log) => (
+              <div key={log.id} className="flex items-start gap-4 px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+                <div className="flex-shrink-0" style={{ minWidth: 120 }}>
                   <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--foreground)" }}>
-                    {log.timestamp.split(" ")[1]}
+                    {formatTimestamp(log.timestamp)}
                   </p>
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>
-                    {new Date(log.timestamp.split(" ")[0]).toLocaleDateString("pt-BR")}
-                  </p>
+                  {log.duracao_ms != null && (
+                    <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{log.duracao_ms} ms</p>
+                  )}
                 </div>
 
-                {/* Action badge */}
-                <div className="flex-shrink-0">
-                  <span className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ background: acao.bg, color: acao.color, fontSize: "11px", fontWeight: 600 }}>
-                    {acao.icon} {acao.label}
-                  </span>
-                </div>
-
-                {/* Main content */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-0.5 flex-wrap">
-                    <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>{log.usuario}</p>
-                    <span className="px-1.5 py-0.5 rounded" style={{ background: `${role.color}18`, color: role.color, fontSize: "9px", fontWeight: 600 }}>
-                      {role.label}
-                    </span>
+                    <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>
+                      {log.operacao ?? "—"}
+                    </p>
+                    {log.role && (
+                      <span
+                        className="px-1.5 py-0.5 rounded"
+                        style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "9px", fontWeight: 600 }}
+                      >
+                        {log.role}
+                      </span>
+                    )}
                   </div>
-                  <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{log.detalhes}</p>
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>
-                    {log.modulo} › {log.recurso}
+                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+                    {log.recurso ?? log.modulo ?? "—"}
                   </p>
+                  {log.resultado_status === "erro" && log.erro_mensagem && (
+                    <p style={{ fontSize: "11px", color: "#dc2626", marginTop: "2px" }}>{log.erro_mensagem}</p>
+                  )}
+                  {log.usuario_id && (
+                    <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>
+                      {log.usuario_id}
+                    </p>
+                  )}
                 </div>
 
-                {/* IP */}
-                <div className="flex-shrink-0 text-right" style={{ minWidth: 90 }}>
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>IP</p>
-                  <p style={{ fontSize: "11px", fontFamily: "monospace", color: "var(--foreground)" }}>{log.ip}</p>
-                </div>
-
-                {/* Severity badge */}
                 <div className="flex-shrink-0">
-                  <span className="px-2 py-0.5 rounded-lg" style={{ background: severity.bg, color: severity.color, fontSize: "10px", fontWeight: 600 }}>
-                    {severity.label}
-                  </span>
+                  <StatusBadge status={log.resultado_status} />
                 </div>
               </div>
-            );
-          })}
+            ))}
+          </div>
+        )}
+
+        <div
+          className="px-4 py-3 flex items-center justify-end gap-2"
+          style={{ borderTop: "1px solid var(--border)", background: "var(--muted)" }}
+        >
+          <button
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page <= 1 || loading}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5"
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              color: "var(--foreground)",
+              fontSize: "12px",
+              fontWeight: 600,
+              opacity: page <= 1 || loading ? 0.5 : 1,
+            }}
+          >
+            <ChevronLeft size={14} /> Anterior
+          </button>
+          <button
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page >= totalPages || loading}
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5"
+            style={{
+              background: "var(--card)",
+              border: "1px solid var(--border)",
+              color: "var(--foreground)",
+              fontSize: "12px",
+              fontWeight: 600,
+              opacity: page >= totalPages || loading ? 0.5 : 1,
+            }}
+          >
+            Próxima <ChevronRight size={14} />
+          </button>
         </div>
       </div>
     </div>

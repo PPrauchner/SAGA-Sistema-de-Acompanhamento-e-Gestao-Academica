@@ -3,7 +3,6 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { LoginPage } from "./components/auth/LoginPage";
 import { RegisterPage } from "./components/auth/RegisterPage";
 import { PasswordRecoveryPage } from "./components/auth/PasswordRecoveryPage";
-import { ChangePasswordPage } from "./components/auth/ChangePasswordPage";
 import { FirstAccessPage } from "./components/auth/FirstAccessPage";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { StudentsPage } from "./components/students/StudentsPage";
@@ -86,14 +85,13 @@ function AppContent() {
     );
   }
 
-  const isAuthPage = ["login", "register", "password-recovery", "change-password", "first-access"].includes(currentPage);
+  const isAuthPage = ["login", "register", "password-recovery", "first-access"].includes(currentPage);
 
   if (isAuthPage) {
     switch (currentPage) {
       case "login": return <LoginPage />;
       case "register": return <RegisterPage />;
       case "password-recovery": return <PasswordRecoveryPage />;
-      case "change-password": return <ChangePasswordPage />;
       case "first-access": return <FirstAccessPage />;
       default: return <LoginPage />;
     }

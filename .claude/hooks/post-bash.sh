@@ -23,15 +23,22 @@ if echo "$COMMAND" | grep -q "gh pr create"; then
         && echo "[hook] Reviewer adicionado." \
         || echo "[hook] Aviso: não foi possível adicionar o reviewer (PR pode ser de fork ou permissão insuficiente)."
 
-    ISSUE_FILE="$ROOT/.claude/current-issue"
+    # Usa root-issue (issue pai) se existir; caso contrário, cai em current-issue.
+    # root-issue é escrito ao iniciar uma issue pai e nunca sobrescrito por sub-issues.
+    ROOT_FILE="$ROOT/.claude/root-issue"
+    CURRENT_FILE="$ROOT/.claude/current-issue"
 
-    if [ -f "$ISSUE_FILE" ]; then
-        ISSUE_NUMBER=$(cat "$ISSUE_FILE" | tr -d '[:space:]')
-        if [ -n "$ISSUE_NUMBER" ]; then
-            echo "[hook] PR criado — movendo issue #$ISSUE_NUMBER para 'In Review'..."
-            bash "$ROOT/.claude/hooks/move-to-in-review.sh" "$ISSUE_NUMBER" "$ROOT"
-        fi
+    if [ -f "$ROOT_FILE" ]; then
+        ISSUE_NUMBER=$(cat "$ROOT_FILE" | tr -d '[:space:]')
+        echo "[hook] PR criado — movendo issue pai #$ISSUE_NUMBER para 'In Review'..."
+    elif [ -f "$CURRENT_FILE" ]; then
+        ISSUE_NUMBER=$(cat "$CURRENT_FILE" | tr -d '[:space:]')
+        echo "[hook] PR criado — movendo issue #$ISSUE_NUMBER para 'In Review'..."
+    fi
+
+    if [ -n "$ISSUE_NUMBER" ]; then
+        bash "$ROOT/.claude/hooks/move-to-in-review.sh" "$ISSUE_NUMBER" "$ROOT"
     else
-        echo "[hook] Aviso: .claude/current-issue não encontrado. Issue não será movida automaticamente."
+        echo "[hook] Aviso: .claude/root-issue e .claude/current-issue não encontrados. Issue não será movida automaticamente."
     fi
 fi

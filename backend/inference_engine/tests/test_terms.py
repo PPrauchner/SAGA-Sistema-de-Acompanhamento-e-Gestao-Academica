@@ -9,9 +9,16 @@ Responsabilidades:
 - Garantir imutabilidade de Atom (sem alteração de valor após criação).
 """
 
+import os
+import sys
+
 import pytest
 
-from backend.inference_engine.terms import Atom, Variable, Compound
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+sys.path.insert(0, BASE_DIR)
+
+from inference_engine.terms import Atom, Variable, Compound
 
 
 def test_atom_string_equality():
@@ -77,4 +84,4 @@ def test_variable_repr():
 def test_compound_repr():
     term = Compound("pai", [Atom("joao")])
 
-    assert repr(term) == "Compound('pai', [Atom('joao')])"
+    assert repr(term) == "Compound('pai', (Atom('joao'),))"
