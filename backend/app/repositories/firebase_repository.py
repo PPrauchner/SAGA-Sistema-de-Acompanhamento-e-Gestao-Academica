@@ -122,3 +122,48 @@ class FirebaseRepository:
             return doc_ref.id
 
         return await asyncio.to_thread(_create)
+
+    async def set_subcollection(
+        self,
+        doc_id: str,
+        subcollection: str,
+        sub_doc_id: str,
+        data: dict[str, Any],
+    ) -> None:
+        """Cria ou sobrescreve um documento com id explícito em uma subcoleção."""
+        await asyncio.to_thread(
+            self._document(doc_id).collection(subcollection).document(sub_doc_id).set,
+            data,
+        )
+
+    async def delete_subcollection(
+        self,
+        doc_id: str,
+        subcollection: str,
+        sub_doc_id: str,
+    ) -> None:
+        """Remove um documento de uma subcoleção."""
+        await asyncio.to_thread(
+            self._document(doc_id).collection(subcollection).document(sub_doc_id).delete,
+        )
+
+    async def list_subcollection(
+        self,
+        doc_id: str,
+        subcollection: str,
+    ) -> list[dict[str, Any]]:
+        """Lista todos os documentos de uma subcoleção, incluindo o id de cada um."""
+
+        def _list() -> list[dict[str, Any]]:
+            docs = self._document(doc_id).collection(subcollection).stream()
+
+            result = []
+
+            for doc in docs:
+                item = doc.to_dict()
+                item["id"] = doc.id
+                result.append(item)
+
+            return result
+
+        return await asyncio.to_thread(_list)
