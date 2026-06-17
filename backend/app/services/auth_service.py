@@ -3,7 +3,9 @@ Serviço de negócio do fluxo de autenticação por convite.
 
 Responsabilidades:
 - create_invite: coordenação cria convite de primeiro acesso (UUID token, TTL 48h),
-  persistindo em invites/{token}; rejeita e-mail que já possui conta ativa (409).
+  persistindo em invites/{token}; rejeita e-mail que já possui conta ativa (409). Após
+  persistir, envia ao convidado um e-mail com o link de primeiro acesso, o código e a
+  validade; falha de envio é registrada em log e não derruba o convite.
 - activate_first_access: valida o convite (existe + não expirado + não usado), cria o
   usuário no Firebase Auth com a senha informada, define os custom claims
   {role, programa_id}, cria o documento users/{uid} e marca o convite como usado.
@@ -17,6 +19,8 @@ Referência: docs/specs/04_autenticacao.json (fluxo_primeiro_acesso, contratos_a
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -25,6 +29,8 @@ from fastapi import HTTPException, status
 from firebase_admin import auth as firebase_auth
 
 from backend.app.core.auth import CurrentUser
+from backend.app.core.config import settings
+from backend.app.core.email import EmailError, EmailSender, get_email_sender
 from backend.app.core.firebase import get_auth_client
 from backend.app.models.user import (
     FirstAccessResponse,
@@ -34,8 +40,35 @@ from backend.app.models.user import (
 )
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
+logger = logging.getLogger(__name__)
+
 # Tempo de validade do convite de primeiro acesso.
 _INVITE_TTL = timedelta(hours=48)
+
+
+def _render_invite_email(
+    nome: str, link: str, token: str, expira_em: datetime
+) -> str:
+    """Monta o corpo HTML do e-mail de convite de primeiro acesso.
+
+    Args:
+        nome: Nome do convidado, usado na saudação.
+        link: URL da página de primeiro acesso no frontend.
+        token: UUID do convite (código a informar na tela de primeiro acesso).
+        expira_em: Instante de expiração do convite.
+
+    Returns:
+        Corpo do e-mail em HTML.
+    """
+    validade = expira_em.strftime("%d/%m/%Y %H:%M UTC")
+    return (
+        f"<p>Olá, {nome}!</p>"
+        f"<p>Você foi convidado para acessar o SAGA. Acesse "
+        f'<a href="{link}">{link}</a> e informe o código abaixo na tela de '
+        f"primeiro acesso para definir sua senha:</p>"
+        f'<p style="font-size:18px;font-weight:bold">{token}</p>'
+        f"<p>Este código é válido até {validade} (48 horas após o envio).</p>"
+    )
 
 
 class AuthService:
@@ -50,10 +83,12 @@ class AuthService:
         invite_repo: FirebaseRepository | None = None,
         user_repo: FirebaseRepository | None = None,
         auth_client: Any | None = None,
+        email_sender: EmailSender | None = None,
     ) -> None:
         self._invites = invite_repo or FirebaseRepository("invites")
         self._users = user_repo or FirebaseRepository("users")
         self._auth = auth_client if auth_client is not None else get_auth_client()
+        self._email = email_sender if email_sender is not None else get_email_sender()
 
     async def create_invite(
         self,
@@ -98,11 +133,38 @@ class AuthService:
 
         await self._invites.set(token, invite_data)
 
+        await self._enviar_email_convite(data.email, data.nome, token, expira_em)
+
         return InviteResponse(
             message=f"Convite enviado para {data.email}",
-            token=token,
+            token=token if settings.expose_invite_token else None,
             expira_em=expira_em.isoformat(),
         )
+
+    async def _enviar_email_convite(
+        self, email: str, nome: str, token: str, expira_em: datetime
+    ) -> None:
+        """Envia o e-mail de convite com o link de primeiro acesso.
+
+        O convite já está persistido quando este método roda; uma falha de envio
+        é registrada em log e não propaga, para não deixar o convite em estado
+        inconsistente (o token segue válido e disponível como fallback de dev).
+
+        Args:
+            email: Destinatário do convite.
+            nome: Nome do convidado, usado na saudação.
+            token: UUID do convite (código de primeiro acesso).
+            expira_em: Instante de expiração do convite.
+        """
+        link = f"{settings.frontend_url}/first-access"
+        assunto = "SAGA — Convite de primeiro acesso"
+        corpo = _render_invite_email(nome, link, token, expira_em)
+        try:
+            await asyncio.to_thread(self._email.send, email, assunto, corpo)
+        except EmailError as exc:
+            logger.error(
+                "Falha ao enviar e-mail de convite para %s: %s", email, exc
+            )
 
     async def activate_first_access(
         self, token: str, senha: str
