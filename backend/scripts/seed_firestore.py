@@ -21,10 +21,9 @@ from __future__ import annotations
 
 import asyncio
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
-from fastapi import HTTPException
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -93,46 +92,48 @@ ACTIVITY_TYPES_DEFAULT: dict[str, dict[str, Any]] = {
 }
 
 
-async def _exists(repository: FirebaseRepository, collection: str, doc_id: str) -> bool:
-    try:
-        await repository.get(collection, doc_id)
-    except HTTPException as exc:
-        if exc.status_code == 404:
-            return False
-        raise
-    return True
-
-
 async def _create_if_missing(
     repository: FirebaseRepository,
-    collection: str,
     doc_id: str,
     data: dict[str, Any],
 ) -> bool:
-    if await _exists(repository, collection, doc_id):
+    """Cria o documento com id explícito se ele ainda não existir (idempotente).
+
+    Args:
+        repository: Repositório já fixado na coleção (ou path de subcoleção) alvo.
+        doc_id: Id explícito do documento.
+        data: Conteúdo a persistir.
+
+    Returns:
+        True se o documento foi criado, False se já existia.
+    """
+    if await repository.get(doc_id) is not None:
         return False
 
-    await repository.create(collection, data, doc_id=doc_id)
+    await repository.set(doc_id, data)
     return True
 
 
 async def seed_firestore() -> dict[str, int]:
-    repository = FirebaseRepository()
+    now = datetime.now(timezone.utc)
+    programs = FirebaseRepository("programs")
+    vehicle_levels = FirebaseRepository(f"programs/{PROGRAM_ID}/vehicle_levels")
+    activity_types = FirebaseRepository("activity_types")
+
     created = {
         "programs": 0,
         "vehicle_levels": 0,
         "activity_types": 0,
     }
 
-    if await _create_if_missing(repository, "programs", PROGRAM_ID, PROGRAM_DEFAULT):
+    if await _create_if_missing(
+        programs, PROGRAM_ID, {**PROGRAM_DEFAULT, "criado_em": now, "atualizado_em": now}
+    ):
         created["programs"] += 1
 
-    vehicle_levels_collection = f"programs/{PROGRAM_ID}/vehicle_levels"
     for doc_id, data in VEHICLE_LEVELS_DEFAULT.items():
-        payload = {**data, "atualizado_por": SEED_USER_ID}
-        if await _create_if_missing(
-            repository, vehicle_levels_collection, doc_id, payload
-        ):
+        payload = {**data, "atualizado_por": SEED_USER_ID, "atualizado_em": now}
+        if await _create_if_missing(vehicle_levels, doc_id, payload):
             created["vehicle_levels"] += 1
 
     for doc_id, data in ACTIVITY_TYPES_DEFAULT.items():
@@ -143,12 +144,13 @@ async def seed_firestore() -> dict[str, int]:
             "ativo": True,
             "programa_id": PROGRAM_ID,
             "criado_por": SEED_USER_ID,
+            "criado_em": now,
+            "atualizado_em": now,
             **data,
         }
-        if await _create_if_missing(repository, "activity_types", doc_id, payload):
+        if await _create_if_missing(activity_types, doc_id, payload):
             created["activity_types"] += 1
 
-    await repository.get("programs", PROGRAM_ID)
     return created
 
 
