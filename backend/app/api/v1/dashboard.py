@@ -13,3 +13,7 @@ Responsabilidades:
   atividades aguardando validação, prorrogações pendentes, produções do último mês, tempo
   médio de integralização e auditoria recente. Exclusivo de @requires_role('coordenacao').
 """
+
+from fastapi import APIRouter
+
+router = APIRouter()
