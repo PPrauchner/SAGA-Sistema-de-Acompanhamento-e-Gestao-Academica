@@ -14,6 +14,8 @@ Responsabilidades:
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 
 from backend.app.core.auth import CurrentUser
@@ -39,10 +41,15 @@ class ActivityTypeService:
         data: ActivityTypeCreateRequest,
         user: CurrentUser,
     ) -> dict:
+        now = datetime.now(timezone.utc)
         type_id = await self._types.create(
             {
                 **data.model_dump(),
                 "ativo": True,
+                "programa_id": user.programa_id,
+                "criado_por": user.uid,
+                "criado_em": now,
+                "atualizado_em": now,
             },
         )
 
@@ -61,6 +68,7 @@ class ActivityTypeService:
 
         fields = data.model_dump(exclude_none=True, exclude={"observacao"})
         if fields:
+            fields["atualizado_em"] = datetime.now(timezone.utc)
             await self._types.update(type_id, fields)
 
         return {
@@ -76,7 +84,10 @@ class ActivityTypeService:
     ) -> dict:
         await self._get_or_404(type_id)
 
-        await self._types.update(type_id, {"ativo": data.ativo})
+        await self._types.update(
+            type_id,
+            {"ativo": data.ativo, "atualizado_em": datetime.now(timezone.utc)},
+        )
 
         return {
             "message": "Tipo ativado" if data.ativo else "Tipo desativado",
