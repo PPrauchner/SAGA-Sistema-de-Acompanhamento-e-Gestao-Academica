@@ -5,6 +5,8 @@ Responsabilidades:
 - Definir a classe Settings (via pydantic-settings) que carrega as seguintes variáveis de
   ambiente: FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL,
   FIREBASE_STORAGE_BUCKET, API_VERSION, CORS_ORIGINS.
+- Carregar as configurações de envio de e-mail (EMAIL_PROVIDER, SMTP_*, FRONTEND_URL,
+  EXPOSE_INVITE_TOKEN) usadas pelo convite de primeiro acesso.
 - Expor instância singleton `settings` importável pelos demais módulos.
 - Garantir que a aplicação falhe em tempo de startup se variáveis obrigatórias estiverem ausentes.
 - Centralizar constantes de configuração reutilizadas pelos aspectos (ex: dias de alerta de prazo,
@@ -36,6 +38,25 @@ class Settings(BaseSettings):
     # API
     api_version: str = "1.0.0-MVP"
     cors_origins: list[str] = ["http://localhost:5173"]
+
+    # Base do frontend — usada para montar o link de primeiro acesso no e-mail de convite.
+    frontend_url: str = "http://localhost:5173"
+
+    # Envio de e-mail
+    # email_provider seleciona a implementação de EmailSender em core/email.py.
+    # "smtp" é a única suportada hoje; "sendgrid" pode ser adicionada sem tocar nos
+    # serviços (basta uma nova classe e um ramo na factory get_email_sender()).
+    email_provider: str = "smtp"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_use_tls: bool = True
+
+    # Token do convite na resposta da API: fallback de dev/testes. Em produção,
+    # definir EXPOSE_INVITE_TOKEN=false para que o token saia apenas por e-mail.
+    expose_invite_token: bool = True
 
     # Aspect constants — importados por aspect_config.py
     deadline_alert_days: int = 30
