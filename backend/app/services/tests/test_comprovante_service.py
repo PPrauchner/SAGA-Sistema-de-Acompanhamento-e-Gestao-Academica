@@ -43,6 +43,21 @@ class _FakeStudentRepository:
         return list(type(self).store)
 
 
+class _FakeActivityRepository:
+    # store[(student_id, activity_id)] = activity dict (None = não existe)
+    store: dict[tuple[str, str], dict[str, Any]] = {}
+    updates: list[tuple[str, str, dict[str, Any]]] = []
+
+    async def get_activity(self, student_id: str, activity_id: str) -> dict[str, Any] | None:
+        data = type(self).store.get((student_id, activity_id))
+        return dict(data) if data else None
+
+    async def update_activity(
+        self, student_id: str, activity_id: str, data: dict[str, Any]
+    ) -> None:
+        type(self).updates.append((student_id, activity_id, dict(data)))
+
+
 def _aluno() -> CurrentUser:
     return CurrentUser(uid="uid-aluno", role="aluno", programa_id="prog_default", email="a@x.com")
 
@@ -64,8 +79,11 @@ def _upload_file(
 @pytest.fixture(autouse=True)
 def _setup(monkeypatch: pytest.MonkeyPatch) -> _FakeBucket:
     _FakeStudentRepository.store = [{"id": "student1", "uid": "uid-aluno"}]
+    _FakeActivityRepository.store = {("student1", "act1"): {"id": "act1", "descricao": "x"}}
+    _FakeActivityRepository.updates = []
     bucket = _FakeBucket()
     monkeypatch.setattr(comprovante_module, "StudentRepository", _FakeStudentRepository)
+    monkeypatch.setattr(comprovante_module, "ActivityRepository", _FakeActivityRepository)
     monkeypatch.setattr(storage_module, "get_storage_bucket", lambda: bucket)
     return bucket
 
@@ -92,6 +110,38 @@ async def test_upload_persiste_no_bucket_e_devolve_url_tokenizada(
         f"comprovantes%2Fprog_default%2Fstudent1%2Fact1%2Fcomprovante.pdf"
         f"?alt=media&token={token}"
     )
+
+
+async def test_upload_persiste_comprovante_url_no_doc_da_atividade(
+    _setup: _FakeBucket,
+) -> None:
+    service = ComprovanteService()
+
+    result = await service.upload(
+        "act1",
+        _upload_file(b"%PDF", "c.pdf", "application/pdf"),
+        _aluno(),
+    )
+
+    assert _FakeActivityRepository.updates
+    student_id, activity_id, data = _FakeActivityRepository.updates[0]
+    assert (student_id, activity_id) == ("student1", "act1")
+    assert data["comprovante_url"] == result["comprovante_url"]
+
+
+async def test_upload_404_quando_atividade_inexistente() -> None:
+    _FakeActivityRepository.store = {}
+    service = ComprovanteService()
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.upload(
+            "inexistente",
+            _upload_file(b"%PDF", "c.pdf", "application/pdf"),
+            _aluno(),
+        )
+
+    assert exc_info.value.status_code == 404
+    assert _FakeActivityRepository.updates == []
 
 
 async def test_upload_sanitiza_filename_com_path_traversal(
