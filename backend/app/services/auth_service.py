@@ -61,14 +61,38 @@ def _render_invite_email(
         Corpo do e-mail em HTML.
     """
     validade = expira_em.strftime("%d/%m/%Y %H:%M UTC")
-    return (
-        f"<p>Olá, {nome}!</p>"
-        f"<p>Você foi convidado para acessar o SAGA. Acesse "
-        f'<a href="{link}">{link}</a> e informe o código abaixo na tela de '
-        f"primeiro acesso para definir sua senha:</p>"
-        f'<p style="font-size:18px;font-weight:bold">{token}</p>'
-        f"<p>Este código é válido até {validade} (48 horas após o envio).</p>"
-    )
+    return f"""\
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f9;padding:24px 0;font-family:Arial,Helvetica,sans-serif;">
+  <tr><td align="center">
+    <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;background-color:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+      <tr><td style="background-color:#123C7A;padding:24px 32px;">
+        <div style="color:#ffffff;font-size:22px;font-weight:bold;letter-spacing:1px;">SAGA</div>
+        <div style="color:#cdd9ee;font-size:13px;margin-top:4px;">Sistema de Acompanhamento e Gestão Acadêmica</div>
+      </td></tr>
+      <tr><td style="padding:32px;">
+        <p style="font-size:16px;color:#1a202c;margin:0 0 16px;">Olá, {nome}!</p>
+        <p style="font-size:14px;color:#4a5568;line-height:1.6;margin:0 0 24px;">
+          Você foi convidado para acessar o <strong>SAGA</strong>. Para definir sua senha
+          e ativar sua conta, acesse a página de primeiro acesso e informe o código abaixo.
+        </p>
+        <div style="text-align:center;margin:0 0 24px;">
+          <div style="font-size:12px;color:#718096;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">Código de primeiro acesso</div>
+          <div style="display:inline-block;background-color:#f1f5f9;border:1px dashed #94a3b8;border-radius:6px;padding:12px 20px;font-family:'Courier New',monospace;font-size:16px;color:#123C7A;letter-spacing:1px;">{token}</div>
+        </div>
+        <div style="text-align:center;margin:0 0 24px;">
+          <a href="{link}" style="display:inline-block;background-color:#123C7A;color:#ffffff;text-decoration:none;font-size:15px;font-weight:bold;padding:12px 28px;border-radius:6px;">Acessar primeiro acesso</a>
+        </div>
+        <p style="font-size:13px;color:#718096;line-height:1.6;margin:0;">
+          Este código é válido até <strong>{validade}</strong> (48 horas após o envio).
+          Se você não esperava este convite, ignore este e-mail.
+        </p>
+      </td></tr>
+      <tr><td style="background-color:#f8fafc;padding:16px 32px;border-top:1px solid #e2e8f0;">
+        <span style="font-size:12px;color:#a0aec0;">SAGA — mensagem automática, não responda este e-mail.</span>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>"""
 
 
 class AuthService:
