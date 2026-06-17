@@ -28,6 +28,7 @@ from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
     ActivityCreateRequest,
     ActivityCreateResponse,
+    ActivityResponse,
     ComprovanteUploadResponse,
 )
 from backend.app.services.activity_service import ActivityService
@@ -62,7 +63,7 @@ def _build_submission_alert(
     }
 
 
-@router.get("/activities")
+@router.get("/activities", response_model=list[ActivityResponse])
 @requires_role("aluno", "orientador", "coordenacao")
 async def list_activities(
     student_id: str | None = Query(None),

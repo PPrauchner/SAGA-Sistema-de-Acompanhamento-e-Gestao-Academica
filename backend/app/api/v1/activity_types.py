@@ -22,6 +22,7 @@ from backend.app.aspects.history import track_history
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity_type import (
     ActivityTypeCreateRequest,
+    ActivityTypeResponse,
     ActivityTypeToggleRequest,
     ActivityTypeUpdateRequest,
 )
@@ -32,7 +33,7 @@ router = APIRouter()
 service = ActivityTypeService()
 
 
-@router.get("/activity-types")
+@router.get("/activity-types", response_model=list[ActivityTypeResponse])
 @requires_role("coordenacao", "orientador", "aluno")
 async def list_activity_types(
     user: CurrentUser = Depends(get_current_user),
