@@ -65,8 +65,13 @@ async def test_create_type_usa_auto_id_e_marca_ativo_por_padrao() -> None:
     )
 
     assert result["id"] == "type1"
-    assert _FakeActivityTypeRepository.store["type1"]["ativo"] is True
-    assert _FakeActivityTypeRepository.store["type1"]["categoria"] == "especifico"
+    stored = _FakeActivityTypeRepository.store["type1"]
+    assert stored["ativo"] is True
+    assert stored["categoria"] == "especifico"
+    # M1: metadados de autoria/tenant/timestamps gravados no create
+    assert stored["programa_id"] == "prog"
+    assert stored["criado_por"] == "coord1"
+    assert "criado_em" in stored and "atualizado_em" in stored
 
 
 async def test_update_type_atualiza_apenas_campos_informados() -> None:
