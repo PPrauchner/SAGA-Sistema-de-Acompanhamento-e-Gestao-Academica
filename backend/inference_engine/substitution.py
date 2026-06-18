@@ -1,27 +1,14 @@
 """
-Aplicação de substituições variável→termo no motor de inferência lógica.
+Representação e aplicação de substituições variável→valor no motor de inferência.
 
-Uma substituição é um dicionário do tipo dict[str, Term] que mapeia nomes
-de variáveis a termos concretos. Após a unificação produzir esse dicionário,
-apply() é usada para 'instanciar' um termo — ou seja, substituir todas as
-variáveis ligadas pelos seus valores correspondentes.
-
-Função pública:
-    apply(term, subst) -> Term
-
-    Percorre term recursivamente e substitui cada Variable pelo valor ligado
-    em subst. Variáveis sem ligação permanecem inalteradas. O processo é
-    não-destrutivo: nenhum termo original é modificado.
-
-Comportamento por tipo de termo:
-    - Atom      → retornado imediatamente sem modificação.
-    - Variable(X) em subst   → aplica recursivamente apply(subst[X], subst),
-                               resolvendo cadeias de substituições (X→Y, Y→a).
-    - Variable(X) fora subst → retorna Variable(X) inalterada.
-    - Compound  → retorna um novo Compound com cada argumento aplicado.
-
-Isolamento: depende apenas de terms.py. Sem imports de FastAPI, Firebase ou
-qualquer ORM.
+Responsabilidades:
+- Definir o tipo substituição como dict[str, Term].
+- Implementar `def apply(term: Term, subst: dict) -> Term`:
+    - Atom → retorna inalterado.
+    - Variable(X) em subst → aplica recursivamente apply(subst[X], subst).
+    - Variable(X) fora de subst → retorna Variable(X).
+    - Compound → retorna Compound(functor, [apply(arg, subst) for arg in args]).
+- Módulo isolado: depende apenas de terms.py, sem imports externos.
 """
 from inference_engine.terms import Atom, Variable, Compound, Term
 
