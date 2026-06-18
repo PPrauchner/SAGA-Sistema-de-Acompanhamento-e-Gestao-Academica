@@ -16,6 +16,8 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
+
 _PROGRAM: dict[str, Any] = {
     "id": "prog_default",
     "min_creditos_basico": 12,
@@ -151,6 +153,9 @@ class FixtureRepository:
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as tasks do plano de trabalho do aluno."""
+        work_plan_tasks = await WorkPlanRepository().get_plan_tasks(student_id)
+        if work_plan_tasks:
+            return work_plan_tasks
         return [dict(t) for t in _TASKS.get(student_id, [])]
 
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:
