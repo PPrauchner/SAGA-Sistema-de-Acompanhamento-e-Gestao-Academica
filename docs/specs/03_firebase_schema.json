@@ -183,7 +183,7 @@
             "titulo": "string",
             "doi": "string | null",
             "veiculo_id": "string (referência a vehicles/)",
-            "tipo_producao": "string ('artigo_publicado'|'artigo_submetido'|'livro'|'capitulo')",
+            "tipo_producao": "string ('artigo'|'livro'|'capitulo') — natureza bibliográfica; situação em status_publicacao",
             "status_publicacao": "string ('publicado'|'submetido'|'aceito')",
             "observacao": "string | null (campo livre para impactos específicos)",
             "autores": ["array de strings (uids)"],
@@ -429,8 +429,6 @@
       {"veiculo_id": "v_placeholder_c",  "nivel": "C",  "peso": 0.5}
     ],
     "activity_types_default": [
-      {"nome": "Artigo Publicado",    "categoria": "especifico",   "pontuacao_base": 10, "ativo": true},
-      {"nome": "Artigo Submetido",    "categoria": "especifico",   "pontuacao_base": 5,  "ativo": true},
       {"nome": "Disciplina Cursada",  "categoria": "basico",       "pontuacao_base": 4,  "ativo": true},
       {"nome": "Estágio Docência",    "categoria": "basico",       "pontuacao_base": 2,  "ativo": true},
       {"nome": "Software Registrado", "categoria": "tecnologico",  "pontuacao_base": 3,  "limite_maximo_creditos": 4, "ativo": true},

@@ -227,6 +227,8 @@
         "items": [
           {
             "id": "string",
+            "aluno_id": "string (dono da subcoleção students/{id}/productions)",
+            "aluno_nome": "string",
             "titulo": "string",
             "doi": "string | null",
             "veiculo_nome": "string",
@@ -251,7 +253,7 @@
         "titulo": "string",
         "doi": "string | null",
         "veiculo_id": "string",
-        "tipo_producao": "string ('artigo_publicado'|'artigo_submetido'|'livro'|'capitulo')",
+        "tipo_producao": "string ('artigo'|'livro'|'capitulo') — natureza da produção; situação de publicação vive em status_publicacao",
         "status_publicacao": "string ('publicado'|'submetido'|'aceito')",
         "observacao": "string | null",
         "data_realizacao": "string (ISO8601)",
@@ -296,7 +298,7 @@
         "tipo": "string ('evento'|'revista')",
         "sigla": "string | null",
         "issn": "string | null",
-        "nivel": "string ('A1'|'A2'|'B'|'C')"
+        "nivel": "string ('A1'|'A2'|'A3'|'A4'|'B1'|'B2'|'SC') — configurável em vehicle_levels"
       },
       "response_201": {"id": "string", "peso_atribuido": "float"}
     }

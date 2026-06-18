@@ -401,7 +401,7 @@ erDiagram
 | `titulo` | string | | |
 | `doi` | string\|null | | chave natural de deduplicação quando presente |
 | `veiculo_id` | string | →`vehicles` | |
-| `tipo_producao` | string | | `artigo_publicado`\|`artigo_submetido`\|`livro`\|`capitulo` (dimensão bibliográfica) |
+| `tipo_producao` | string | | `artigo`\|`livro`\|`capitulo` (natureza bibliográfica; situação em `status_publicacao`) |
 | `status_publicacao` | string | | `publicado`\|`submetido`\|`aceito` |
 | `observacao` | string\|null | | impactos específicos |
 | `autores` | array | →`users.uid` **ou** string livre | inclui autores externos |
