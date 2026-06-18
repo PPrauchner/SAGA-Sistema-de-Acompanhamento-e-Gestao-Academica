@@ -43,7 +43,7 @@ _PROGRAM: dict[str, Any] = {
     "max_creditos_tecnologico": 4,
     "min_creditos_total": 24,
     "max_prorrogacoes": 2,
-    "relevancia_pesos": {"A1": 2.0, "A2": 1.5, "B": 1.0, "C": 0.5},
+    "relevancia_pesos": {"A1": 1.0, "A2": 0.85, "A3": 0.7, "A4": 0.7, "B1": 0.5, "B2": 0.5, "SC": 0.2},
 }
 
 # aluno_apto         — prazo no futuro, todos os requisitos cumpridos.
@@ -223,7 +223,7 @@ _PRODUCTIONS: dict[str, list[dict[str, Any]]] = {
     ],
     "aluno_risco": [],
     "aluno_regular": [
-        {"id": "p_reg1", "veiculo_id": "v_b", "nivel": "B", "pontuacao_base": 8, "bibliografica": False},
+        {"id": "p_reg1", "veiculo_id": "v_b", "nivel": "B1", "pontuacao_base": 8, "bibliografica": False},
     ],
     "aluno_recem": [],
     "aluno_credito_risco": [],
