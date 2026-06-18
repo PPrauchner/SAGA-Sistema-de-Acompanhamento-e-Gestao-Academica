@@ -1,19 +1,48 @@
-"""
-Aspecto A05 — Geração de Alertas e Notificações (After advice).
+"""Aspecto A05: geração de alertas e notificações."""
 
-Responsabilidades:
-- Implementar o decorador @trigger_alerts usando mecanismos nativos do Python, sem
-  bibliotecas externas de AOP.
-- After: verifica flag ALERTS_ENABLED em aspect_config. Extrai resultado da função original;
-  determina destinatários (aluno_id → orientador_id via Firestore lookup). Monta documento
-  Notification com {tipo, titulo, mensagem, destinatario_id, entidade_id, lida: false,
-  timestamp} e persiste em notifications/{auto_id} no Firestore.
-- Join points e alertas:
-    - POST tasks/{id}/updates → notifica orientador (progresso registrado).
-    - PATCH activities/{id}/validate → notifica aluno (aprovada|rejeitada).
-    - PATCH extensions/{id}/approve → notifica aluno (resultado e novo prazo).
-    - Delegação do A04 para prazo crítico → notifica aluno + orientador.
-    - POST activities → notifica orientador (atividade submetida para validação).
-- Frontend assina onSnapshot em notifications/ filtrado por destinatario_id para receber
-  alertas em tempo real.
-"""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from functools import wraps
+from typing import Any, Awaitable, Callable, TypeVar
+
+from backend.app.aspects.aspect_config import ALERTS_ENABLED
+
+F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
+
+
+def trigger_alerts(func: F) -> F:
+    """After advice para persistir notificações no padrão `notifications/`.
+
+    No join point de progresso de task, o destinatário é o orientador do plano.
+    O documento segue o contrato usado pelo frontend:
+    `{tipo, titulo, mensagem, destinatario_id, entidade_id, lida, timestamp}`.
+    """
+
+    @wraps(func)
+    async def wrapper(self: Any, task_id: str, *args: Any, **kwargs: Any) -> Any:
+        result = await func(self, task_id, *args, **kwargs)
+        if not ALERTS_ENABLED:
+            return result
+
+        plan, _, task = await self._repo.get_task_context(task_id)
+        actor = kwargs.get("actor")
+        if actor is None and len(args) >= 2:
+            actor = args[1]
+        actor_name = getattr(actor, "nome", "Aluno")
+
+        notification = {
+            "tipo": "progresso_task",
+            "titulo": "Progresso registrado",
+            "mensagem": f"{actor_name} registrou progresso em {task['titulo']}",
+            "destinatario_id": plan.get("orientador_id", "orientador"),
+            "entidade_id": task_id,
+            "lida": False,
+            "timestamp": datetime.now(timezone.utc),
+        }
+        await self._repo.create_notification(notification)
+        if hasattr(result, "notificacao_enviada_ao_orientador"):
+            result.notificacao_enviada_ao_orientador = True
+        return result
+
+    return wrapper  # type: ignore[return-value]
