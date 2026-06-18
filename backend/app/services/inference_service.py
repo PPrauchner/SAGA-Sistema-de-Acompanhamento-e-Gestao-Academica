@@ -333,6 +333,58 @@ class InferenceService:
 
     # -- consultas ao motor -------------------------------------------------------------
 
+    def evaluate_activity_eligibility(
+        self,
+        *,
+        activity_id: str,
+        student_id: str,
+        data_ingresso: str | None,
+        data_realizacao: str | None,
+        tem_comprovante: bool,
+        tipo_ativo: bool,
+        categoria_creditos_aprovados: float,
+        pontuacao_base: float,
+        limite_categoria: float | None,
+    ) -> bool:
+        """Avalia RL04 (atividade_elegivel) para uma única atividade recém-registrada.
+
+        Monta apenas os 4 fatos da RL04 para a atividade e consulta o motor — sem rodar a
+        inferência completa do aluno nem persistir snapshot. Os booleanos das condições são
+        derivados dos dados crus aqui (não nos services de negócio), mantendo a regra
+        declarativa (a conjunção) isolada em rules/activity_eligibility.py.
+
+        Args:
+            activity_id: ID da atividade recém-criada.
+            student_id: ID do aluno dono da atividade.
+            data_ingresso: Data de ingresso do aluno (ISO 'YYYY-MM-DD') — dentro_periodo_curso.
+            data_realizacao: Data de realização da atividade (ISO 'YYYY-MM-DD').
+            tem_comprovante: Se a atividade tem comprovante_url.
+            tipo_ativo: Se o tipo de atividade está ativo.
+            categoria_creditos_aprovados: Soma de créditos já aprovados da mesma categoria.
+            pontuacao_base: Crédito gerado pela atividade (base do tipo).
+            limite_categoria: Teto de créditos da categoria, ou None se ilimitado.
+
+        Returns:
+            True se a atividade satisfaz as 4 condições da RL04, False caso contrário.
+        """
+        sid = Atom(student_id)
+        atv = Atom(activity_id)
+        facts: list[Compound] = []
+
+        ingresso = _parse_date(data_ingresso)
+        realizacao = _parse_date(data_realizacao)
+        if realizacao is not None and ingresso is not None and realizacao >= ingresso:
+            facts.append(Compound("dentro_periodo_curso", [atv, sid]))
+        if tem_comprovante:
+            facts.append(Compound("tem_comprovante", [atv]))
+        if tipo_ativo:
+            facts.append(Compound("tipo_ativo", [atv]))
+        if limite_categoria is None or categoria_creditos_aprovados + pontuacao_base <= limite_categoria:
+            facts.append(Compound("nao_excede_limite_categoria", [atv, sid]))
+
+        engine = self._build_engine(facts)
+        return bool(engine.query(Compound("atividade_elegivel", [atv, sid])))
+
     def _query_eligible_activities(
         self,
         engine: InferenceEngine,

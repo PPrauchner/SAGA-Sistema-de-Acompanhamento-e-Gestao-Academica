@@ -9,50 +9,103 @@ Responsabilidades:
   reutilizado por todos os repositórios.
 - Expor função `get_auth_client()` retornando o cliente firebase_admin.auth para verificação de
   tokens e gestão de custom claims.
+- Expor função `get_storage_bucket()` retornando o bucket do Firebase Storage (configurado via
+  FIREBASE_STORAGE_BUCKET) usado pelo upload de comprovantes.
 - Garantir que o SDK seja encerrado corretamente no shutdown do lifespan.
 """
 
+from __future__ import annotations
+
+from typing import Any
+
 import firebase_admin
-from firebase_admin import auth, credentials, firestore
+from firebase_admin import App, auth, credentials, firestore, storage
+from google.cloud.firestore import Client
+from google.cloud.storage import Bucket
 
 from backend.app.core.config import settings
 
-_firebase_app: firebase_admin.App | None = None
+
+def _get_default_app() -> App | None:
+    try:
+        return firebase_admin.get_app()
+    except ValueError:
+        return None
 
 
-def init_firebase() -> None:
-    """Inicializa o Firebase Admin SDK a partir das credenciais em settings."""
-    global _firebase_app
-    cred = credentials.Certificate(
+def _build_credentials() -> credentials.Certificate:
+    required_settings = {
+        "FIREBASE_PROJECT_ID": settings.firebase_project_id,
+        "FIREBASE_PRIVATE_KEY": settings.firebase_private_key,
+        "FIREBASE_CLIENT_EMAIL": settings.firebase_client_email,
+    }
+    missing = [name for name, value in required_settings.items() if not value]
+
+    if missing:
+        joined = ", ".join(missing)
+        raise RuntimeError(f"Variáveis de ambiente Firebase ausentes: {joined}")
+
+    private_key = settings.firebase_private_key.replace("\\n", "\n")
+    return credentials.Certificate(
         {
             "type": "service_account",
             "project_id": settings.firebase_project_id,
-            # Substitui \\n literal (vindo de .env) pelo newline real
-            "private_key": settings.firebase_private_key.replace("\\n", "\n"),
+            "private_key": private_key,
             "client_email": settings.firebase_client_email,
             "token_uri": "https://oauth2.googleapis.com/token",
         }
     )
-    _firebase_app = firebase_admin.initialize_app(cred)
+
+
+def init_firebase() -> App:
+    """Inicializa o Firebase Admin SDK uma única vez e retorna a app default."""
+
+    existing_app = _get_default_app()
+    if existing_app is not None:
+        return existing_app
+
+    options: dict[str, Any] = {"projectId": settings.firebase_project_id}
+    if settings.firebase_storage_bucket:
+        options["storageBucket"] = settings.firebase_storage_bucket
+
+    return firebase_admin.initialize_app(_build_credentials(), options=options)
 
 
 def shutdown_firebase() -> None:
-    """Encerra o Firebase Admin SDK no shutdown do lifespan."""
-    global _firebase_app
-    if _firebase_app:
-        firebase_admin.delete_app(_firebase_app)
-        _firebase_app = None
+    """Encerra a app default do Firebase Admin SDK, se ela estiver ativa."""
+
+    app = _get_default_app()
+    if app is not None:
+        firebase_admin.delete_app(app)
 
 
 def is_initialized() -> bool:
-    return _firebase_app is not None
+    return _get_default_app() is not None
 
 
-def get_firestore_client():
-    """Retorna o cliente Firestore. Deve ser chamado após init_firebase()."""
-    return firestore.client()
+def get_firestore_client() -> Client:
+    """Retorna o cliente Firestore reutilizando a app Firebase inicializada."""
+
+    return firestore.client(app=init_firebase())
 
 
-def get_auth_client():
-    """Retorna o módulo firebase_admin.auth para verificação de tokens."""
-    return auth
+def get_auth_client() -> auth.Client:
+    """Retorna o cliente Firebase Auth associado à app default."""
+
+    return auth.Client(init_firebase())
+
+
+def get_storage_bucket() -> Bucket:
+    """Retorna o bucket do Firebase Storage (FIREBASE_STORAGE_BUCKET) da app default.
+
+    Raises:
+        RuntimeError: Se FIREBASE_STORAGE_BUCKET não estiver configurado — falha com
+            mensagem explícita em vez do ValueError opaco do firebase_admin.
+    """
+
+    if not settings.firebase_storage_bucket:
+        raise RuntimeError(
+            "FIREBASE_STORAGE_BUCKET não configurado: upload de arquivos indisponível",
+        )
+
+    return storage.bucket(app=init_firebase())

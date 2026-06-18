@@ -9,6 +9,9 @@ Responsabilidades:
 - Encapsular o cliente Firestore assíncrono obtido de backend/app/core/firebase.py.
 - Converter Timestamps do Firestore para datetime Python e vice-versa.
 - Tratar DocumentNotFoundError lançando HTTPException(404) padronizada.
+- save_history_snapshot(doc_id, snapshot): persiste snapshot do aspecto A03 (history.py)
+  em {collection}/{doc_id}/history/{auto_id}, reutilizado por todos os repositórios cujas
+  entidades são versionadas (StudentRepository, ActivityTypeRepository, etc.).
 - Ser a única camada que importa google.cloud.firestore — todos os outros módulos
   acessam dados exclusivamente através dos repositórios concretos.
 """
@@ -147,23 +150,29 @@ class FirebaseRepository:
             self._document(doc_id).collection(subcollection).document(sub_doc_id).delete,
         )
 
+    async def save_history_snapshot(
+        self,
+        doc_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        """Persiste snapshot do aspecto A03 (history.py) em {collection}/{doc_id}/history/."""
+
+        return await self.set_subcollection_auto(doc_id, "history", snapshot)
+
     async def list_subcollection(
         self,
         doc_id: str,
         subcollection: str,
     ) -> list[dict[str, Any]]:
-        """Lista todos os documentos de uma subcoleção, incluindo o id de cada um."""
+        """Lista os documentos de {collection}/{doc_id}/{subcollection}/ com o id injetado."""
 
         def _list() -> list[dict[str, Any]]:
             docs = self._document(doc_id).collection(subcollection).stream()
-
             result = []
-
             for doc in docs:
                 item = doc.to_dict()
                 item["id"] = doc.id
                 result.append(item)
-
             return result
 
         return await asyncio.to_thread(_list)
