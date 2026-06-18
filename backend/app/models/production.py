@@ -20,7 +20,9 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-TipoProducao = Literal["artigo_publicado", "artigo_submetido", "livro", "capitulo"]
+# tipo_producao descreve apenas a NATUREZA da produção; a situação de publicação
+# (publicado/submetido/aceito) vive exclusivamente em status_publicacao.
+TipoProducao = Literal["artigo", "livro", "capitulo"]
 
 StatusPublicacao = Literal["publicado", "submetido", "aceito"]
 
@@ -38,6 +40,8 @@ class ProductionCreate(BaseModel):
 
 class ProductionResponse(BaseModel):
     id: str
+    aluno_id: str
+    aluno_nome: str
     titulo: str
     doi: str | None = None
     veiculo_nome: str
