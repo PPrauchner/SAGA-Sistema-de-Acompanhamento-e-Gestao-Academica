@@ -298,7 +298,7 @@
         "tipo": "string ('evento'|'revista')",
         "sigla": "string | null",
         "issn": "string | null",
-        "nivel": "string ('A1'|'A2'|'A3'|'A4'|'B1'|'B2'|'SC') — configurável em vehicle_levels"
+        "nivel": "string ('A1'|'A2'|'B'|'C') — configurável em vehicle_levels"
       },
       "response_201": {"id": "string", "peso_atribuido": "float"}
     }

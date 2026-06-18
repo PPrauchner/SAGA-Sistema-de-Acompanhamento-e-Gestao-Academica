@@ -5,9 +5,8 @@ Responsabilidades:
 - Declarar a cláusula: pontuacao_producao(P, Score) :- producao_veiculo(P, V),
   nivel_relevancia(V, Prog, Nivel), relevancia_peso(Nivel, Peso), pontuacao_base(P, Base),
   Score = Base * Peso (built-in aritmético).
-- Fatos de configuração de pesos (configuráveis): relevancia_peso('A1', 1.0),
-  relevancia_peso('A2', 0.85), relevancia_peso('A3', 0.7), relevancia_peso('A4', 0.7),
-  relevancia_peso('B1', 0.5), relevancia_peso('B2', 0.5), relevancia_peso('SC', 0.2) —
+- Fatos de configuração de pesos (configuráveis): relevancia_peso('A1', 2.0),
+  relevancia_peso('A2', 1.5), relevancia_peso('B', 1.0), relevancia_peso('C', 0.5) —
   carregados da coleção programs/prog_default/vehicle_levels/ pelo InferenceService.
 - Executada em ProductionService.create_production() e em GET /api/v1/inference/{student_id}.
 - A regra é aritmética pura (Score = Base * Peso); os testes em tests/test_rules.py exercitam
