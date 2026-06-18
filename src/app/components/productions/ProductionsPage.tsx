@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Plus, ExternalLink, BookOpen, FileText } from "lucide-react";
+import { Plus, ExternalLink, BookOpen, FileText, X, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import {
   getProductions,
@@ -12,8 +12,7 @@ import {
 } from "@/api/productionsApi";
 
 const TIPO_MAP: Record<TipoProducao, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
-  artigo_publicado: { label: "Artigo Publicado", icon: <FileText size={16} />, color: "var(--tint-blue-text)", bg: "var(--tint-blue-bg)" },
-  artigo_submetido: { label: "Artigo Submetido", icon: <FileText size={16} />, color: "var(--tint-gold-text)", bg: "var(--tint-gold-bg)" },
+  artigo: { label: "Artigo", icon: <FileText size={16} />, color: "var(--tint-blue-text)", bg: "var(--tint-blue-bg)" },
   livro: { label: "Livro", icon: <BookOpen size={16} />, color: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)" },
   capitulo: { label: "Capítulo", icon: <BookOpen size={16} />, color: "var(--tint-violet-text)", bg: "var(--tint-violet-bg)" },
 };
@@ -26,24 +25,37 @@ const STATUS_MAP: Record<StatusPublicacao, { label: string; color: string; bg: s
 
 const NIVEL_COLORS: Record<string, { color: string; bg: string }> = {
   A1: { color: "#fff", bg: "#123C7A" },
-  A2: { color: "#fff", bg: "#1F8A70" },
-  B: { color: "#fff", bg: "#D4A017" },
-  C: { color: "#fff", bg: "#94a3b8" },
+  A2: { color: "#fff", bg: "#1A56A0" },
+  A3: { color: "#fff", bg: "#1F8A70" },
+  A4: { color: "#fff", bg: "#2BA88A" },
+  B1: { color: "#fff", bg: "#D4A017" },
+  B2: { color: "#fff", bg: "#E0B84D" },
+  SC: { color: "#fff", bg: "#94a3b8" },
 };
 
-const NIVEIS = ["A1", "A2", "B", "C"];
+const NIVEIS = ["A1", "A2", "A3", "A4", "B1", "B2", "SC"];
+
+const NIVEL_LABELS: Record<string, string> = {
+  A1: "Nível A1",
+  A2: "Nível A2",
+  A3: "Nível A3",
+  A4: "Nível A4",
+  B1: "Nível B1",
+  B2: "Nível B2",
+  SC: "Sem Classificação",
+};
 
 const emptyForm = {
   titulo: "",
   veiculo_id: "",
-  tipo_producao: "artigo_publicado" as TipoProducao,
+  tipo_producao: "artigo" as TipoProducao,
   status_publicacao: "publicado" as StatusPublicacao,
   doi: "",
   data_realizacao: "",
 };
 
 export function ProductionsPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [productions, setProductions] = useState<Production[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +67,7 @@ export function ProductionsPage() {
 
   const [filterTipo, setFilterTipo] = useState("todos");
   const [filterNivel, setFilterNivel] = useState("todos");
+  const [filterAluno, setFilterAluno] = useState("todos");
 
   function reload() {
     if (!token) return;
@@ -71,14 +84,26 @@ export function ProductionsPage() {
 
   useEffect(reload, [token]);
 
+  // Na visão da coordenação cada produção pode ser de um aluno diferente; oferecer filtro.
+  const isCoordenacao = role === "coordenacao";
+
+  const alunos = useMemo(() => {
+    const byId = new Map<string, string>();
+    productions.forEach((p) => byId.set(p.aluno_id, p.aluno_nome));
+    return Array.from(byId, ([id, nome]) => ({ id, nome })).sort((a, b) =>
+      a.nome.localeCompare(b.nome),
+    );
+  }, [productions]);
+
   const filtered = useMemo(
     () =>
       productions.filter((p) => {
         const matchTipo = filterTipo === "todos" || p.tipo_producao === filterTipo;
         const matchNivel = filterNivel === "todos" || p.nivel_veiculo === filterNivel;
-        return matchTipo && matchNivel;
+        const matchAluno = filterAluno === "todos" || p.aluno_id === filterAluno;
+        return matchTipo && matchNivel && matchAluno;
       }),
-    [productions, filterTipo, filterNivel],
+    [productions, filterTipo, filterNivel, filterAluno],
   );
 
   const totalPublicados = productions.filter((p) => p.status_publicacao === "publicado").length;
@@ -158,8 +183,19 @@ export function ProductionsPage() {
           style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
         >
           <option value="todos">Todos os Níveis</option>
-          {NIVEIS.map((n) => <option key={n} value={n}>Nível {n}</option>)}
+          {NIVEIS.map((n) => <option key={n} value={n}>{NIVEL_LABELS[n]}</option>)}
         </select>
+        {isCoordenacao && (
+          <select
+            value={filterAluno}
+            onChange={(e) => setFilterAluno(e.target.value)}
+            className="rounded-xl px-3 py-2 outline-none"
+            style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
+          >
+            <option value="todos">Todos os Alunos</option>
+            {alunos.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}
+          </select>
+        )}
         <span style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>{filtered.length} resultado(s)</span>
       </div>
 
@@ -168,7 +204,7 @@ export function ProductionsPage() {
       ) : (
         <div className="space-y-3">
           {filtered.map((prod) => {
-            const tipo = TIPO_MAP[prod.tipo_producao] ?? TIPO_MAP.artigo_publicado;
+            const tipo = TIPO_MAP[prod.tipo_producao] ?? TIPO_MAP.artigo;
             const status = STATUS_MAP[prod.status_publicacao];
             const nivel = prod.nivel_veiculo ? NIVEL_COLORS[prod.nivel_veiculo] : null;
             return (
@@ -195,6 +231,7 @@ export function ProductionsPage() {
                     </div>
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="px-2 py-0.5 rounded-lg" style={{ background: tipo.bg, color: tipo.color, fontSize: "10px", fontWeight: 600 }}>{tipo.label}</span>
+                      <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>👤 {prod.aluno_nome}</span>
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>📰 {prod.veiculo_nome}</span>
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>⭐ {prod.pontuacao_calculada.toFixed(1)} pts (peso {prod.peso_aplicado})</span>
                     </div>
@@ -223,58 +260,132 @@ export function ProductionsPage() {
       )}
 
       {showForm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
-          <div className="rounded-2xl p-6 w-full max-w-lg mx-4" style={{ background: "var(--card)" }}>
-            <div className="flex justify-between items-center mb-6">
-              <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>Registrar Produção</h2>
-              <button onClick={() => setShowForm(false)} style={{ color: "var(--muted-foreground)", fontSize: "20px" }}>✕</button>
+        <div
+          className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
+          style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)" }}
+          onClick={() => setShowForm(false)}
+        >
+          <div
+            className="w-full md:max-w-2xl rounded-t-2xl md:rounded-2xl flex flex-col"
+            style={{ background: "var(--card)", boxShadow: "0 -8px 40px rgba(0,0,0,0.2)", maxHeight: "92vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="md:hidden flex justify-center pt-3 pb-1">
+              <div style={{ width: 36, height: 4, borderRadius: 2, background: "var(--border)" }} />
             </div>
-            <div className="space-y-4">
-              <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Título</label>
-                <input value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} placeholder="Título completo da produção" className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
+            <div className="flex items-center justify-between p-4 md:p-6 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl p-2" style={{ background: "#eef3fc" }}><Plus size={16} style={{ color: "#123C7A" }} /></div>
+                <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--foreground)" }}>Registrar Produção</h2>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Tipo</label>
-                  <select value={form.tipo_producao} onChange={(e) => setForm({ ...form, tipo_producao: e.target.value as TipoProducao })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
-                    {Object.entries(TIPO_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Status de Publicação</label>
-                  <select value={form.status_publicacao} onChange={(e) => setForm({ ...form, status_publicacao: e.target.value as StatusPublicacao })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
-                    {Object.entries(STATUS_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
+              <button onClick={() => setShowForm(false)} className="rounded-xl p-2" style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}><X size={16} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Tipo */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", display: "block", marginBottom: 8 }}>TIPO DE PRODUÇÃO *</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {(Object.keys(TIPO_MAP) as TipoProducao[]).map((t) => {
+                    const cfg = TIPO_MAP[t];
+                    const selected = form.tipo_producao === t;
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setForm({ ...form, tipo_producao: t })}
+                        className="flex flex-col items-center gap-1.5 rounded-xl p-3 transition-all"
+                        style={{ background: selected ? cfg.bg : "var(--muted)", border: `2px solid ${selected ? cfg.color : "transparent"}`, color: selected ? cfg.color : "var(--muted-foreground)" }}
+                      >
+                        <span style={{ color: selected ? cfg.color : "var(--muted-foreground)" }}>{cfg.icon}</span>
+                        <span style={{ fontSize: 11, fontWeight: 700 }}>{cfg.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+
+              {/* Título */}
+              <FInput label="TÍTULO *" value={form.titulo} onChange={(v) => setForm({ ...form, titulo: v })} placeholder="Título completo da produção" />
+
+              {/* Veículo */}
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Veículo de Publicação</label>
-                <select value={form.veiculo_id} onChange={(e) => setForm({ ...form, veiculo_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", display: "block", marginBottom: 6 }}>VEÍCULO DE PUBLICAÇÃO *</label>
+                <select
+                  value={form.veiculo_id}
+                  onChange={(e) => setForm({ ...form, veiculo_id: e.target.value })}
+                  className="w-full rounded-xl px-3 py-2.5 outline-none"
+                  style={{ border: "1px solid var(--border)", background: "var(--muted)", fontSize: 12, color: "var(--foreground)" }}
+                >
                   <option value="">Selecione um veículo…</option>
                   {vehicles.map((v) => <option key={v.id} value={v.id}>{v.nome} · Nível {v.nivel} (peso {v.peso})</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Data de Realização</label>
-                  <input type="date" value={form.data_realizacao} onChange={(e) => setForm({ ...form, data_realizacao: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>DOI (opcional)</label>
-                  <input value={form.doi} onChange={(e) => setForm({ ...form, doi: e.target.value })} placeholder="10.xxxx/xxxxx" className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
+
+              {/* Status de Publicação */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", display: "block", marginBottom: 6 }}>STATUS DE PUBLICAÇÃO</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.keys(STATUS_MAP) as StatusPublicacao[]).map((s) => {
+                    const cfg = STATUS_MAP[s];
+                    const selected = form.status_publicacao === s;
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setForm({ ...form, status_publicacao: s })}
+                        className="rounded-lg px-2.5 py-1 transition-all"
+                        style={{ background: selected ? cfg.bg : "var(--muted)", color: selected ? cfg.color : "var(--muted-foreground)", border: `1px solid ${selected ? cfg.color + "60" : "var(--border)"}`, fontSize: 11, fontWeight: 700 }}
+                      >
+                        {cfg.label}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
+
+              {/* Data / DOI */}
+              <div className="grid grid-cols-2 gap-4">
+                <FInput label="DATA DE REALIZAÇÃO *" type="date" value={form.data_realizacao} onChange={(v) => setForm({ ...form, data_realizacao: v })} />
+                <FInput label="DOI (OPCIONAL)" value={form.doi} onChange={(v) => setForm({ ...form, doi: v })} placeholder="10.xxxx/xxxxx" />
+              </div>
             </div>
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowForm(false)} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
-              <button onClick={handleSubmit} disabled={submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: submitting ? 0.6 : 1 }}>
-                {submitting ? "Registrando…" : "Registrar"}
+
+            <div className="flex gap-3 p-6 pt-0">
+              <button onClick={() => setShowForm(false)} className="px-5 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 700, fontSize: 13 }}>Cancelar</button>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao}
+                className="flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5"
+                style={{
+                  background: submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao ? "#e5e7eb" : "#123C7A",
+                  color: submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao ? "#9ca3af" : "#fff",
+                  fontWeight: 700,
+                  fontSize: 13,
+                }}
+              >
+                <Check size={14} /> {submitting ? "Registrando…" : "Registrar"}
               </button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function FInput({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+  return (
+    <div>
+      <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", display: "block", marginBottom: 6 }}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-xl px-3 py-2.5 outline-none"
+        style={{ border: "1px solid var(--border)", background: "var(--muted)", fontSize: 12, color: "var(--foreground)" }}
+        onFocus={(e) => (e.currentTarget.style.borderColor = "#123C7A")}
+        onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+      />
     </div>
   );
 }
