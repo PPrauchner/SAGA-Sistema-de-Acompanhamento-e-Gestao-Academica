@@ -15,11 +15,7 @@
 import { API_URL } from "@/api/authApi";
 
 export type RelevanceLevel = "A1" | "A2" | "B" | "C";
-export type TipoProducao =
-  | "artigo_publicado"
-  | "artigo_submetido"
-  | "livro"
-  | "capitulo";
+export type TipoProducao = "artigo" | "livro" | "capitulo";
 export type StatusPublicacao = "publicado" | "submetido" | "aceito";
 
 export interface Vehicle {
@@ -34,6 +30,8 @@ export interface Vehicle {
 
 export interface Production {
   id: string;
+  aluno_id: string;
+  aluno_nome: string;
   titulo: string;
   doi?: string | null;
   veiculo_nome: string;
