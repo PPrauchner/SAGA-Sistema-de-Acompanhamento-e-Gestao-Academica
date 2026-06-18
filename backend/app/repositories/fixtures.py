@@ -5,8 +5,14 @@ Responsabilidades:
 - Fornecer dados de alunos, programa, atividades, tasks e produções com as mesmas
   assinaturas de método que os repositórios reais do Firestore exporão, de forma que
   InferenceService e ChecklistService não dependam da origem.
-- Cobrir três cenários: aluno apto (fase_defesa), aluno em risco (com conflito
-  situacao_registrada != situacao_inferida) e aluno regular/qualificado.
+- Cobrir sete cenários de aluno:
+    - aluno_apto        — prazo no futuro, todos os requisitos cumpridos.
+    - aluno_risco       — prazo expirado (prazo_estourado) + créditos insuficientes.
+    - aluno_regular     — prazo no futuro, qualificado, mas sem produção/plano concluído.
+    - aluno_recem       — primeiro dia, 0 créditos: nenhum flag de risco deve disparar.
+    - aluno_credito_risco — metade do prazo sem créditos: creditos_insuficientes ativo.
+    - aluno_qual_risco  — prazo_qualificacao < 90 dias e qualificação pendente.
+    - aluno_plano_risco — ~75% do prazo decorrido com plano 0% concluído.
 
 Restrição: sem lógica de negócio — apenas dados e leitura.
 """
@@ -14,9 +20,8 @@ Restrição: sem lógica de negócio — apenas dados e leitura.
 from __future__ import annotations
 
 import uuid
+from datetime import date, timedelta
 from typing import Any
-
-from backend.app.repositories.work_plan_repository import WorkPlanRepository
 
 _PROGRAM: dict[str, Any] = {
     "id": "prog_default",
@@ -28,15 +33,19 @@ _PROGRAM: dict[str, Any] = {
     "relevancia_pesos": {"A1": 2.0, "A2": 1.5, "B": 1.0, "C": 0.5},
 }
 
-# aluno_apto    — prazo no futuro, todos os requisitos cumpridos.
-# aluno_risco   — prazo já expirado (prazo_estourado) + créditos insuficientes.
-# aluno_regular — prazo no futuro, qualificado, mas sem produção/plano concluído.
+# aluno_apto         — prazo no futuro, todos os requisitos cumpridos.
+# aluno_risco        — prazo já expirado (prazo_estourado) + créditos insuficientes.
+# aluno_regular      — prazo no futuro, qualificado, mas sem produção/plano concluído.
+# aluno_recem        — primeiro dia do programa, 0 créditos: nenhum flag de risco.
+# aluno_credito_risco — metade do prazo decorrida, 0 créditos: creditos_insuficientes.
+# aluno_qual_risco   — prazo_qualificacao < 90 dias e qualificação pendente.
+# aluno_plano_risco  — ~75% do prazo decorrido, plano 0% concluído: plano_atrasado.
 _STUDENTS: dict[str, dict[str, Any]] = {
     "aluno_apto": {
         "id": "aluno_apto",
         "nome": "Ana Apta",
         "programa_id": "prog_default",
-        "situacao_registrada": "fase_defesa",
+        "situacao_registrada": "em_fase_de_defesa",
         "data_ingresso": "2022-03-01",
         "prazo_final": "2027-03-01",
         "prazo_qualificacao": "2023-09-01",
@@ -71,6 +80,62 @@ _STUDENTS: dict[str, dict[str, Any]] = {
         "qualificacao_aprovada": True,
         "qualificacao_data": "2025-08-20",
     },
+    "aluno_recem": {
+        "id": "aluno_recem",
+        "nome": "Novo Aluno",
+        "programa_id": "prog_default",
+        "situacao_registrada": "regular",
+        # Primeiro dia do programa: fração decorrida = 0 → nenhum risco de crédito.
+        "data_ingresso": _iso(0),
+        "prazo_final": _iso(730),
+        "prazo_qualificacao": _iso(545),
+        "proficiencia_comprovada": False,
+        "proficiencia_data": None,
+        "qualificacao_aprovada": False,
+        "qualificacao_data": None,
+    },
+    "aluno_credito_risco": {
+        "id": "aluno_credito_risco",
+        "nome": "Carlos Crédito",
+        "programa_id": "prog_default",
+        "situacao_registrada": "regular",
+        # ~Metade do prazo decorrida (fração 0.5), 0 créditos → creditos_insuficientes.
+        "data_ingresso": _iso(-365),
+        "prazo_final": _iso(365),
+        "prazo_qualificacao": _iso(900),
+        "proficiencia_comprovada": True,
+        "proficiencia_data": "2025-09-01",
+        "qualificacao_aprovada": True,
+        "qualificacao_data": "2026-03-01",
+    },
+    "aluno_qual_risco": {
+        "id": "aluno_qual_risco",
+        "nome": "Queiroz Qualificação",
+        "programa_id": "prog_default",
+        "situacao_registrada": "regular",
+        # Prazo de qualificação a 60 dias (< 90) com qualificação pendente → risco de qual.
+        "data_ingresso": _iso(-700),
+        "prazo_final": _iso(180),
+        "prazo_qualificacao": _iso(60),
+        "proficiencia_comprovada": True,
+        "proficiencia_data": "2024-09-01",
+        "qualificacao_aprovada": False,
+        "qualificacao_data": None,
+    },
+    "aluno_plano_risco": {
+        "id": "aluno_plano_risco",
+        "nome": "Pedro Plano",
+        "programa_id": "prog_default",
+        "situacao_registrada": "regular",
+        # ~75% do prazo decorrido (fração 0.75) com plano 0% concluído → plano_atrasado.
+        "data_ingresso": _iso(-547),
+        "prazo_final": _iso(183),
+        "prazo_qualificacao": _iso(900),
+        "proficiencia_comprovada": True,
+        "proficiencia_data": "2025-03-01",
+        "qualificacao_aprovada": True,
+        "qualificacao_data": "2025-09-01",
+    },
 }
 
 # Atividades aprovadas por aluno. grupo ∈ {basico, especifico, tecnologico}.
@@ -89,6 +154,18 @@ _ACTIVITIES: dict[str, list[dict[str, Any]]] = {
         {"id": "atv_reg_b", "grupo": "basico", "creditos": 14, "comprovante": "url/b", "tipo_ativo": True, "data": "2024-06-01"},
         {"id": "atv_reg_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": "2024-09-01"},
         {"id": "atv_reg_t", "grupo": "tecnologico", "creditos": 2, "comprovante": "url/t", "tipo_ativo": True, "data": "2025-01-15"},
+    ],
+    "aluno_recem": [],
+    "aluno_credito_risco": [],
+    # 15 básico + 9 específico = 24 créditos (≥ min_total=24 e > expected ~19.2 com fracao ~0.80).
+    "aluno_qual_risco": [
+        {"id": "atv_qr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": _iso(-650)},
+        {"id": "atv_qr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": _iso(-600)},
+    ],
+    # 15 básico + 9 específico = 24 créditos (≥ min_total=24 e > expected ~18 com fracao ~0.75).
+    "aluno_plano_risco": [
+        {"id": "atv_pr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": _iso(-500)},
+        {"id": "atv_pr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": _iso(-450)},
     ],
 }
 
@@ -112,6 +189,18 @@ _TASKS: dict[str, list[dict[str, Any]]] = {
         {"id": "t4", "is_defesa": False, "concluida": True},
         {"id": "t5", "is_defesa": False, "concluida": False},
     ],
+    "aluno_recem": [],
+    "aluno_credito_risco": [],
+    "aluno_qual_risco": [
+        {"id": "t1", "is_defesa": False, "concluida": True},
+        {"id": "t2", "is_defesa": False, "concluida": True},
+        {"id": "t3", "is_defesa": False, "concluida": True},
+    ],
+    "aluno_plano_risco": [
+        {"id": "t1", "is_defesa": False, "concluida": False},
+        {"id": "t2", "is_defesa": False, "concluida": False},
+        {"id": "t3", "is_defesa": False, "concluida": False},
+    ],
 }
 
 # Produções aprovadas por aluno.
@@ -123,6 +212,10 @@ _PRODUCTIONS: dict[str, list[dict[str, Any]]] = {
     "aluno_regular": [
         {"id": "p_reg1", "veiculo_id": "v_b", "nivel": "B", "pontuacao_base": 8, "bibliografica": False},
     ],
+    "aluno_recem": [],
+    "aluno_credito_risco": [],
+    "aluno_qual_risco": [],
+    "aluno_plano_risco": [],
 }
 
 

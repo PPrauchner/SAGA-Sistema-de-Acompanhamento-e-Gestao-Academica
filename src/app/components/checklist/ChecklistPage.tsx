@@ -165,10 +165,9 @@ export function ChecklistPage() {
       {/* Legenda de status */}
       <div className="flex flex-wrap items-center gap-3 mb-5">
         {[
-          { label: "Concluído",     dot: "#1F8A70", bg: "#dcfce7", color: "#1F8A70" },
+          { label: "Cumprido",     dot: "#1F8A70", bg: "#dcfce7", color: "#1F8A70" },
           { label: "Pendente",      dot: "#D4A017", bg: "#fef9c3", color: "#D4A017" },
-          { label: "Em andamento",  dot: "#123C7A", bg: "#eef3fc", color: "#123C7A" },
-          { label: "Bloqueado",     dot: "var(--muted-foreground)", bg: "var(--muted)", color: "var(--muted-foreground)" },
+          { label: "Em Risco",  dot: "#dc2626", bg: "#fee2e2", color: "#dc2626" },
         ].map(({ label, dot, bg, color }) => (
           <span
             key={label}

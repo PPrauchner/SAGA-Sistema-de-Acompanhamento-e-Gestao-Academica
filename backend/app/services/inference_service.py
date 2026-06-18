@@ -26,6 +26,7 @@ esperado pelos repositórios concretos.
 
 from __future__ import annotations
 
+from calendar import monthrange
 from datetime import date, datetime, timezone
 from typing import Any, Protocol
 
@@ -39,6 +40,8 @@ from backend.app.models.inference import (
     InferenceChecklist,
     InferenceResult,
     PontuacaoProducao,
+    RequisitoStatus,
+    SituacaoInferida,
     StatusItem,
 )
 
@@ -57,8 +60,7 @@ class StudentNotFoundError(Exception):
 class InferenceDataSource(Protocol):
     """Contrato de leitura/escrita consumido pelo InferenceService.
 
-    Implementado hoje por FixtureRepository e, futuramente, pelos repositórios reais do
-    Firestore (issue #41 e correlatas).
+    Implementado por InferenceRepository (produção) e FixtureRepository (testes).
     """
 
     async def get_student(self, student_id: str) -> dict[str, Any] | None: ...
@@ -77,6 +79,15 @@ def _parse_date(value: Any) -> date | None:
         return date.fromisoformat(str(value))
     except (ValueError, TypeError):
         return None
+
+
+def _add_months(start: date, months: int) -> date:
+    """Soma `months` meses a `start`, ajustando o dia ao ultimo dia do mes de destino."""
+    month_index = start.month - 1 + months
+    year = start.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(start.day, monthrange(year, month)[1])
+    return start.replace(year=year, month=month, day=day)
 
 
 class InferenceService:
@@ -133,7 +144,7 @@ class InferenceService:
         pontuacoes = self._query_production_scores(engine, productions)
 
         situacao = self._derive_situacao(apto, em_risco, student)
-        checklist = self._build_checklist(totals, program, student, productions, tasks, em_risco)
+        checklist = self._build_checklist(totals, program, student, productions, tasks, risk_flags)
         riscos = self._risk_messages(risk_flags, student, totals, program)
 
         result = InferenceResult(
@@ -224,10 +235,13 @@ class InferenceService:
         if prazo_final is not None and prazo_final < today:
             facts.append(Compound("prazo_estourado", [sid]))
             risk_flags["prazo_estourado"] = True
-        if total < min_total:
+        expected_total = min_total * self._fracao_prazo_decorrida(student)
+        if total < expected_total:
             facts.append(Compound("creditos_insuficientes", [sid]))
             risk_flags["creditos_insuficientes"] = True
         prazo_qual = _parse_date(student.get("prazo_qualificacao"))
+        if prazo_qual is None:
+            prazo_qual = self._derive_prazo_qualificacao(student, program)
         if (
             not student.get("qualificacao_aprovada")
             and prazo_qual is not None
@@ -253,11 +267,11 @@ class InferenceService:
                 facts.append(Compound("tipo_ativo", [atv]))
             grupo = activity.get("grupo")
             creditos = int(activity.get("creditos", 0))
-            running = category_running.get(grupo, 0) + creditos
+            running = (category_running.get(grupo, 0) if grupo is not None else 0) + creditos
             limite = max_tecnologico if grupo == "tecnologico" else None
             if limite is None or running <= limite:
                 facts.append(Compound("nao_excede_limite_categoria", [atv, sid]))
-            if grupo in category_running:
+            if grupo is not None and grupo in category_running:
                 category_running[grupo] = running
 
         # Fatos de configuração de pesos (RL05) — uma vez por nível configurado.
@@ -287,6 +301,58 @@ class InferenceService:
         return InferenceEngine(fact_base, rule_base)
 
     # -- consultas ao motor -------------------------------------------------------------
+
+    def evaluate_activity_eligibility(
+        self,
+        *,
+        activity_id: str,
+        student_id: str,
+        data_ingresso: str | None,
+        data_realizacao: str | None,
+        tem_comprovante: bool,
+        tipo_ativo: bool,
+        categoria_creditos_aprovados: float,
+        pontuacao_base: float,
+        limite_categoria: float | None,
+    ) -> bool:
+        """Avalia RL04 (atividade_elegivel) para uma única atividade recém-registrada.
+
+        Monta apenas os 4 fatos da RL04 para a atividade e consulta o motor — sem rodar a
+        inferência completa do aluno nem persistir snapshot. Os booleanos das condições são
+        derivados dos dados crus aqui (não nos services de negócio), mantendo a regra
+        declarativa (a conjunção) isolada em rules/activity_eligibility.py.
+
+        Args:
+            activity_id: ID da atividade recém-criada.
+            student_id: ID do aluno dono da atividade.
+            data_ingresso: Data de ingresso do aluno (ISO 'YYYY-MM-DD') — dentro_periodo_curso.
+            data_realizacao: Data de realização da atividade (ISO 'YYYY-MM-DD').
+            tem_comprovante: Se a atividade tem comprovante_url.
+            tipo_ativo: Se o tipo de atividade está ativo.
+            categoria_creditos_aprovados: Soma de créditos já aprovados da mesma categoria.
+            pontuacao_base: Crédito gerado pela atividade (base do tipo).
+            limite_categoria: Teto de créditos da categoria, ou None se ilimitado.
+
+        Returns:
+            True se a atividade satisfaz as 4 condições da RL04, False caso contrário.
+        """
+        sid = Atom(student_id)
+        atv = Atom(activity_id)
+        facts: list[Compound] = []
+
+        ingresso = _parse_date(data_ingresso)
+        realizacao = _parse_date(data_realizacao)
+        if realizacao is not None and ingresso is not None and realizacao >= ingresso:
+            facts.append(Compound("dentro_periodo_curso", [atv, sid]))
+        if tem_comprovante:
+            facts.append(Compound("tem_comprovante", [atv]))
+        if tipo_ativo:
+            facts.append(Compound("tipo_ativo", [atv]))
+        if limite_categoria is None or categoria_creditos_aprovados + pontuacao_base <= limite_categoria:
+            facts.append(Compound("nao_excede_limite_categoria", [atv, sid]))
+
+        engine = self._build_engine(facts)
+        return bool(engine.query(Compound("atividade_elegivel", [atv, sid])))
 
     def _query_eligible_activities(
         self,
@@ -329,10 +395,10 @@ class InferenceService:
 
     # -- derivações de apresentação -----------------------------------------------------
 
-    def _derive_situacao(self, apto: bool, em_risco: bool, student: dict[str, Any]) -> str:
+    def _derive_situacao(self, apto: bool, em_risco: bool, student: dict[str, Any]) -> SituacaoInferida:
         """Mapeia os booleanos das regras para a situação inferida do aluno."""
         if apto:
-            return "fase_defesa"
+            return "em_fase_de_defesa"
         if em_risco:
             return "em_risco"
         if student.get("qualificacao_aprovada"):
@@ -346,7 +412,7 @@ class InferenceService:
         student: dict[str, Any],
         productions: list[dict[str, Any]],
         tasks: list[dict[str, Any]],
-        em_risco: bool,
+        risk_flags: dict[str, bool],
     ) -> InferenceChecklist:
         """Monta o checklist resumido por item (status cumprido/pendente/em_risco)."""
         min_basico = int(program.get("min_creditos_basico", 12))
@@ -354,42 +420,57 @@ class InferenceService:
         max_tecnologico = int(program.get("max_creditos_tecnologico", 4))
         min_total = int(program.get("min_creditos_total", 24))
 
-        def status_min(obtidos: int, minimo: int) -> str:
+        risco_creditos = risk_flags["creditos_insuficientes"]
+        risco_qualificacao = risk_flags["qualificacao_prazo_proximo"]
+        risco_plano = risk_flags["plano_atrasado"]
+        risco_prazo_estourado = risk_flags["prazo_estourado"]
+
+        def status_min(obtidos: int, minimo: int, em_risco_item: bool) -> RequisitoStatus:
             if obtidos >= minimo:
                 return "cumprido"
-            return "em_risco" if em_risco else "pendente"
+            return "em_risco" if em_risco_item else "pendente"
 
-        def status_max(obtidos: int, maximo: int) -> str:
+        def status_max(obtidos: int, maximo: int, em_risco_item: bool) -> RequisitoStatus:
             if obtidos <= maximo:
                 return "cumprido"
-            return "em_risco" if em_risco else "pendente"
+            return "em_risco" if em_risco_item else "pendente"
 
-        def status_bool(ok: bool) -> str:
+        def status_bool(ok: bool, em_risco_item: bool) -> RequisitoStatus:
             if ok:
                 return "cumprido"
-            return "em_risco" if em_risco else "pendente"
+            return "em_risco" if em_risco_item else "pendente"
 
         return InferenceChecklist(
             creditos_minimos=CreditoMinimoItem(
-                status=status_min(totals["total"], min_total), obtidos=totals["total"], minimo=min_total
+                status=status_min(totals["total"], min_total, risco_creditos),
+                obtidos=totals["total"],
+                minimo=min_total,
             ),
             creditos_grupo_basico=CreditoMinimoItem(
-                status=status_min(totals["basico"], min_basico), obtidos=totals["basico"], minimo=min_basico
+                status=status_min(totals["basico"], min_basico, risco_creditos),
+                obtidos=totals["basico"],
+                minimo=min_basico,
             ),
             creditos_grupo_especifico=CreditoMinimoItem(
-                status=status_min(totals["especifico"], min_especifico),
+                status=status_min(totals["especifico"], min_especifico, risco_creditos),
                 obtidos=totals["especifico"],
                 minimo=min_especifico,
             ),
             creditos_grupo_tecnologico=CreditoMaximoItem(
-                status=status_max(totals["tecnologico"], max_tecnologico),
+                status=status_max(totals["tecnologico"], max_tecnologico, risco_creditos),
                 obtidos=totals["tecnologico"],
                 maximo=max_tecnologico,
             ),
-            proficiencia=StatusItem(status=status_bool(bool(student.get("proficiencia_comprovada")))),
-            qualificacao=StatusItem(status=status_bool(bool(student.get("qualificacao_aprovada")))),
-            producao_validada=StatusItem(status=status_bool(any(p.get("bibliografica") for p in productions))),
-            plano_concluido=StatusItem(status=status_bool(self._is_plano_concluido(tasks))),
+            proficiencia=StatusItem(
+                status=status_bool(bool(student.get("proficiencia_comprovada")), risco_prazo_estourado)
+            ),
+            qualificacao=StatusItem(
+                status=status_bool(bool(student.get("qualificacao_aprovada")), risco_qualificacao)
+            ),
+            producao_validada=StatusItem(
+                status=status_bool(any(p.get("bibliografica") for p in productions), risco_prazo_estourado)
+            ),
+            plano_concluido=StatusItem(status=status_bool(self._is_plano_concluido(tasks), risco_plano)),
         )
 
     def _risk_messages(
@@ -415,6 +496,47 @@ class InferenceService:
 
     # -- helpers de plano ---------------------------------------------------------------
 
+    def _fracao_prazo_decorrida(self, student: dict[str, Any]) -> float:
+        """Fração do prazo já decorrida desde data_ingresso até prazo_final.
+
+        Args:
+            student: Documento do aluno com campos data_ingresso e prazo_final.
+
+        Returns:
+            Float em [0.0, 1.0]: 0.0 se datas ausentes/inválidas ou se o prazo não
+            começou; 1.0 se o prazo já expirou; valor proporcional caso contrário.
+        """
+        ingresso = _parse_date(student.get("data_ingresso"))
+        prazo = _parse_date(student.get("prazo_final"))
+        if ingresso is None or prazo is None or prazo <= ingresso:
+            return 0.0
+        elapsed = (date.today() - ingresso).days
+        span = (prazo - ingresso).days
+        return max(0.0, min(1.0, elapsed / span))
+
+    def _derive_prazo_qualificacao(
+        self, student: dict[str, Any], program: dict[str, Any]
+    ) -> date | None:
+        """Deriva o prazo de qualificação de data_ingresso + meses_ate_qualificacao.
+
+        Usado quando o aluno não traz prazo_qualificacao explícito: os dados reais do
+        Firestore não armazenam esse campo — o data-model define apenas
+        programs.meses_ate_qualificacao. Sem essa derivação o risco de qualificação
+        (RL03) nunca dispararia em produção.
+
+        Args:
+            student: Documento do aluno (fonte de data_ingresso).
+            program: Configuração do programa (fonte de meses_ate_qualificacao).
+
+        Returns:
+            Data derivada, ou None se faltar data_ingresso ou meses_ate_qualificacao.
+        """
+        ingresso = _parse_date(student.get("data_ingresso"))
+        meses = program.get("meses_ate_qualificacao")
+        if ingresso is None or meses is None:
+            return None
+        return _add_months(ingresso, int(meses))
+
     def _is_plano_concluido(self, tasks: list[dict[str, Any]]) -> bool:
         """True se todas as tasks não-defesa estiverem concluídas (e houver ao menos uma)."""
         non_defesa = [t for t in tasks if not t.get("is_defesa")]
@@ -425,13 +547,7 @@ class InferenceService:
         non_defesa = [t for t in tasks if not t.get("is_defesa")]
         if not non_defesa:
             return False
-        ingresso = _parse_date(student.get("data_ingresso"))
-        prazo = _parse_date(student.get("prazo_final"))
-        if ingresso is None or prazo is None or prazo <= ingresso:
-            return False
-        elapsed = (date.today() - ingresso).days
-        span = (prazo - ingresso).days
-        expected = max(0.0, min(1.0, elapsed / span))
+        expected = self._fracao_prazo_decorrida(student)
         concluidas = len([t for t in non_defesa if t.get("concluida")])
         actual = concluidas / len(non_defesa)
         return actual < expected

@@ -16,7 +16,14 @@
 import { apiGet } from "@/api/http";
 
 export type RequisitoStatus = "cumprido" | "pendente" | "em_risco";
-export type SituacaoInferida = "regular" | "em_risco" | "qualificado" | "fase_defesa";
+export type SituacaoInferida =
+  | "regular"
+  | "em_prorrogacao"
+  | "em_risco"
+  | "qualificado"
+  | "em_fase_de_defesa"
+  | "concluido"
+  | "desligado";
 
 export interface CreditoMinimoItem {
   status: RequisitoStatus;

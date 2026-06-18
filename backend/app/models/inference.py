@@ -17,7 +17,15 @@ from typing import Literal
 from pydantic import BaseModel
 
 RequisitoStatus = Literal["cumprido", "pendente", "em_risco"]
-SituacaoInferida = Literal["regular", "em_risco", "qualificado", "fase_defesa"]
+SituacaoInferida = Literal[
+    "regular",
+    "em_prorrogacao",
+    "em_risco",
+    "qualificado",
+    "em_fase_de_defesa",
+    "concluido",
+    "desligado",
+]
 
 
 class CreditoMinimoItem(BaseModel):

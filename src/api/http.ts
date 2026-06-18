@@ -2,14 +2,16 @@
  * Helper HTTP compartilhado pelas camadas de API do frontend.
  *
  * Responsabilidades:
- * - Resolver a base da API a partir de VITE_API_URL (fallback: http://localhost:8000/api/v1).
+ * - Resolver a base da API a partir de VITE_API_URL (host puro,
+ *   fallback http://localhost:8000), acrescentando /api/v1 — mesma convenção de @/api/authApi.
  * - Expor apiGet(path, token?): faz GET com header Authorization: Bearer <token> quando um
  *   token é fornecido (forward-compatible com a autenticação das issues #04/#10).
  * - Lançar erro com o status HTTP em respostas não-ok, para tratamento nas páginas.
  */
 
-const API_BASE: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api/v1";
+const API_HOST: string =
+  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
+const API_BASE = `${API_HOST}/api/v1`;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {

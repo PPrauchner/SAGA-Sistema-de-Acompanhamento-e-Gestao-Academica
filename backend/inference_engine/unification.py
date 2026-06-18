@@ -1,37 +1,18 @@
 """
-Algoritmo de unificação entre termos do motor de inferência lógica.
+Algoritmo de unificação entre termos do motor de inferência.
 
-Unificação é o mecanismo central da programação lógica: dado dois termos t1
-e t2, a unificação determina se existe um conjunto de ligações
-variável→termo (uma 'substituição') que, quando aplicado a ambos, os torna
-sintaticamente idênticos.
-
-Função pública:
-    unify(t1, t2, subst) -> dict | None
-
-    Recebe dois termos e um ambiente de substituições já existente. Retorna
-    um novo dicionário de substituições (extensão de subst) se a unificação
-    for possível, ou None em caso de falha. Nunca modifica subst in-place —
-    o resultado é sempre um novo dicionário.
-
-Casos tratados (em ordem de avaliação):
-    1. Atom == Atom (mesmo valor)  → retorna subst inalterada.
-    2. Atom != Atom                → falha (None).
-    3. Variable(X) já em subst     → resolve subst[X] e tenta unificar com t2.
-    4. Variable(X) nova            → occur check + adiciona X→t2 à subst.
-    5. Compound vs Compound        → mesmo functor e aridade, unifica args par a par.
-    6. Qualquer outra combinação   → falha (None).
-
-Occur check (caso 4):
-    Antes de ligar Variable(X) a um termo t2, verifica se X aparece dentro
-    de t2. Se sim, retorna None — isso evita a criação de termos circulares
-    infinitos (ex.: X = f(X) seria inválido).
-
-Isolamento: depende apenas de terms.py. Sem imports de FastAPI, Firebase ou
-qualquer ORM.
+Responsabilidades:
+- Implementar `def unify(t1: Term, t2: Term, subst: dict) -> dict | None`.
+- Casos tratados:
+    - Atom == Atom com mesmo valor → retorna subst inalterada.
+    - Atom != Atom → retorna None.
+    - Variable(X) já em subst → unifica subst[X] com t2 recursivamente.
+    - Variable(X) não em subst → retorna {**subst, X: t2} com occur check
+      (X não pode aparecer em t2).
+    - Compound vs Compound → mesmo functor e aridade; unifica argumentos par a par.
+    - Qualquer outra combinação → retorna None.
+- Módulo isolado: depende apenas de terms.py, sem imports externos.
 """
-from __future__ import annotations
-
 from inference_engine.terms import Atom, Variable, Compound, Term
 
 
