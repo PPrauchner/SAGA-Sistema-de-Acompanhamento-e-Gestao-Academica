@@ -11,7 +11,8 @@ Responsabilidades:
 Acoplamento com atividade (#45) DEFERIDO: a produção é subtipo de atividade e deveria
 referenciar um activity_id e herdar o fluxo rascunho→enviado→aprovado. Enquanto a #45
 (ActivityService/activity_types) não existe, o activity_id fica None e a pontuacao_base é
-resolvida pelo mapa interino PONTUACAO_BASE_POR_TIPO. Toda essa interinidade está isolada
+resolvida por _resolve_pontuacao_base() (artigo modulado por status_publicacao; livro e
+capítulo com base única). Toda essa interinidade está isolada
 em create_production() para reconciliação localizada quando a #45 entrar.
 """
 
@@ -29,13 +30,34 @@ from backend.app.repositories.vehicle_repository import VehicleRepository
 from backend.app.services.inference_service import InferenceService
 from backend.app.services.student_service import StudentService
 
-# Interino até activity_types/#45: pontuação base por tipo de produção (seed activity_types).
-PONTUACAO_BASE_POR_TIPO: dict[str, float] = {
-    "artigo_publicado": 10.0,
-    "artigo_submetido": 5.0,
-    "livro": 8.0,
-    "capitulo": 4.0,
+# Pontuação base por NATUREZA bibliográfica da produção. Publicações não são activity_types
+# (modelo de produção bibliográfica isolado); a #45 dará à produção um activity_id para também
+# gerar crédito. Para artigo a situação de publicação modula a base; livro e capítulo têm base única.
+PONTUACAO_BASE_ARTIGO_POR_STATUS: dict[str, float] = {
+    "publicado": 1.0,
+    "aceito": 0.8,
+    "submetido": 0.3,
 }
+PONTUACAO_BASE_POR_TIPO: dict[str, float] = {
+    "livro": 1.0,
+    "capitulo": 0.6,
+}
+
+
+def _resolve_pontuacao_base(tipo_producao: str, status_publicacao: str) -> float:
+    """Resolve a pontuação base de uma produção a partir da sua natureza e situação.
+
+    Args:
+        tipo_producao: Natureza da produção ('artigo' | 'livro' | 'capitulo').
+        status_publicacao: Situação de publicação ('publicado' | 'submetido' | 'aceito').
+
+    Returns:
+        Pontuação base: para 'artigo' depende de status_publicacao; para os demais tipos
+        é única.
+    """
+    if tipo_producao == "artigo":
+        return PONTUACAO_BASE_ARTIGO_POR_STATUS[status_publicacao]
+    return PONTUACAO_BASE_POR_TIPO[tipo_producao]
 
 
 class ProductionService:
@@ -76,7 +98,7 @@ class ProductionService:
     async def create_production(self, data: ProductionCreate, user: CurrentUser) -> dict:
         student_id = await self._resolve_student_id(user)
         nivel, peso = await self._resolve_vehicle_level(user.programa_id, data.veiculo_id)
-        pontuacao_base = PONTUACAO_BASE_POR_TIPO[data.tipo_producao]
+        pontuacao_base = _resolve_pontuacao_base(data.tipo_producao, data.status_publicacao)
 
         score = self._inference.score_production(nivel, peso, pontuacao_base)
 
@@ -123,6 +145,10 @@ class ProductionService:
                 result.append(
                     {
                         "id": production["id"],
+                        # aluno_id deriva do dono da subcoleção students/{id}/productions,
+                        # não de `autores` (que admite coautores).
+                        "aluno_id": student["id"],
+                        "aluno_nome": student.get("nome", ""),
                         "titulo": production.get("titulo"),
                         "doi": production.get("doi"),
                         "veiculo_nome": nome_by_vehicle.get(production.get("veiculo_id"), ""),
