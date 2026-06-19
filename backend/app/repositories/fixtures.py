@@ -23,6 +23,13 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
+
+
+def _iso(days_from_today: int) -> str:
+    return (date.today() + timedelta(days=days_from_today)).isoformat()
+
+
 _PROGRAM: dict[str, Any] = {
     "id": "prog_default",
     "min_creditos_basico": 12,
