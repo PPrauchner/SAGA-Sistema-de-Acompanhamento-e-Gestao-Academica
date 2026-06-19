@@ -79,6 +79,50 @@ async def test_audit_operation_registra_autoria_e_status_pt_br(
     assert log["resultado_status"] == "sucesso"
 
 
+async def test_audit_operation_captura_modulo_recurso_e_valor_entrada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _AuditRepo.store = {}
+    _AuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _AuditRepo)
+
+    @audit_operation
+    async def update_situacao(
+        student_id: str,
+        body: dict[str, str],
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        return {"id": student_id, "message": "ok"}
+
+    await update_situacao("s1", {"situacao_registrada": "concluido"}, _user())
+
+    log = next(iter(_AuditRepo.store.values()))
+    assert log["modulo"] == update_situacao.__module__
+    # recurso usa o primeiro argumento *_id encontrado nos argumentos capturados.
+    assert log["recurso"].endswith("/s1")
+    # valor_entrada captura os argumentos nomeados via inspect, exceto o CurrentUser.
+    assert log["valor_entrada"]["student_id"] == "s1"
+    assert log["valor_entrada"]["body"] == {"situacao_registrada": "concluido"}
+    assert "user" not in log["valor_entrada"]
+
+
+async def test_audit_operation_deriva_recurso_do_id_no_resultado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _AuditRepo.store = {}
+    _AuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _AuditRepo)
+
+    @audit_operation
+    async def create_something(body: dict[str, str], user: CurrentUser) -> dict[str, str]:
+        return {"id": "novo123"}
+
+    await create_something({"nome": "X"}, _user())
+
+    log = next(iter(_AuditRepo.store.values()))
+    assert log["recurso"].endswith("/novo123")
+
+
 async def test_audit_operation_respeita_flag_desativada(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -173,6 +217,54 @@ async def test_track_history_salva_observacao_no_snapshot(
 
     _, snapshot = _StudentRepo.history[0]
     assert snapshot["observacao"] == "Mudanca revisada pela coordenacao"
+
+
+class _ActivityTypeRepo:
+    documents: dict[str, dict[str, Any]] = {
+        "type1": {"nome": "Disciplina", "pontuacao_base": 4.0}
+    }
+    history: list[tuple[str, dict[str, Any]]] = []
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        data = self.documents.get(doc_id)
+        return dict(data) if data else None
+
+    async def update(self, doc_id: str, data: dict[str, Any]) -> None:
+        self.documents.setdefault(doc_id, {}).update(data)
+
+    async def save_history_snapshot(
+        self,
+        type_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        self.history.append((type_id, dict(snapshot)))
+        return "hist1"
+
+
+async def test_track_history_resolve_activity_type_por_type_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ActivityTypeRepo.documents = {"type1": {"nome": "Disciplina", "pontuacao_base": 4.0}}
+    _ActivityTypeRepo.history = []
+    monkeypatch.setattr(history_module, "ActivityTypeRepository", _ActivityTypeRepo)
+
+    @track_history
+    async def update_type(
+        type_id: str,
+        body: dict[str, float],
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        await _ActivityTypeRepo().update(type_id, body)
+        return {"message": "ok"}
+
+    await update_type("type1", {"pontuacao_base": 6.0}, _user())
+
+    type_id, snapshot = _ActivityTypeRepo.history[0]
+    assert type_id == "type1"
+    assert snapshot["entidade_tipo"] == "activity_type"
+    assert snapshot["entidade_id"] == "type1"
+    assert snapshot["valor_anterior"]["pontuacao_base"] == 4.0
+    assert snapshot["valor_novo"]["pontuacao_base"] == 6.0
 
 
 async def test_track_history_respeita_flag_desativada(

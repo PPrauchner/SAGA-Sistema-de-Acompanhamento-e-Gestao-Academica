@@ -3,10 +3,12 @@ import {
   Brain, Zap, Database, GitBranch, Terminal, Clock, CheckCircle2,
   XCircle, Circle, Play, RotateCcw, Cpu, Activity, AlertTriangle,
   ChevronRight, Code2, Layers, Shield, Network, FileCheck, Search, Loader2,
+  ChevronDown,
 } from "lucide-react";
 import { useApp } from "@/app/context/AppContext";
 import { getInference, type InferenceResult } from "@/api/inferenceApi";
 import { getChecklist, type ChecklistResponse } from "@/api/checklistApi";
+import { useChecklistStudent } from "@/hooks/useChecklistStudent";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -702,17 +704,9 @@ function ExplainPanel({ student, question }: { student: StudentProfile; question
 }
 
 // ─── Real Inference Panel (dados reais do backend) ────────────────────────────
-// Consome GET /inference e /checklist. Enquanto a issue #41 não popula o Firestore,
-// usa os alunos de fixture do backend (aluno_apto/risco/regular).
-
-const PANEL_FIXTURES = [
-  { id: "aluno_apto", label: "Ana Apta" },
-  { id: "aluno_risco", label: "Rui Risco" },
-  { id: "aluno_regular", label: "Rita Regular" },
-];
 
 const SITU_CLR: Record<string, string> = {
-  fase_defesa: "#10b981",
+  em_fase_de_defesa: "#10b981",
   qualificado: "#3b82f6",
   regular: "#64748b",
   em_risco: "#f59e0b",
@@ -728,14 +722,16 @@ function BoolPill({ label, value }: { label: string; value: boolean }) {
 }
 
 function RealInferencePanel() {
-  const [studentId, setStudentId] = useState("aluno_risco");
+  const { studentId, students, setStudentId } = useChecklistStudent();
+  const [selectorOpen, setSelectorOpen] = useState(false);
   const [inf, setInf] = useState<InferenceResult | null>(null);
   const [chk, setChk] = useState<ChecklistResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFacts, setShowFacts] = useState(false);
 
   useEffect(() => {
+    if (!studentId) return;
     let active = true;
     setLoading(true);
     setError(null);
@@ -746,6 +742,8 @@ function RealInferencePanel() {
     return () => { active = false; };
   }, [studentId]);
 
+  const selectedLabel = students?.find((s) => s.id === studentId)?.label;
+
   return (
     <div className="rounded-2xl p-5" style={{ background: "#030712", border: "1px solid #1e293b" }}>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
@@ -753,14 +751,48 @@ function RealInferencePanel() {
           <Database size={14} style={{ color: "#3b82f6" }} />
           <span style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0" }}>Inferência real (motor lógico + backend)</span>
         </div>
-        <div className="flex gap-1.5">
-          {PANEL_FIXTURES.map((s) => (
-            <button key={s.id} onClick={() => setStudentId(s.id)} className="rounded-lg px-3 py-1.5"
-              style={{ background: studentId === s.id ? "#1e3a5f" : "#0f172a", color: studentId === s.id ? "#60a5fa" : "#475569", border: "1px solid #1e293b", fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}>
-              {s.label}
+
+        {students && (
+          <div className="relative">
+            <button
+              onClick={() => setSelectorOpen((o) => !o)}
+              className="flex items-center gap-2 rounded-lg px-3 py-1.5"
+              style={{ background: "#0f172a", border: "1px solid #1e293b", color: "#e2e8f0", fontSize: 11, fontWeight: 700, fontFamily: "monospace" }}
+            >
+              {selectedLabel ?? "Selecionar aluno"}
+              <ChevronDown size={12} style={{ color: "#475569" }} />
             </button>
-          ))}
-        </div>
+            {selectorOpen && (
+              <div
+                className="absolute right-0 mt-1 rounded-xl shadow-lg z-10 overflow-hidden"
+                style={{ background: "#0f172a", border: "1px solid #1e293b", minWidth: 180 }}
+              >
+                {students.length === 0 ? (
+                  <p className="px-4 py-3" style={{ fontSize: 11, color: "#475569", fontFamily: "monospace" }}>
+                    Nenhum aluno encontrado
+                  </p>
+                ) : (
+                  students.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => { setStudentId(s.id); setSelectorOpen(false); }}
+                      className="w-full text-left px-4 py-2.5"
+                      style={{
+                        fontSize: 11,
+                        fontWeight: s.id === studentId ? 700 : 400,
+                        color: s.id === studentId ? "#60a5fa" : "#94a3b8",
+                        background: s.id === studentId ? "#1e3a5f" : "transparent",
+                        fontFamily: "monospace",
+                      }}
+                    >
+                      {s.label}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {loading && (

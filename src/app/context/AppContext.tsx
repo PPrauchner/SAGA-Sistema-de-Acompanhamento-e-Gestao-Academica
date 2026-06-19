@@ -89,6 +89,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         email: profile.email,
         role: profile.role,
         programa: profile.programaId,
+        student_id: profile.studentId ?? undefined,
       }
     : null;
 

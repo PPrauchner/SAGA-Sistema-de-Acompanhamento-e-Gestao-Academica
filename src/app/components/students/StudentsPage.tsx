@@ -29,7 +29,7 @@ const STATUS_MAP: Record<
   em_prorrogacao: { label: "Prorrogação", color: "#D4A017", bg: "#fef9c3", icon: <AlertTriangle size={12} /> },
   em_risco: { label: "Em Risco", color: "#dc2626", bg: "#fee2e2", icon: <AlertTriangle size={12} /> },
   qualificado: { label: "Qualificado", color: "#123C7A", bg: "#eef3fc", icon: <CheckCircle size={12} /> },
-  fase_defesa: { label: "Defesa", color: "#7c3aed", bg: "#ede9fe", icon: <GraduationCap size={12} /> },
+  em_fase_de_defesa: { label: "Fase de Defesa", color: "#7c3aed", bg: "#ede9fe", icon: <GraduationCap size={12} /> },
   concluido: { label: "Concluído", color: "#3b82f6", bg: "#dbeafe", icon: <CheckCircle size={12} /> },
   desligado: { label: "Desligado", color: "#dc2626", bg: "#fee2e2", icon: <AlertTriangle size={12} /> },
 };
@@ -54,7 +54,7 @@ function progressFor(student: Student): number {
   const checks = [
     Boolean(student.qualificacao_aprovada),
     Boolean(student.proficiencia_comprovada),
-    student.situacao_registrada === "qualificado" || student.situacao_registrada === "fase_defesa" || student.situacao_registrada === "concluido",
+    student.situacao_registrada === "qualificado" || student.situacao_registrada === "em_fase_de_defesa" || student.situacao_registrada === "concluido",
     student.situacao_registrada === "concluido",
   ];
   return 20 + checks.filter(Boolean).length * 20;
@@ -62,7 +62,7 @@ function progressFor(student: Student): number {
 
 export function StudentsPage() {
   const { setCurrentPage, setSelectedStudentId } = useApp();
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [search, setSearch] = useState("");
@@ -164,6 +164,8 @@ export function StudentsPage() {
   }
 
   const regularCount = students.filter((s) => s.situacao_registrada === "regular").length;
+  // Apenas a coordenação cria/edita alunos (spec 05_discentes). Orientador é read-only.
+  const canManage = role === "coordenacao";
 
   return (
     <div>
@@ -174,10 +176,12 @@ export function StudentsPage() {
             {students.length} alunos cadastrados · {regularCount} regulares
           </p>
         </div>
-        <button onClick={openCreateForm} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
-          <Plus size={16} />
-          Novo Aluno
-        </button>
+        {canManage && (
+          <button onClick={openCreateForm} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
+            <Plus size={16} />
+            Novo Aluno
+          </button>
+        )}
       </div>
 
       {error && <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px" }}>{error}</div>}
@@ -252,7 +256,7 @@ export function StudentsPage() {
                     <td className="px-4 py-3"><p style={{ fontSize: "12px", color: "var(--foreground)" }}>{advisor?.nome ?? student.orientador_id}</p><p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{student.programa_id}</p></td>
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="rounded-full overflow-hidden" style={{ width: 60, height: 6, background: "var(--muted)" }}><div className="h-full rounded-full" style={{ width: `${progress}%`, background: progress > 70 ? "#1F8A70" : progress > 40 ? "#D4A017" : "#dc2626" }} /></div><span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>{progress}%</span></div></td>
                     <td className="px-4 py-3"><span className="flex items-center gap-1 px-2 py-1 rounded-lg w-fit" style={{ background: st.bg, color: st.color, fontSize: "11px", fontWeight: 600 }}>{st.icon} {st.label}</span></td>
-                    <td className="px-4 py-3"><div className="flex items-center gap-1"><button onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }} className="p-1.5 rounded-lg" style={{ color: "#123C7A" }} title="Ver detalhes"><Eye size={15} /></button><button onClick={() => openEditForm(student)} className="p-1.5 rounded-lg" style={{ color: "#1F8A70" }} title="Editar"><Edit3 size={15} /></button></div></td>
+                    <td className="px-4 py-3"><div className="flex items-center gap-1"><button onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }} className="p-1.5 rounded-lg" style={{ color: "#123C7A" }} title="Ver detalhes"><Eye size={15} /></button>{canManage && <button onClick={() => openEditForm(student)} className="p-1.5 rounded-lg" style={{ color: "#1F8A70" }} title="Editar"><Edit3 size={15} /></button>}</div></td>
                   </tr>
                 );
               })}

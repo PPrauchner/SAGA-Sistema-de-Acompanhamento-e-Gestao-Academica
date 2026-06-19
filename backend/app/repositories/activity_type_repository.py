@@ -1,9 +1,10 @@
 """
-Repository for academic activity types.
+Repositório para tipos de atividades acadêmicas.
 
 Responsabilidades:
-- Implement CRUD operations for the 'activity_types' collection.
-- Filter activity types by program.
+- Implementar operações CRUD para a coleção 'activity_types'.
+- Filtrar tipos de atividades por programa.
+- Herdar FirebaseRepository e especializar operações.
 """
 
 from typing import Any, Dict, List, Optional
@@ -11,54 +12,53 @@ from backend.app.repositories.firebase_repository import FirebaseRepository
 
 
 class ActivityTypeRepository(FirebaseRepository):
-    """Concrete repository for activity types in Firestore."""
+    """Repositório concreto para tipos de atividades no Firestore."""
 
     def __init__(self):
-        """Initializes the ActivityTypeRepository."""
+        """Inicializa o ActivityTypeRepository."""
         super().__init__("activity_types")
 
     async def get_all_by_program(self, programa_id: str) -> List[Dict[str, Any]]:
-        """Fetches all activity types belonging to a specific program.
+        """Busca todos os tipos de atividades pertencentes a um programa específico.
 
         Args:
-            programa_id: The unique identifier of the program.
+            programa_id: O identificador único do programa.
 
         Returns:
-            A list of activity type documents.
+            Uma lista de documentos de tipos de atividades.
         """
         return await self.query(filters=[("programa_id", "==", programa_id)])
 
     async def get_type(self, type_id: str) -> Optional[Dict[str, Any]]:
-        """Fetches a single activity type by ID.
+        """Busca um único tipo de atividade por ID.
 
         Args:
-            type_id: The unique identifier of the activity type.
+            type_id: O identificador único do tipo de atividade.
 
         Returns:
-            The activity type data or None.
+            Os dados do tipo de atividade ou None.
         """
         return await self.get(type_id)
 
     async def create_type(self, data: Dict[str, Any]) -> str:
-        """Creates a new activity type.
+        """Cria um novo tipo de atividade.
 
         Args:
-            data: The activity type data.
+            data: Os dados do tipo de atividade.
 
         Returns:
-            The ID of the created document.
+            O ID do documento criado.
         """
         return await self.create(data)
 
     async def update_type(self, type_id: str, data: Dict[str, Any]) -> bool:
-        """Updates an existing activity type.
+        """Atualiza um tipo de atividade existente.
 
         Args:
-            type_id: The unique identifier of the activity type.
-            data: The fields to update.
+            type_id: O identificador único do tipo de atividade.
+            data: Os campos para atualizar.
 
         Returns:
-            True if the update was successful.
+            True se a atualização for bem-sucedida.
         """
         return await self.update(type_id, data)
-

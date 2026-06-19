@@ -1,10 +1,13 @@
 """
-Base repository for Firestore operations using Firebase Admin SDK.
+Repositório base genérico para operações no Firestore usando Firebase Admin SDK.
 
 Responsabilidades:
-- Provide generic asynchronous methods for CRUD operations (get, create, update, delete, query).
-- Encapsulate the Firestore client obtained from backend/app/core/firebase.py.
-- Handle DocumentNotFoundError and other common database exceptions.
+- Fornecer métodos assíncronos genéricos para operações CRUD (get, create, update, delete, query).
+- Encapsular o cliente Firestore assíncrono obtido de backend/app/core/firebase.py.
+- Tratar exceções comuns de banco de dados, como DocumentNotFoundError.
+- save_history_snapshot(doc_id, snapshot): persiste snapshot do aspecto A03 (history.py)
+  em {collection}/{doc_id}/history/{auto_id}, reutilizado por todos os repositórios cujas
+  entidades são versionadas (StudentRepository, ActivityTypeRepository, etc.).
 """
 
 from __future__ import annotations
@@ -183,3 +186,30 @@ class FirebaseRepository:
             return doc_ref.id
 
         return await asyncio.to_thread(_create)
+
+    async def save_history_snapshot(
+        self,
+        doc_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        """Persiste snapshot do aspecto A03 (history.py) em {collection}/{doc_id}/history/."""
+
+        return await self.set_subcollection_auto(doc_id, "history", snapshot)
+
+    async def list_subcollection(
+        self,
+        doc_id: str,
+        subcollection: str,
+    ) -> list[dict[str, Any]]:
+        """Lista os documentos de {collection}/{doc_id}/{subcollection}/ com o id injetado."""
+
+        def _list() -> list[dict[str, Any]]:
+            docs = self._document(doc_id).collection(subcollection).stream()
+            result = []
+            for doc in docs:
+                item = doc.to_dict()
+                item["id"] = doc.id
+                result.append(item)
+            return result
+
+        return await asyncio.to_thread(_list)

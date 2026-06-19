@@ -5,9 +5,14 @@ description = "Sistema de Acompanhamento e Gestão Acadêmica para programas de 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi[standard]>=0.115.0",
-    "firebase-admin>=6.5.0",
-    "pydantic-settings>=2.6.0",
+    "fastapi>=0.100",
+    "uvicorn[standard]>=0.24",
+    "firebase-admin>=6.1.0",
+    "google-cloud-firestore>=2.13.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "python-dotenv>=1.0",
+    "python-multipart>=0.0.9",
 ]
 
 [project.optional-dependencies]

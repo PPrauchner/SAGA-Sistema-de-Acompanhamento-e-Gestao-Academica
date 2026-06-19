@@ -9,6 +9,42 @@ Responsabilidades:
   Alimenta a AuditPage do frontend com dados reais em substituição aos dados hardcoded.
 """
 
-from fastapi import APIRouter
+from __future__ import annotations
+
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query
+
+from backend.app.aspects.authorization import requires_role
+from backend.app.core.auth import CurrentUser, get_current_user
+from backend.app.models.audit import AuditLogPage, ResultadoStatus
+from backend.app.services.audit_service import AuditService
 
 router = APIRouter()
+
+service = AuditService()
+
+
+@router.get("/audit-logs")
+@requires_role("coordenacao")
+async def list_audit_logs(
+    usuario_id: str | None = None,
+    operacao: str | None = None,
+    modulo: str | None = None,
+    resultado_status: ResultadoStatus | None = None,
+    data_inicio: datetime | None = None,
+    data_fim: datetime | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    user: CurrentUser = Depends(get_current_user),
+) -> AuditLogPage:
+    return await service.list_audit_logs(
+        usuario_id=usuario_id,
+        operacao=operacao,
+        modulo=modulo,
+        resultado_status=resultado_status,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        page=page,
+        page_size=page_size,
+    )
