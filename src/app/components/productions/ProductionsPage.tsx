@@ -233,6 +233,9 @@ export function ProductionsPage() {
                       <span className="px-2 py-0.5 rounded-lg" style={{ background: tipo.bg, color: tipo.color, fontSize: "10px", fontWeight: 600 }}>{tipo.label}</span>
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>👤 {prod.aluno_nome}</span>
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>📰 {prod.veiculo_nome}</span>
+                      {prod.autores && prod.autores.length > 1 && (
+                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>✍️ {prod.autores.length} autores</span>
+                      )}
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>⭐ {prod.pontuacao_calculada.toFixed(1)} pts (peso {prod.peso_aplicado})</span>
                     </div>
                     {prod.doi && (
