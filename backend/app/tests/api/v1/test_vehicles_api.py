@@ -6,7 +6,7 @@ Responsabilidades:
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 # Set dummy environment variables to satisfy pydantic-settings
 os.environ["FIREBASE_PROJECT_ID"] = "test-project"
@@ -25,7 +25,7 @@ client = TestClient(app)
 def test_update_vehicle_level_success():
     """Should return 200 on successful vehicle level update."""
     # Setup mock service
-    mock_service = MagicMock()
+    mock_service = AsyncMock()
     mock_service.update_vehicle_level.return_value = True
 
     # Override dependencies

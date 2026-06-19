@@ -6,7 +6,7 @@ Responsabilidades:
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 # Set dummy environment variables to satisfy pydantic-settings
 os.environ["FIREBASE_PROJECT_ID"] = "test-project"
@@ -25,7 +25,7 @@ client = TestClient(app)
 def test_get_activity_types_success():
     """Should return 200 and list of activity types."""
     # Setup mock service
-    mock_service = MagicMock()
+    mock_service = AsyncMock()
     mock_service.get_all_by_program.return_value = [{"id": "1", "nome": "Artigo"}]
 
     # Override dependencies
@@ -49,7 +49,7 @@ def test_get_activity_types_success():
 def test_create_activity_type_success():
     """Should return 201 on successful creation."""
     # Setup mock service
-    mock_service = MagicMock()
+    mock_service = AsyncMock()
     mock_service.create_type.return_value = "new_id"
 
     # Override dependencies

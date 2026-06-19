@@ -7,7 +7,7 @@ Responsabilidades:
 """
 
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 # Set dummy environment variables to satisfy pydantic-settings
 os.environ["FIREBASE_PROJECT_ID"] = "test-project"
@@ -26,7 +26,7 @@ client = TestClient(app)
 def test_get_config_success():
     """Should return 200 and config data."""
     # Setup mock service
-    mock_service = MagicMock()
+    mock_service = AsyncMock()
     mock_service.get_config.return_value = {"id": "prog_default", "creditos_total_min": 24}
 
     # Override dependencies
@@ -50,7 +50,7 @@ def test_get_config_success():
 def test_update_config_success():
     """Should return 200 on successful update."""
     # Setup mock service
-    mock_service = MagicMock()
+    mock_service = AsyncMock()
     mock_service.update_config.return_value = True
 
     # Override dependencies
