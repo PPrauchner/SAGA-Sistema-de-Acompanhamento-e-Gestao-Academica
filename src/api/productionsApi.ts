@@ -39,6 +39,8 @@ export interface Production {
   tipo_producao: TipoProducao;
   status_publicacao: StatusPublicacao;
   observacao?: string | null;
+  // uids de alunos cadastrados e/ou strings livres (autores externos).
+  autores: string[];
   pontuacao_calculada: number;
   peso_aplicado: number;
   status_atividade: string;
@@ -51,13 +53,14 @@ export interface ProductionCreatePayload {
   tipo_producao: TipoProducao;
   status_publicacao: StatusPublicacao;
   observacao?: string | null;
+  // O autor que registra é sempre incluído pelo backend; demais autores são opcionais.
+  autores?: string[];
   data_realizacao: string;
   comprovante_url?: string | null;
 }
 
 export interface ProductionCreateResult {
   id: string;
-  activity_id: string | null;
   pontuacao_calculada: number;
   nivel_veiculo: string;
   peso_aplicado: number;
