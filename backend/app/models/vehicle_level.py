@@ -1,21 +1,21 @@
 """
-Pydantic models for vehicle relevance levels within a program.
+Modelos Pydantic para níveis de relevância de veículos dentro de um programa.
 
 Responsabilidades:
-- Define the structure for mapping vehicles to specific relevance levels and weights.
-- Ensure type safety for relevance-related business logic.
+- Definir a estrutura para mapear veículos para níveis de relevância e pesos específicos.
+- Garantir segurança de tipo para lógica de negócios relacionada a relevância.
 """
 
 from pydantic import BaseModel, ConfigDict
 
 
 class VehicleLevelBase(BaseModel):
-    """Base schema for vehicle relevance levels.
+    """Schema base para níveis de relevância de veículos.
 
     Attributes:
-        veiculo_id: The unique identifier of the vehicle.
-        nivel: The relevance level (e.g., 'A1', 'A2', 'B1').
-        peso: The numeric weight assigned to this level for scoring (RL05).
+        veiculo_id: O identificador único do veículo.
+        nivel: O nível de relevância (ex: 'A1', 'A2', 'B1').
+        peso: O peso numérico atribuído a este nível para pontuação (RL05).
     """
     veiculo_id: str
     nivel: str
@@ -23,18 +23,18 @@ class VehicleLevelBase(BaseModel):
 
 
 class VehicleLevelCreate(VehicleLevelBase):
-    """Schema for creating a new vehicle level mapping."""
+    """Schema para criar um novo mapeamento de nível de veículo."""
     pass
 
 
 class VehicleLevelUpdate(BaseModel):
-    """Schema for updating an existing vehicle level mapping."""
+    """Schema para atualizar um mapeamento de nível de veículo existente."""
     nivel: str | None = None
     peso: float | None = None
 
 
 class VehicleLevel(VehicleLevelBase):
-    """Full representation of a vehicle level mapping, including its Firestore ID."""
+    """Representação completa de um mapeamento de nível de veículo, incluindo seu ID no Firestore."""
     model_config = ConfigDict(from_attributes=True)
 
     id: str

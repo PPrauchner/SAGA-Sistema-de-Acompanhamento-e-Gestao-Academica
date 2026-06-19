@@ -12,8 +12,7 @@ from backend.app.core.auth import get_current_user, CurrentUser
 from backend.app.models.program_config import ProgramConfigUpdate
 from backend.app.services.program_service import ProgramService
 
-# AOP Aspects (Imports will work because the files exist with docstrings, 
-# but we might need to implement the actual decorators)
+
 from backend.app.aspects.authorization import requires_role
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.history import track_history

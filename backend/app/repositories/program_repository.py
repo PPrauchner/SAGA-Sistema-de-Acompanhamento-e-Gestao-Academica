@@ -7,7 +7,7 @@ Responsabilidades:
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.core.firebase import get_firestore_client
 
@@ -19,7 +19,7 @@ class ProgramRepository(FirebaseRepository):
         """Inicializa o ProgramRepository."""
         super().__init__("programs")
 
-    async def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
+    async def get_config(self, programa_id: str) -> dict[str, Any] | None:
         """Busca a configuração de um determinado programa.
 
         Args:
@@ -30,7 +30,7 @@ class ProgramRepository(FirebaseRepository):
         """
         return await self.get(programa_id)
 
-    async def update_config(self, programa_id: str, data: Dict[str, Any]) -> bool:
+    async def update_config(self, programa_id: str, data: dict[str, Any]) -> bool:
         """Atualiza a configuração de um determinado programa.
 
         Args:
@@ -42,7 +42,7 @@ class ProgramRepository(FirebaseRepository):
         """
         return await self.update(programa_id, data)
 
-    async def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
+    async def get_vehicle_levels(self, programa_id: str) -> list[dict[str, Any]]:
         """Busca todos os níveis de relevância de veículos de um programa.
 
         Args:
@@ -54,7 +54,7 @@ class ProgramRepository(FirebaseRepository):
         collection_path = f"{self.collection}/{programa_id}/vehicle_levels"
         return await self.query(subcollection_path=collection_path)
 
-    async def update_vehicle_level(self, programa_id: str, veiculo_id: str, data: Dict[str, Any]) -> bool:
+    async def update_vehicle_level(self, programa_id: str, veiculo_id: str, data: dict[str, Any]) -> bool:
         """Atualiza ou cria um mapeamento de nível de relevância de veículo.
 
         Args:

@@ -1,10 +1,10 @@
 """
-Service for managing academic program configurations and vehicle levels.
+Serviço para gerenciar configurações de programas acadêmicos e níveis de veículos.
 
 Responsabilidades:
-- Retrieve and update program-wide configurations (credits, deadlines).
-- Manage vehicle relevance levels for specific programs.
-- Coordinate with ProgramRepository for data persistence.
+- Recuperar e atualizar configurações do programa (créditos, prazos).
+- Gerenciar níveis de relevância de veículos para programas específicos.
+- Coordenar com o ProgramRepository para persistência de dados.
 """
 
 from typing import Any, Dict, List, Optional
@@ -14,48 +14,48 @@ from backend.app.repositories.program_repository import ProgramRepository
 
 
 class ProgramService:
-    """Service to handle business logic for program configurations."""
+    """Serviço para lidar com a lógica de negócios das configurações do programa."""
 
     def __init__(self, repository=None):
-        """Initializes the ProgramService.
+        """Inicializa o ProgramService.
 
         Args:
-            repository: An instance of ProgramRepository. If None, a new one is created.
+            repository: Uma instância de ProgramRepository. Se None, uma nova é criada.
         """
         self.repository = repository or ProgramRepository()
 
     async def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
-        """Fetches the configuration for a given program.
+        """Busca a configuração de um determinado programa.
 
         Args:
-            programa_id: The unique identifier of the program.
+            programa_id: O identificador único do programa.
 
         Returns:
-            The program configuration as a dictionary or None.
+            A configuração do programa como dicionário ou None.
         """
         return await self.repository.get_config(programa_id)
 
     async def update_config(self, programa_id: str, data: ProgramConfigUpdate) -> bool:
-        """Updates the configuration for a given program.
+        """Atualiza a configuração de um determinado programa.
 
         Args:
-            programa_id: The unique identifier of the program.
-            data: The update data validated by Pydantic.
+            programa_id: O identificador único do programa.
+            data: Os dados de atualização validados pelo Pydantic.
 
         Returns:
-            True if the update was successful.
+            True se a atualização foi bem-sucedida.
         """
         update_dict = data.model_dump(exclude_unset=True)
         return await self.repository.update_config(programa_id, update_dict)
 
     async def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
-        """Fetches all vehicle relevance levels for a program.
+        """Busca todos os níveis de relevância de veículos para um programa.
 
         Args:
-            programa_id: The unique identifier of the program.
+            programa_id: O identificador único do programa.
 
         Returns:
-            A list of vehicle level mappings.
+            Uma lista de mapeamentos de níveis de veículos.
         """
         return await self.repository.get_vehicle_levels(programa_id)
 
@@ -65,15 +65,15 @@ class ProgramService:
         veiculo_id: str, 
         data: VehicleLevelUpdate | VehicleLevelCreate
     ) -> bool:
-        """Updates or creates a vehicle relevance level mapping.
+        """Atualiza ou cria um mapeamento de nível de relevância de veículo.
 
         Args:
-            programa_id: The unique identifier of the program.
-            veiculo_id: The unique identifier of the vehicle.
-            data: The level and weight data validated by Pydantic.
+            programa_id: O identificador único do programa.
+            veiculo_id: O identificador único do veículo.
+            data: Os dados de nível e peso validados pelo Pydantic.
 
         Returns:
-            True if the update was successful.
+            True se a atualização foi bem-sucedida.
         """
         update_dict = data.model_dump(exclude_unset=True)
         return await self.repository.update_vehicle_level(programa_id, veiculo_id, update_dict)
