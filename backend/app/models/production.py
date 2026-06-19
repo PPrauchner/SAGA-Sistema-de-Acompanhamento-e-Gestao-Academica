@@ -3,14 +3,15 @@ Modelos Pydantic para a entidade Production (produção bibliográfica).
 
 Responsabilidades:
 - Definir ProductionCreate para POST /api/v1/productions com campos: titulo, doi,
-  veiculo_id, tipo_producao, status_publicacao, observacao, data_realizacao,
+  veiculo_id, tipo_producao, status_publicacao, observacao, autores, data_realizacao,
   comprovante_url.
 - Definir ProductionResponse para leitura incluindo veiculo_nome, nivel_veiculo (de
   vehicle_levels do programa), pontuacao_calculada (resultado do motor RL05), peso_aplicado
   e status_atividade (do documento activity associado).
-- Produção é subtipo de atividade: cada produção referencia um activity_id e herda o
-  fluxo de validação (rascunho → enviado → aprovado | rejeitado).
-- Mapear a sub-coleção Firestore students/{id}/productions.
+- Produção é coleção raiz Firestore (productions/{id}); a FK é invertida: cada aluno autor
+  tem um documento students/{id}/activities com activities.producao_id → productions/{id},
+  por onde herda o fluxo de validação (rascunho → enviado → aprovado | rejeitado).
+- autores admite uids de alunos cadastrados e strings livres (autores externos).
 """
 
 from __future__ import annotations
@@ -34,6 +35,9 @@ class ProductionCreate(BaseModel):
     tipo_producao: TipoProducao
     status_publicacao: StatusPublicacao
     observacao: str | None = None
+    # uids de alunos cadastrados e/ou strings livres (autores externos). O autor que registra
+    # é sempre incluído pelo service; cada uid cadastrado recebe uma activity dedicada.
+    autores: list[str] = []
     data_realizacao: datetime
     comprovante_url: str | None = None
 
@@ -49,6 +53,7 @@ class ProductionResponse(BaseModel):
     tipo_producao: TipoProducao
     status_publicacao: StatusPublicacao
     observacao: str | None = None
+    autores: list[str] = []
     pontuacao_calculada: float
     peso_aplicado: float
     status_atividade: str

@@ -46,6 +46,10 @@ class ActivityResponse(BaseModel):
     tipo_nome: str | None = None
     categoria: str | None = None
 
+    # FK invertida para produção bibliográfica em coleção raiz (productions/{id}); None
+    # para atividades regulares (não-bibliográficas).
+    producao_id: str | None = None
+
     descricao: str
     data_realizacao: datetime | None = None
     comprovante_url: str | None = None
