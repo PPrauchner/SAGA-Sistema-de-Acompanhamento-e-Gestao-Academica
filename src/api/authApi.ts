@@ -4,13 +4,16 @@
  * Responsabilidades:
  * - API_URL: base da API do backend (VITE_API_URL, default http://localhost:8000).
  * - getMe(token): GET /api/v1/auth/me — perfil do usuário autenticado, mapeado para
- *   camelCase. Requer Authorization: Bearer <token>.
+ *   camelCase. Requer Authorization: Bearer <token>. Lança ApiError (com o status HTTP)
+ *   em resposta não-ok, para que o chamador distinga falha de auth (401/403) de
+ *   indisponibilidade transitória (5xx).
  * - activateFirstAccess(token, senha): POST /api/v1/auth/first-access — endpoint público
  *   que ativa a conta convidada e retorna uid, role e e-mail. O papel vem do convite,
  *   não do cliente.
  */
 
 import type { UserRole } from "@/app/context/AppContext";
+import { ApiError } from "@/api/http";
 
 // Base da API do backend; em dev o FastAPI roda em http://localhost:8000.
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -38,7 +41,7 @@ export async function getMe(token: string): Promise<AuthProfile> {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!response.ok) {
-    throw new Error(`Falha ao carregar perfil (HTTP ${response.status})`);
+    throw new ApiError(response.status, `Falha ao carregar perfil (HTTP ${response.status})`);
   }
   const data = await response.json();
   return {
