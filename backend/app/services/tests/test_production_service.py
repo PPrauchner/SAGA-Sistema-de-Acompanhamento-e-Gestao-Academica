@@ -4,8 +4,9 @@ Testes do ProductionService.
 Cobre:
 - _resolve_pontuacao_base: artigo modulado por status_publicacao (publicado/aceito/
   submetido) e tipos de base única (livro/capítulo). Função pura — sem acesso ao Firebase.
-- Acoplamento com atividade (#45): create_production cria uma atividade dedicada e devolve
-  o activity_id; list_productions expõe o status_atividade vindo da atividade ligada.
+- Acoplamento com atividade (FK invertida): create_production grava a produção na coleção
+  raiz e cria uma atividade com producao_id por autor cadastrado; list_productions expõe o
+  status_atividade vindo da atividade ligada.
 """
 
 from __future__ import annotations
@@ -54,17 +55,18 @@ def test_tipo_base_unica_ignora_status(tipo: str, esperado: float) -> None:
 
 
 class _FakeProductionRepository:
-    store: dict[str, list[dict[str, Any]]] = {}
+    store: dict[str, dict[str, Any]] = {}
     counter = 0
 
-    async def create(self, student_id: str, data: dict[str, Any]) -> str:
+    async def create(self, data: dict[str, Any]) -> str:
         type(self).counter += 1
         production_id = f"prod{type(self).counter}"
-        type(self).store.setdefault(student_id, []).append({**data, "id": production_id})
+        type(self).store[production_id] = {**data, "id": production_id}
         return production_id
 
-    async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
-        return [dict(item) for item in type(self).store.get(student_id, [])]
+    async def get(self, production_id: str) -> dict[str, Any] | None:
+        item = type(self).store.get(production_id)
+        return dict(item) if item else None
 
 
 class _FakeActivityRepository:
@@ -135,17 +137,20 @@ async def test_create_production_cria_atividade_ligada() -> None:
 
     result = await service.create_production(_payload(), _aluno())
 
-    assert result["activity_id"] == "act1"
+    assert result["id"] == "prod1"
+    assert "activity_id" not in result  # FK agora é activities.producao_id
     assert result["pontuacao_calculada"] == 2.0  # peso 2.0 x base 1.0 (artigo publicado)
 
     atividade = _FakeActivityRepository.store["student1"][0]
     assert atividade["tipo_id"] is None
+    assert atividade["producao_id"] == "prod1"  # FK invertida
     assert atividade["categoria"] == ACTIVITY_CATEGORIA_PRODUCAO
     assert atividade["status"] == "enviado"
-    assert atividade["creditos_gerados"] == 1.0
+    assert atividade["creditos_gerados"] == 2.0  # = pontuacao_calculada
 
-    producao = _FakeProductionRepository.store["student1"][0]
-    assert producao["activity_id"] == "act1"
+    producao = _FakeProductionRepository.store["prod1"]
+    assert "activity_id" not in producao  # produção não referencia atividade
+    assert "uid-aluno" in producao["autores"]  # autor que registra incluído
 
 
 async def test_list_productions_usa_status_da_atividade() -> None:
@@ -156,4 +161,5 @@ async def test_list_productions_usa_status_da_atividade() -> None:
 
     listadas = await service.list_productions(_aluno())
 
+    assert listadas[0]["id"] == "prod1"
     assert listadas[0]["status_atividade"] == "aprovado"
