@@ -29,6 +29,7 @@ from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
 from backend.app.repositories.activity_type_repository import ActivityTypeRepository
 from backend.app.repositories.student_repository import StudentRepository
+from backend.app.repositories.transfer_repository import TransferRepository
 
 def _resolve(bound_arguments: dict[str, Any]) -> tuple[Any, str, str] | None:
     """Resolve (repositório, entidade_tipo, entidade_id) a partir dos argumentos nomeados.
@@ -51,6 +52,21 @@ def _resolve(bound_arguments: dict[str, Any]) -> tuple[Any, str, str] | None:
     return None
 
 
+async def _resolve_async(bound_arguments: dict[str, Any]) -> tuple[Any, str, str] | None:
+    resolved = _resolve(bound_arguments)
+    if resolved is not None:
+        return resolved
+
+    transfer_id = bound_arguments.get("transfer_id")
+    if isinstance(transfer_id, str):
+        request = await TransferRepository().get(transfer_id)
+        student_id = request.get("student_id") if request else None
+        if isinstance(student_id, str):
+            return StudentRepository(), "student", student_id
+
+    return None
+
+
 def track_history(func):
     @functools.wraps(func)
     async def wrapper(*args, **kwargs):
@@ -59,7 +75,7 @@ def track_history(func):
 
         bound = inspect.signature(func).bind_partial(*args, **kwargs)
 
-        resolved = _resolve(bound.arguments)
+        resolved = await _resolve_async(bound.arguments)
         if resolved is None:
             return await func(*args, **kwargs)
         repo, entidade_tipo, entity_id = resolved
