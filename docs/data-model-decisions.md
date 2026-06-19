@@ -87,7 +87,7 @@ Caso de borda: usuário **só coordenador** que perde a coordenação → desati
 **Decisão:** **score cheio por autor** — cada co-autor conta a produção integralmente, **sem dividir** a pontuação. A **produção** guarda o score canônico (`pontuacao_calculada`, RL05, calculado uma vez); cada **atividade** do aluno guarda `creditos_gerados` = esse score, ajustável **por aluno** pela coordenação (`creditos_concedidos`) e capado pelo limite da categoria (RL04) **individualmente**. Produção = fonte da pontuação bibliográfica; atividade = crédito efetivamente concedido àquele aluno.
 
 ### Q10 — Integridade `vehicles` ↔ `vehicle_levels`
-**Decisão:** `programs/{prog}/vehicle_levels/{veiculo_id}` é **1:1 opcional (0..1)** com `vehicles/` — um veículo pode ser cadastrado antes de a coordenação classificá-lo. Sem nível configurado, a RL05 usa **peso default `C` = 0.5** (fallback documentado), e a coordenação pode reclassificar depois (recalcula o score). Garante RL05 total (sempre retorna pontuação), sem produção "travada".
+**Decisão:** `programs/{prog}/vehicle_levels/{veiculo_id}` é **1:1 opcional (0..1)** com `vehicles/` — um veículo pode ser cadastrado antes de a coordenação classificá-lo. Sem nível configurado, a RL05 usa **peso default `SC` = 0.2** (fallback documentado), e a coordenação pode reclassificar depois (recalcula o score). Garante RL05 total (sempre retorna pontuação), sem produção "travada".
 
 ### Q11 — Coleções transversais (`history`, `audit_logs`, `notifications`)
 **Decisão:**
@@ -124,3 +124,38 @@ Caso de borda: usuário **só coordenador** que perde a coordenação → desati
 4. Inferência & infra — `inferred_status` / `history` / `audit_logs` / `notifications` / `extensions`
 
 Mais um **ER macro** só com entidades-âncora e ligações principais (sem atributos). Tabelas de atributos detalhadas acompanham cada subdomínio.
+
+---
+
+## Refinamentos (pós-implementação)
+
+> Decisões tomadas após a primeira implementação (revisão do PR #111, 2026-06-18).
+
+### R1 — Escala de níveis de relevância: 4 níveis → 7 níveis (Qualis Único)
+
+**Contexto:** a escala original (Q10) tinha 4 níveis (`A1/A2/B/C`). O PR #111 introduziu uma escala
+de 7 níveis no código (fixtures/frontend/seed), gerando incoerência com a documentação.
+**Decisão:** adotar a escala de **7 níveis** alinhada ao Qualis Único da CAPES:
+`A1 | A2 | A3 | A4 | B1 | B2 | SC` (`SC` = Sem Classificação), com pesos
+`A1=1.0, A2=0.85, A3=0.7, A4=0.7, B1=0.5, B2=0.5, SC=0.2`. O fallback para veículo sem nível
+configurado passa de `C=0.5` para **`SC=0.2`** (refina Q10).
+**Pendência:** os pesos `A3=A4=0.7` e `B1=B2=0.5` foram herdados do código e **não são monotônicos**;
+confirmar se devem seguir o Qualis normalizado (`A4=0.55`, `B1=0.4`, `B2=0.3`). Aplicar a escala
+escolhida em todo o código (model `RelevanceLevel`, `VehicleService.PESO_POR_NIVEL`, default da
+inferência) — hoje o runtime ainda usa a escala antiga (bloqueador C1 da revisão do PR #111).
+
+### R2 — `tipo_producao` = natureza; situação em `status_publicacao`
+
+**Contexto:** o enum `tipo_producao` (`artigo_publicado | artigo_submetido | livro | capitulo`)
+duplicava a informação de `status_publicacao` (`publicado | submetido | aceito`).
+**Decisão:** `tipo_producao` passa a descrever apenas a **natureza** da produção
+(`artigo | livro | capitulo`); a situação de publicação vive exclusivamente em `status_publicacao`.
+Aplicado em `data-model.md`, specs 03 e 07.
+
+### R3 — `productions` permanece coleção raiz (mantém Q8)
+
+**Contexto:** os specs 03/07 e o código do PR #111 descreviam `productions` como subcoleção de
+`students`, divergindo da decisão Q8 (coleção raiz + `activities.producao_id → productions`).
+**Decisão:** **manter Q8** — `productions` é coleção raiz. Os specs 03/07 foram atualizados para
+refletir a estrutura raiz e a FK invertida; o código do PR #111 (subcoleção) precisa ser
+ajustado (bloqueador M1 da revisão).
