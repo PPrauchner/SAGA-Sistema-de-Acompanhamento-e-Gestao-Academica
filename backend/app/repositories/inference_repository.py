@@ -24,10 +24,13 @@ from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.vehicle_repository import VehicleRepository
 
 _DEFAULT_RELEVANCIA_PESOS: dict[str, float] = {
-    "A1": 2.0,
-    "A2": 1.5,
-    "B": 1.0,
-    "C": 0.5,
+    "A1": 1.0,
+    "A2": 0.85,
+    "A3": 0.7,
+    "A4": 0.7,
+    "B1": 0.5,
+    "B2": 0.5,
+    "SC": 0.2,
 }
 
 

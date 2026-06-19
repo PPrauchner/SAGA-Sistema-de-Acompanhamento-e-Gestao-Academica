@@ -43,7 +43,7 @@ _PROGRAM: dict[str, Any] = {
     "creditos_grupo_tecnologico_max": 4,
     "creditos_total_min": 24,
     "max_prorrogacoes": 2,
-    "relevancia_pesos": {"A1": 2.0, "A2": 1.5, "B": 1.0, "C": 0.5},
+    "relevancia_pesos": {"A1": 1.0, "A2": 0.85, "A3": 0.7, "A4": 0.7, "B1": 0.5, "B2": 0.5, "SC": 0.2},
 }
 
 # aluno_apto         — prazo no futuro, todos os requisitos cumpridos.
