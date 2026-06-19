@@ -26,17 +26,23 @@ const STATUS_MAP: Record<StatusPublicacao, { label: string; color: string; bg: s
 const NIVEL_COLORS: Record<string, { color: string; bg: string }> = {
   A1: { color: "#fff", bg: "#123C7A" },
   A2: { color: "#fff", bg: "#1A56A0" },
-  B: { color: "#fff", bg: "#D4A017" },
-  C: { color: "#fff", bg: "#94a3b8" },
+  A3: { color: "#fff", bg: "#2C6FB5" },
+  A4: { color: "#fff", bg: "#4A89C8" },
+  B1: { color: "#fff", bg: "#D4A017" },
+  B2: { color: "#fff", bg: "#E0B84D" },
+  SC: { color: "#fff", bg: "#94a3b8" },
 };
 
-const NIVEIS = ["A1", "A2", "B", "C"];
+const NIVEIS = ["A1", "A2", "A3", "A4", "B1", "B2", "SC"];
 
 const NIVEL_LABELS: Record<string, string> = {
   A1: "Nível A1",
   A2: "Nível A2",
-  B: "Nível B",
-  C: "Nível C",
+  A3: "Nível A3",
+  A4: "Nível A4",
+  B1: "Nível B1",
+  B2: "Nível B2",
+  SC: "Sem Classificação",
 };
 
 const emptyForm = {
