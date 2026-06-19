@@ -219,6 +219,39 @@ async def test_track_history_salva_observacao_no_snapshot(
     assert snapshot["observacao"] == "Mudanca revisada pela coordenacao"
 
 
+async def test_track_history_resolve_student_id_no_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _StudentRepo.documents = {"s1": {"nome": "Aluno", "orientador_id": "advisor1"}}
+    _StudentRepo.history = []
+    monkeypatch.setattr(history_module, "StudentRepository", _StudentRepo)
+
+    payload = type(
+        "Payload",
+        (),
+        {"student_id": "s1", "observacao": "Transferencia direta"},
+    )()
+
+    @track_history
+    async def direct_transfer(
+        body,
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        await _StudentRepo().update(
+            body.student_id,
+            {"orientador_id": "advisor2"},
+        )
+        return {"message": "ok"}
+
+    await direct_transfer(payload, _user())
+
+    student_id, snapshot = _StudentRepo.history[0]
+    assert student_id == "s1"
+    assert snapshot["valor_anterior"]["orientador_id"] == "advisor1"
+    assert snapshot["valor_novo"]["orientador_id"] == "advisor2"
+    assert snapshot["observacao"] == "Transferencia direta"
+
+
 class _ActivityTypeRepo:
     documents: dict[str, dict[str, Any]] = {
         "type1": {"nome": "Disciplina", "pontuacao_base": 4.0}

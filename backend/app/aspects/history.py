@@ -38,6 +38,9 @@ def _resolve(bound_arguments: dict[str, Any]) -> tuple[Any, str, str] | None:
     monkeypatch.setattr(history_module, "StudentRepository", ...) a cada execução.
     """
     student_id = bound_arguments.get("student_id")
+    body = bound_arguments.get("body")
+    if student_id is None and body is not None:
+        student_id = getattr(body, "student_id", None)
     if isinstance(student_id, str):
         return StudentRepository(), "student", student_id
 
