@@ -220,7 +220,7 @@
             "student_nome": "string",
             "total": "int",
             "pontuacao_total": "float",
-            "por_nivel": {"A1": "int", "A2": "int", "B": "int", "C": "int"}
+            "por_nivel": {"A1": "int", "A2": "int", "A3": "int", "A4": "int", "B1": "int", "B2": "int", "SC": "int"}
           }
         ],
         "por_orientador": [
