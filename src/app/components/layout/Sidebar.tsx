@@ -26,7 +26,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "prorrogacoes", label: "Prorrogações", icon: <Clock size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
   { id: "relatorios", label: "Relatórios", icon: <BarChart3 size={18} />, roles: ["orientador", "coordenacao"] },
   { id: "inferencia", label: "Inferência Acadêmica", icon: <Brain size={18} />, roles: ["orientador", "coordenacao"] },
-  { id: "transferencias", label: "Transferências", icon: <ArrowRightLeft size={18} />, roles: ["coordenacao"] },
+  { id: "transferencias", label: "Transferências", icon: <ArrowRightLeft size={18} />, roles: ["orientador", "coordenacao"] },
   { id: "auditoria", label: "Auditoria", icon: <ShieldCheck size={18} />, roles: ["coordenacao"] },
   { id: "configuracoes", label: "Configurações", icon: <Settings size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
 ];

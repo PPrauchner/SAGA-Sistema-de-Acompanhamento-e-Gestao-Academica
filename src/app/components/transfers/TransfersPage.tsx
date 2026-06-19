@@ -1,36 +1,67 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { ArrowRightLeft, CheckCircle, RefreshCw, Search, UserCheck } from "lucide-react";
+import {
+  ArrowRightLeft,
+  CheckCircle,
+  RefreshCw,
+  Send,
+  UserCheck,
+  XCircle,
+} from "lucide-react";
 
 import { getAdvisors, type Advisor } from "@/api/advisorsApi";
 import { getStudents, type Student } from "@/api/studentsApi";
-import { directTransfer } from "@/api/transfersApi";
+import {
+  approveTransferRequest,
+  cancelTransferRequest,
+  createTransferRequest,
+  directTransfer,
+  getTransfers,
+  rejectTransferRequest,
+  type TransferRequest,
+} from "@/api/transfersApi";
 import { useApp } from "../../context/AppContext";
 
 const TERMINAL_STATUSES = new Set(["concluido", "desligado"]);
 
+function statusLabel(status: TransferRequest["status"]): string {
+  const labels: Record<TransferRequest["status"], string> = {
+    pendente: "Pendente",
+    aprovada: "Aprovada",
+    rejeitada: "Rejeitada",
+    cancelada: "Cancelada",
+  };
+  return labels[status];
+}
+
 export function TransfersPage() {
-  const { token, setCurrentPage, setSelectedStudentId } = useApp();
+  const { currentUser, token, setCurrentPage, setSelectedStudentId } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [transfers, setTransfers] = useState<TransferRequest[]>([]);
   const [studentId, setStudentId] = useState("");
   const [advisorId, setAdvisorId] = useState("");
-  const [observacao, setObservacao] = useState("");
-  const [search, setSearch] = useState("");
+  const [motivo, setMotivo] = useState("");
+  const [rejectReason, setRejectReason] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const isCoord = currentUser?.role === "coordenacao";
+  const isAdvisor = currentUser?.role === "orientador";
+
   async function loadData(authToken: string): Promise<void> {
     setLoading(true);
     setError(null);
     try {
-      const [studentsData, advisorsData] = await Promise.all([
+      const [studentsData, advisorsData, transfersData] = await Promise.all([
         getStudents(authToken),
         getAdvisors(authToken),
+        getTransfers(authToken),
       ]);
       setStudents(studentsData);
       setAdvisors(advisorsData);
+      setTransfers(transfersData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar transferencias");
     } finally {
@@ -46,8 +77,11 @@ export function TransfersPage() {
     () => new Map(advisors.map((advisor) => [advisor.id, advisor])),
     [advisors],
   );
+  const studentById = useMemo(
+    () => new Map(students.map((student) => [student.id, student])),
+    [students],
+  );
   const selectedStudent = students.find((student) => student.id === studentId) ?? null;
-  const originAdvisor = selectedStudent ? advisorById.get(selectedStudent.orientador_id) : null;
   const selectedStudentTerminal = selectedStudent
     ? TERMINAL_STATUSES.has(selectedStudent.situacao_registrada)
     : false;
@@ -59,44 +93,52 @@ export function TransfersPage() {
           advisor.id !== selectedStudent.orientador_id,
       )
     : [];
+  const pendingTransfers = transfers.filter((transfer) => transfer.status === "pendente");
 
-  const filteredStudents = students.filter((student) => {
-    const query = search.toLowerCase();
-    return (
-      student.nome.toLowerCase().includes(query) ||
-      student.matricula.toLowerCase().includes(query)
-    );
-  });
-
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    if (!token || !studentId || !advisorId) return;
-
+  async function runAction(action: () => Promise<{ message: string }>): Promise<void> {
+    if (!token) return;
     setSaving(true);
     setError(null);
     setSuccess(null);
     try {
-      const result = await directTransfer(token, {
-        student_id: studentId,
-        orientador_destino_id: advisorId,
-        observacao: observacao || null,
-      });
+      const result = await action();
       setSuccess(result.message);
+      setStudentId("");
       setAdvisorId("");
-      setObservacao("");
+      setMotivo("");
       await loadData(token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao transferir aluno");
+      setError(err instanceof Error ? err.message : "Falha na operacao");
     } finally {
       setSaving(false);
     }
   }
 
-  function openStudentDetail(): void {
-    if (!selectedStudent) return;
-    setSelectedStudentId(selectedStudent.id);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token || !studentId || !advisorId) return;
+
+    await runAction(() =>
+      isCoord
+        ? directTransfer(token, {
+            student_id: studentId,
+            orientador_destino_id: advisorId,
+            observacao: motivo || null,
+          })
+        : createTransferRequest(token, {
+            student_id: studentId,
+            orientador_destino_id: advisorId,
+            motivo: motivo || null,
+          }),
+    );
+  }
+
+  function openStudentDetail(student: Student): void {
+    setSelectedStudentId(student.id);
     setCurrentPage("aluno-detail");
   }
+
+  if (!isCoord && !isAdvisor) return null;
 
   return (
     <div className="space-y-6">
@@ -106,7 +148,9 @@ export function TransfersPage() {
             Transferências
           </h1>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
-            Mova orientandos entre orientadores do mesmo programa.
+            {isCoord
+              ? "Aprove solicitações e mova orientandos diretamente."
+              : "Solicite transferência dos seus orientandos para outro orientador."}
           </p>
         </div>
         <button
@@ -133,61 +177,79 @@ export function TransfersPage() {
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-6">
         <section className="rounded-xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          <div className="relative mb-4">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar aluno por nome ou matrícula"
-              className="w-full rounded-lg pl-10 pr-3 py-2 outline-none"
-              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "14px" }}
-            />
-          </div>
-
+          <h2 style={{ color: "var(--foreground)", fontSize: "16px", fontWeight: 700, marginBottom: 12 }}>
+            Solicitações
+          </h2>
           {loading ? (
             <div className="py-16 text-center" style={{ color: "var(--muted-foreground)" }}>Carregando...</div>
+          ) : pendingTransfers.length === 0 ? (
+            <div className="py-16 text-center" style={{ color: "var(--muted-foreground)" }}>Nenhuma solicitação pendente.</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr style={{ color: "var(--muted-foreground)", fontSize: "12px", textAlign: "left" }}>
-                    <th className="px-3 py-2">Aluno</th>
-                    <th className="px-3 py-2">Programa</th>
-                    <th className="px-3 py-2">Orientador atual</th>
-                    <th className="px-3 py-2">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.map((student) => {
-                    const active = student.id === studentId;
-                    const advisor = advisorById.get(student.orientador_id);
-                    return (
-                      <tr
-                        key={student.id}
-                        onClick={() => {
-                          setStudentId(student.id);
-                          setAdvisorId("");
-                          setSuccess(null);
-                        }}
-                        className="cursor-pointer"
-                        style={{ background: active ? "rgba(18,60,122,0.08)" : "transparent", borderTop: "1px solid var(--border)" }}
-                      >
-                        <td className="px-3 py-3">
-                          <p style={{ color: "var(--foreground)", fontWeight: 600 }}>{student.nome}</p>
-                          <p style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>{student.matricula}</p>
-                        </td>
-                        <td className="px-3 py-3" style={{ color: "var(--foreground)", fontSize: "13px" }}>{student.programa_id}</td>
-                        <td className="px-3 py-3" style={{ color: "var(--foreground)", fontSize: "13px" }}>{advisor?.nome ?? student.orientador_id}</td>
-                        <td className="px-3 py-3">
-                          <span className="rounded-full px-2 py-1" style={{ background: TERMINAL_STATUSES.has(student.situacao_registrada) ? "#fee2e2" : "#eef3fc", color: TERMINAL_STATUSES.has(student.situacao_registrada) ? "#991b1b" : "#123C7A", fontSize: "12px", fontWeight: 600 }}>
-                            {student.situacao_registrada}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {pendingTransfers.map((transfer) => {
+                const student = studentById.get(transfer.student_id);
+                const origin = transfer.orientador_origem_id ? advisorById.get(transfer.orientador_origem_id) : null;
+                const destination = advisorById.get(transfer.orientador_destino_id);
+                return (
+                  <div key={transfer.id} className="rounded-lg p-4" style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
+                    <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+                      <div>
+                        <p style={{ color: "var(--foreground)", fontWeight: 700 }}>{student?.nome ?? transfer.student_id}</p>
+                        <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>
+                          {origin?.nome ?? transfer.orientador_origem_id} → {destination?.nome ?? transfer.orientador_destino_id}
+                        </p>
+                        <span className="inline-block rounded-full px-2 py-1 mt-2" style={{ background: "#fef9c3", color: "#854d0e", fontSize: "12px", fontWeight: 700 }}>
+                          {statusLabel(transfer.status)}
+                        </span>
+                      </div>
+                      {isCoord ? (
+                        <div className="flex flex-col gap-2 md:min-w-[260px]">
+                          <input
+                            value={rejectReason[transfer.id] ?? ""}
+                            onChange={(event) => setRejectReason((prev) => ({ ...prev, [transfer.id]: event.target.value }))}
+                            placeholder="Motivo para rejeitar"
+                            className="rounded-lg px-3 py-2 outline-none"
+                            style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "13px" }}
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => token && runAction(() => approveTransferRequest(token, transfer.id))}
+                              className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg px-3 py-2"
+                              style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 700 }}
+                            >
+                              <UserCheck size={14} />
+                              Aprovar
+                            </button>
+                            <button
+                              type="button"
+                              disabled={saving}
+                              onClick={() => token && runAction(() => rejectTransferRequest(token, transfer.id, rejectReason[transfer.id] ?? ""))}
+                              className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg px-3 py-2"
+                              style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px", fontWeight: 700 }}
+                            >
+                              <XCircle size={14} />
+                              Rejeitar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={saving}
+                          onClick={() => token && runAction(() => cancelTransferRequest(token, transfer.id))}
+                          className="inline-flex items-center justify-center gap-1 rounded-lg px-3 py-2"
+                          style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px", fontWeight: 700 }}
+                        >
+                          <XCircle size={14} />
+                          Cancelar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </section>
@@ -198,16 +260,35 @@ export function TransfersPage() {
               <ArrowRightLeft size={18} />
             </div>
             <div>
-              <h2 style={{ color: "var(--foreground)", fontSize: "16px", fontWeight: 700 }}>Mover direto</h2>
-              <p style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>Auto-aprovado pela coordenação</p>
+              <h2 style={{ color: "var(--foreground)", fontSize: "16px", fontWeight: 700 }}>
+                {isCoord ? "Mover direto" : "Solicitar transferência"}
+              </h2>
+              <p style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>
+                {isCoord ? "Auto-aprovado pela coordenação" : "Enviado para aprovação da coordenação"}
+              </p>
             </div>
           </div>
 
-          <div className="rounded-lg p-3" style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
-            <p style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>Aluno selecionado</p>
-            <p style={{ color: "var(--foreground)", fontWeight: 700 }}>{selectedStudent?.nome ?? "Nenhum aluno selecionado"}</p>
+          <div>
+            <label style={{ color: "var(--foreground)", fontSize: "13px", fontWeight: 600 }}>Aluno</label>
+            <select
+              value={studentId}
+              onChange={(event) => {
+                setStudentId(event.target.value);
+                setAdvisorId("");
+              }}
+              className="w-full rounded-lg mt-1 px-3 py-2 outline-none"
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "14px" }}
+            >
+              <option value="">Selecione...</option>
+              {students.map((student) => (
+                <option key={student.id} value={student.id}>
+                  {student.nome} ({student.matricula})
+                </option>
+              ))}
+            </select>
             {selectedStudent && (
-              <button type="button" onClick={openStudentDetail} style={{ color: "#123C7A", fontSize: "12px", fontWeight: 700, marginTop: 6 }}>
+              <button type="button" onClick={() => openStudentDetail(selectedStudent)} style={{ color: "#123C7A", fontSize: "12px", fontWeight: 700, marginTop: 6 }}>
                 Abrir detalhe do aluno
               </button>
             )}
@@ -238,9 +319,9 @@ export function TransfersPage() {
           </div>
 
           <textarea
-            value={observacao}
-            onChange={(event) => setObservacao(event.target.value)}
-            placeholder="Observação opcional"
+            value={motivo}
+            onChange={(event) => setMotivo(event.target.value)}
+            placeholder={isCoord ? "Observação opcional" : "Justificativa opcional"}
             rows={4}
             className="w-full rounded-lg px-3 py-2 outline-none resize-none"
             style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "14px" }}
@@ -252,15 +333,9 @@ export function TransfersPage() {
             className="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2"
             style={{ background: saving || !selectedStudent || !advisorId ? "var(--muted)" : "#123C7A", color: "#fff", fontSize: "14px", fontWeight: 700, opacity: saving ? 0.7 : 1 }}
           >
-            <UserCheck size={16} />
-            {saving ? "Transferindo..." : "Confirmar transferência"}
+            {isCoord ? <UserCheck size={16} /> : <Send size={16} />}
+            {saving ? "Salvando..." : isCoord ? "Confirmar transferência" : "Enviar solicitação"}
           </button>
-
-          {originAdvisor && (
-            <p style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>
-              Origem atual: {originAdvisor.nome}
-            </p>
-          )}
         </form>
       </div>
     </div>
