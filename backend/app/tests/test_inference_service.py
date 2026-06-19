@@ -18,6 +18,7 @@ def service() -> InferenceService:
     return InferenceService(FixtureRepository())
 
 
+@pytest.mark.anyio
 async def test_aluno_apto_em_fase_de_defesa(service: InferenceService):
     result = await service.run_inference("aluno_apto", "prog_default")
     assert result.apto_defesa is True
@@ -35,6 +36,7 @@ async def test_aluno_apto_em_fase_de_defesa(service: InferenceService):
     assert pontuacao.nivel_veiculo == "A1"
 
 
+@pytest.mark.anyio
 async def test_aluno_risco_em_risco(service: InferenceService):
     result = await service.run_inference("aluno_risco", "prog_default")
     assert result.em_risco is True
@@ -45,6 +47,7 @@ async def test_aluno_risco_em_risco(service: InferenceService):
     assert result.atividades_elegiveis == ["atv_risco_b"]
 
 
+@pytest.mark.anyio
 async def test_aluno_regular_qualificado(service: InferenceService):
     result = await service.run_inference("aluno_regular", "prog_default")
     assert result.apto_defesa is False
@@ -55,6 +58,7 @@ async def test_aluno_regular_qualificado(service: InferenceService):
     assert result.checklist.producao_validada.status != "cumprido"
 
 
+@pytest.mark.anyio
 async def test_aluno_inexistente(service: InferenceService):
     with pytest.raises(StudentNotFoundError):
         await service.run_inference("nao_existe", "prog_default")
