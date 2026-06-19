@@ -8,7 +8,8 @@ Responsabilidades:
   creditos_grupo_tecnologico_max=4, creditos_total_min=24, max_prorrogacoes=1,
   duracao_prorrogacao_meses=6, meses_ate_qualificacao=12.
 - Popular programs/prog_default/vehicle_levels/ com os níveis de relevância padrão
-  (configuráveis): A1 (peso 2.0), A2 (1.5), B (1.0), C (0.5).
+  (configuráveis), escala Qualis Único de 7 níveis: A1 (peso 1.0), A2 (0.85), A3 (0.7),
+  A4 (0.7), B1 (0.5), B2 (0.5), SC (0.2). Veículo sem nível configurado usa fallback SC.
 - Popular activity_types/ com os 4 tipos de atividade creditável NÃO bibliográfica:
   Disciplina Cursada (básico, 4), Estágio Docência (básico, 2),
   Software Registrado (tecnológico, 3, limite=4), Participação Banca (básico, 1).
@@ -52,10 +53,13 @@ PROGRAM_DEFAULT: dict[str, Any] = {
 }
 
 VEHICLE_LEVELS_DEFAULT: dict[str, dict[str, Any]] = {
-    "v_placeholder_a1": {"veiculo_id": "v_placeholder_a1", "nivel": "A1", "peso": 2.0},
-    "v_placeholder_a2": {"veiculo_id": "v_placeholder_a2", "nivel": "A2", "peso": 1.5},
-    "v_placeholder_b": {"veiculo_id": "v_placeholder_b", "nivel": "B", "peso": 1.0},
-    "v_placeholder_c": {"veiculo_id": "v_placeholder_c", "nivel": "C", "peso": 0.5},
+    "v_placeholder_a1": {"veiculo_id": "v_placeholder_a1", "nivel": "A1", "peso": 1.0},
+    "v_placeholder_a2": {"veiculo_id": "v_placeholder_a2", "nivel": "A2", "peso": 0.85},
+    "v_placeholder_a3": {"veiculo_id": "v_placeholder_a3", "nivel": "A3", "peso": 0.7},
+    "v_placeholder_a4": {"veiculo_id": "v_placeholder_a4", "nivel": "A4", "peso": 0.7},
+    "v_placeholder_b1": {"veiculo_id": "v_placeholder_b1", "nivel": "B1", "peso": 0.5},
+    "v_placeholder_b2": {"veiculo_id": "v_placeholder_b2", "nivel": "B2", "peso": 0.5},
+    "v_placeholder_sc": {"veiculo_id": "v_placeholder_sc", "nivel": "SC", "peso": 0.2},
 }
 
 ACTIVITY_TYPES_DEFAULT: dict[str, dict[str, Any]] = {
