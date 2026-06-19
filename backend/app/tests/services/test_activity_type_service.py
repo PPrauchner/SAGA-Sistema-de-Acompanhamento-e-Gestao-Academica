@@ -7,7 +7,7 @@ Responsabilidades:
 """
 
 import os
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, ANY
 
 # Configurar variáveis de ambiente dummy para satisfazer pydantic-settings
 os.environ["FIREBASE_PROJECT_ID"] = "test-project"
@@ -71,4 +71,4 @@ async def test_toggle_active_switches_status(service, mock_repo):
     result = await service.toggle_active("1")
 
     assert result is True
-    mock_repo.update_type.assert_called_with("1", {"ativo": False})
+    mock_repo.update_type.assert_called_with("1", {"ativo": False, "atualizado_em": ANY})

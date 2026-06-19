@@ -1,8 +1,8 @@
 """
-Tests for Vehicles API endpoints.
+Testes para os endpoints da API de Veículos.
 
 Responsabilidades:
-- Verify vehicle relevance level updates.
+- Verificar as atualizações de níveis de relevância de veículos.
 """
 
 import os
@@ -23,7 +23,7 @@ client = TestClient(app)
 
 
 def test_update_vehicle_level_success():
-    """Should return 200 on successful vehicle level update."""
+    """Deve retornar 200 ao atualizar o nível do veículo com sucesso."""
     # Setup mock service
     mock_service = AsyncMock()
     mock_service.update_vehicle_level.return_value = True

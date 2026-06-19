@@ -23,10 +23,10 @@ client = TestClient(app)
 
 
 def test_get_activity_types_success():
-    """Should return 200 and list of activity types."""
+    """Deve retornar 200 e a lista de tipos de atividade."""
     # Setup mock service
     mock_service = AsyncMock()
-    mock_service.get_all_by_program.return_value = [{"id": "1", "nome": "Artigo"}]
+    mock_service.get_all_by_program.return_value = [{"id": "1", "nome": "Artigo", "categoria": "tecnologico", "pontuacao_base": 5.0}]
 
     # Override dependencies
     from backend.app.core.auth import CurrentUser
@@ -47,7 +47,7 @@ def test_get_activity_types_success():
 
 
 def test_create_activity_type_success():
-    """Should return 201 on successful creation."""
+    """Deve retornar 201 ao criar com sucesso."""
     # Setup mock service
     mock_service = AsyncMock()
     mock_service.create_type.return_value = "new_id"

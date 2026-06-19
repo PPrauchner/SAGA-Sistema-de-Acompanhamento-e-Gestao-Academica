@@ -24,7 +24,7 @@ async def test_inference_reflects_program_config_change(monkeypatch):
     Com min_creditos_total=30 (nova config) -> Em Risco.
     """
     # 1. Setup com configuração padrão (24 créditos mínimos)
-    # _PROGRAM em fixtures.py já tem min_creditos_total=24
+    # _PROGRAM em fixtures.py já tem creditos_total_min=24
     repo = FixtureRepository()
     service = InferenceService(data_source=repo)
     
@@ -36,7 +36,7 @@ async def test_inference_reflects_program_config_change(monkeypatch):
     
     # 3. Alterar configuração do programa (Simulando Issue #47)
     # Usamos monkeypatch para alterar a constante no módulo de fixtures durante o teste
-    monkeypatch.setitem(_PROGRAM, "min_creditos_total", 30)
+    monkeypatch.setitem(_PROGRAM, "creditos_total_min", 100)
     
     # 4. Segunda inferência: deve ser 'em_risco' pois o aluno tem apenas 25 créditos
     result_after = await service.run_inference(student_id="aluno_regular", programa_id="prog_default")
@@ -45,7 +45,7 @@ async def test_inference_reflects_program_config_change(monkeypatch):
     assert result_after.situacao_inferida == "em_risco"
     assert result_after.creditos_validos is False
     assert result_after.em_risco is True
-    assert any("Créditos insuficientes (25/30)" in msg for msg in result_after.riscos_detectados)
+    assert any("Créditos insuficientes (25/100)" in msg for msg in result_after.riscos_detectados)
 
 @pytest.mark.anyio
 async def test_aptidao_defesa_aluno_apto():
@@ -55,7 +55,7 @@ async def test_aptidao_defesa_aluno_apto():
     
     result = await service.run_inference(student_id="aluno_apto", programa_id="prog_default")
     
-    assert result.situacao_inferida == "fase_defesa"
+    assert result.situacao_inferida == "em_fase_de_defesa"
     assert result.apto_defesa is True
     assert result.checklist.creditos_minimos.status == "cumprido"
     assert result.checklist.producao_validada.status == "cumprido"

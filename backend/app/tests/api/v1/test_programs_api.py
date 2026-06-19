@@ -1,9 +1,9 @@
 """
-Tests for Program API endpoints.
+Testes para os endpoints da API de Programas.
 
 Responsabilidades:
-- Verify GET and PUT endpoints for program configuration.
-- Ensure proper integration with ProgramService.
+- Verificar os endpoints GET e PUT para a configuração do programa.
+- Garantir a integração correta com o ProgramService.
 """
 
 import os
@@ -24,7 +24,7 @@ client = TestClient(app)
 
 
 def test_get_config_success():
-    """Should return 200 and config data."""
+    """Deve retornar 200 e os dados de configuração."""
     # Setup mock service
     mock_service = AsyncMock()
     mock_service.get_config.return_value = {"id": "prog_default", "creditos_total_min": 24}
@@ -48,7 +48,7 @@ def test_get_config_success():
 
 
 def test_update_config_success():
-    """Should return 200 on successful update."""
+    """Deve retornar 200 ao atualizar com sucesso."""
     # Setup mock service
     mock_service = AsyncMock()
     mock_service.update_config.return_value = True
