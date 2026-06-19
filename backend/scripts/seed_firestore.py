@@ -13,7 +13,7 @@ Responsabilidades:
 - Popular activity_types/ com os 4 tipos de atividade creditável NÃO bibliográfica:
   Disciplina Cursada (básico, 4), Estágio Docência (básico, 2),
   Software Registrado (tecnológico, 3, limite=4), Participação Banca (básico, 1).
-  Publicações (artigo/livro/capítulo) são produções (subcoleção productions, RL05), não
+  Publicações (artigo/livro/capítulo) são produções (coleção raiz productions, RL05), não
   activity_types — a distinção publicado/submetido vive em status_publicacao.
 - Executar uma única vez no setup do ambiente de desenvolvimento ou produção.
 - Idempotente: verificar existência de documentos antes de criar para evitar duplicatas.
