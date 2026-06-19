@@ -4,6 +4,7 @@ import { LoginPage } from "./components/auth/LoginPage";
 import { RegisterPage } from "./components/auth/RegisterPage";
 import { PasswordRecoveryPage } from "./components/auth/PasswordRecoveryPage";
 import { FirstAccessPage } from "./components/auth/FirstAccessPage";
+import { ProfileUnavailablePage } from "./components/auth/ProfileUnavailablePage";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { StudentsPage } from "./components/students/StudentsPage";
 import { AdvisorsPage } from "./components/advisors/AdvisorsPage";
@@ -72,7 +73,7 @@ function PageRouter() {
 }
 
 function AppContent() {
-  const { currentPage, loading } = useApp();
+  const { currentPage, loading, profileUnavailable } = useApp();
 
   // Enquanto o estado de autenticação inicial não resolve, evita o flash da
   // tela de login para usuários já autenticados.
@@ -83,6 +84,13 @@ function AppContent() {
         Carregando…
       </div>
     );
+  }
+
+  // Sessão válida, mas perfil indisponível (GET /auth/me falhou): estado degradado
+  // com retry. Precede a checagem de página de auth para não cair no login mesmo que
+  // currentPage ainda seja "login".
+  if (profileUnavailable) {
+    return <ProfileUnavailablePage />;
   }
 
   const isAuthPage = ["login", "register", "password-recovery", "first-access"].includes(currentPage);
