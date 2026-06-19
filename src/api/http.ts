@@ -2,14 +2,27 @@
  * Helper HTTP compartilhado pelas camadas de API do frontend.
  *
  * Responsabilidades:
- * - Resolver a base da API a partir de VITE_API_URL (fallback: http://localhost:8000/api/v1).
- * - Expor apiGet(path, token?): faz GET com header Authorization: Bearer <token> quando um
- *   token é fornecido (forward-compatible com a autenticação das issues #04/#10).
+ * - API_ROOT: fonte única da base da API, derivada de VITE_API_URL (host raiz, SEM o
+ *   prefixo de versão /api/v1 — o código é dono do prefixo). Fallback: http://localhost:8000.
+ *   Normaliza o valor para tolerar barra final e um /api/v1 acidental.
+ * - apiGet(path, token?): faz GET com header Authorization: Bearer <token> quando um token é
+ *   fornecido (forward-compatible com a autenticação das issues #04/#10), contra API_ROOT/api/v1.
  * - Lançar erro com o status HTTP em respostas não-ok, para tratamento nas páginas.
  */
 
-const API_BASE: string =
-  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000/api/v1";
+// Fonte única da base da API: único ponto que lê VITE_API_URL no frontend. Mantém o host
+// raiz sem /api/v1 para que clientes que embutem o prefixo no path e clientes que usam
+// a base com prefixo derivem da mesma origem (evita /api/v1 duplicado ou ausente — issue #114).
+// Normaliza removendo barra(s) final(is) e um sufixo /api/v1 acidental, tornando a base
+// robusta independentemente de como VITE_API_URL é informado.
+export const API_ROOT: string = (
+  (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000"
+)
+  .replace(/\/+$/, "")
+  .replace(/\/api\/v1$/, "");
+
+// Base com prefixo de versão, usada internamente por apiGet.
+const API_BASE: string = `${API_ROOT}/api/v1`;
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
