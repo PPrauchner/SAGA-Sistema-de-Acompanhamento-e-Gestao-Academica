@@ -19,7 +19,7 @@ from pydantic import BaseModel
 
 VehicleType = Literal["evento", "revista"]
 
-RelevanceLevel = Literal["A1", "A2", "B", "C"]
+RelevanceLevel = Literal["A1", "A2", "A3", "A4", "B1", "B2", "SC"]
 
 
 class VehicleCreate(BaseModel):
