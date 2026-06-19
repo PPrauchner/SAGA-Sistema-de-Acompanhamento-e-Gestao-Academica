@@ -35,6 +35,34 @@ class WorkPlanNotFoundError(Exception):
     """Recurso de plano de trabalho não encontrado."""
 
 
+async def _build_progress_update_alert(
+    result: ProgressUpdateCreated,
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> None:
+    service = args[0] if args else None
+    task_id = args[1] if len(args) > 1 else kwargs.get("task_id")
+    actor = args[3] if len(args) > 3 else kwargs.get("actor")
+    if service is None or task_id is None or not hasattr(service, "_repo"):
+        return None
+
+    plan, _, task = await service._repo.get_task_context(task_id)
+    await service._repo.create_notification(
+        {
+            "tipo": "progresso_task",
+            "titulo": "Atualizacao de progresso",
+            "mensagem": f"{actor.nome if actor else 'Sistema'} atualizou {task['titulo']}.",
+            "destinatario_id": "orientador",
+            "entidade_id": task_id,
+            "student_id": plan["student_id"],
+            "lida": False,
+            "timestamp": datetime.now(timezone.utc),
+        }
+    )
+    result.notificacao_enviada_ao_orientador = True
+    return None
+
+
 class WorkPlanService:
     """Orquestra CRUD, progresso e fatos consumidos pela inferência."""
 
@@ -115,7 +143,7 @@ class WorkPlanService:
             fato_plano_concluido=plan_fact,
         )
 
-    @trigger_alerts
+    @trigger_alerts(_build_progress_update_alert)
     @check_deadlines
     async def add_progress_update(
         self,
