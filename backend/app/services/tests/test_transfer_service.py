@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.app.core.auth import CurrentUser
-from backend.app.models.transfer import DirectTransferRequest
+from backend.app.models.transfer import DirectTransferRequest, TransferCreateRequest
 from backend.app.services import transfer_service as transfer_module
 from backend.app.services.transfer_service import TransferService
 
@@ -71,6 +71,39 @@ class _FakeTransferRepository(_FakeRepo):
             None,
         )
 
+    async def create_request(self, data: dict[str, Any]) -> str:
+        return await self.create(data)
+
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            request
+            for request in await self.list_all()
+            if request.get("programa_id") == programa_id
+        ]
+
+    async def list_by_requester(self, solicitante_id: str) -> list[dict[str, Any]]:
+        return [
+            request
+            for request in await self.list_all()
+            if request.get("solicitante_id") == solicitante_id
+        ]
+
+    async def approve(self, transfer_id: str, data: dict[str, Any]) -> None:
+        await self.update(transfer_id, {"status": "aprovada", **data})
+
+    async def reject(self, transfer_id: str, data: dict[str, Any]) -> None:
+        await self.update(transfer_id, {"status": "rejeitada", **data})
+
+    async def cancel(self, transfer_id: str, data: dict[str, Any]) -> None:
+        await self.update(transfer_id, {"status": "cancelada", **data})
+
+
+class _FakeUserRepository(_FakeRepo):
+    store: dict[str, dict[str, Any]] = {}
+
+    def __init__(self, collection: str) -> None:
+        self.collection = collection
+
 
 def _coord() -> CurrentUser:
     return CurrentUser(
@@ -78,6 +111,15 @@ def _coord() -> CurrentUser:
         role="coordenacao",
         programa_id="prog",
         email="coord@saga.test",
+    )
+
+
+def _advisor_user() -> CurrentUser:
+    return CurrentUser(
+        uid="uid-origin",
+        role="orientador",
+        programa_id="prog",
+        email="origem@saga.test",
     )
 
 
@@ -115,9 +157,17 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     }
     _FakeTransferRepository.store = {}
     _FakeTransferRepository.counter = 0
+    _FakeUserRepository.store = {
+        "coord1": {
+            "role": "coordenacao",
+            "programa_id": "prog",
+            "email": "coord@saga.test",
+        },
+    }
     monkeypatch.setattr(transfer_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(transfer_module, "AdvisorRepository", _FakeAdvisorRepository)
     monkeypatch.setattr(transfer_module, "TransferRepository", _FakeTransferRepository)
+    monkeypatch.setattr(transfer_module, "FirebaseRepository", _FakeUserRepository)
 
 
 async def test_direct_transfer_atualiza_orientador_e_cria_request_aprovada() -> None:
@@ -210,3 +260,158 @@ async def test_direct_transfer_bloqueia_programa_diferente() -> None:
 
     assert exc_info.value.status_code == 400
     assert "mesmo programa" in str(exc_info.value.detail)
+
+
+async def test_orientador_cria_solicitacao_para_orientando_proprio() -> None:
+    result = await TransferService().create_request(
+        TransferCreateRequest(student_id="student1", orientador_destino_id="advisor2"),
+        _advisor_user(),
+    )
+
+    assert result["status"] == "pendente"
+    assert result["orientador_origem_id"] == "advisor1"
+    assert result["coord_uids"] == ["coord1"]
+    assert _FakeTransferRepository.store[result["id"]]["status"] == "pendente"
+
+
+async def test_orientador_nao_cria_solicitacao_para_aluno_de_outro_orientador() -> None:
+    _FakeStudentRepository.store["student1"]["orientador_id"] = "advisor2"
+
+    with pytest.raises(HTTPException) as exc_info:
+        await TransferService().create_request(
+            TransferCreateRequest(student_id="student1", orientador_destino_id="advisor3"),
+            _advisor_user(),
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_segunda_solicitacao_pendente_retorna_409() -> None:
+    _FakeTransferRepository.store = {
+        "transfer_old": {
+            "student_id": "student1",
+            "status": "pendente",
+            "solicitante_id": "uid-origin",
+            "programa_id": "prog",
+        },
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await TransferService().create_request(
+            TransferCreateRequest(student_id="student1", orientador_destino_id="advisor2"),
+            _advisor_user(),
+        )
+
+    assert exc_info.value.status_code == 409
+
+
+async def test_aprovacao_transfere_aluno_reaproveitando_efetivacao() -> None:
+    _FakeTransferRepository.store = {
+        "transfer1": {
+            "student_id": "student1",
+            "orientador_origem_id": "advisor1",
+            "orientador_destino_id": "advisor2",
+            "status": "pendente",
+            "solicitante_id": "uid-origin",
+            "programa_id": "prog",
+        },
+    }
+
+    result = await TransferService().approve_request("transfer1", _coord())
+
+    assert result["status"] == "aprovada"
+    assert _FakeStudentRepository.store["student1"]["orientador_id"] == "advisor2"
+    assert _FakeTransferRepository.store["transfer1"]["status"] == "aprovada"
+    assert _FakeTransferRepository.store["transfer1"]["decidido_por"] == "coord1"
+
+
+async def test_rejeicao_exige_motivo() -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await TransferService().reject_request("transfer1", "  ", _coord())
+
+    assert exc_info.value.status_code == 422
+
+
+async def test_rejeicao_salva_motivo_e_decisor() -> None:
+    _FakeTransferRepository.store = {
+        "transfer1": {
+            "student_id": "student1",
+            "orientador_origem_id": "advisor1",
+            "orientador_destino_id": "advisor2",
+            "status": "pendente",
+            "solicitante_id": "uid-origin",
+            "programa_id": "prog",
+        },
+    }
+
+    result = await TransferService().reject_request("transfer1", "Destino indisponivel", _coord())
+
+    assert result["status"] == "rejeitada"
+    assert _FakeTransferRepository.store["transfer1"]["motivo"] == "Destino indisponivel"
+    assert _FakeTransferRepository.store["transfer1"]["decidido_por"] == "coord1"
+
+
+async def test_cancelamento_so_funciona_para_solicitante_pendente() -> None:
+    _FakeTransferRepository.store = {
+        "transfer1": {
+            "student_id": "student1",
+            "orientador_origem_id": "advisor1",
+            "orientador_destino_id": "advisor2",
+            "status": "pendente",
+            "solicitante_id": "uid-origin",
+            "programa_id": "prog",
+        },
+    }
+
+    result = await TransferService().cancel_request("transfer1", _advisor_user())
+
+    assert result["status"] == "cancelada"
+    assert _FakeTransferRepository.store["transfer1"]["status"] == "cancelada"
+    assert _FakeTransferRepository.store["transfer1"]["cancelado_por"] == "uid-origin"
+
+
+async def test_cancelamento_bloqueia_outro_orientador() -> None:
+    _FakeTransferRepository.store = {
+        "transfer1": {
+            "student_id": "student1",
+            "orientador_origem_id": "advisor1",
+            "orientador_destino_id": "advisor2",
+            "status": "pendente",
+            "solicitante_id": "outro",
+            "programa_id": "prog",
+        },
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await TransferService().cancel_request("transfer1", _advisor_user())
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_listagem_filtra_por_papel() -> None:
+    _FakeTransferRepository.store = {
+        "transfer1": {
+            "student_id": "student1",
+            "status": "pendente",
+            "solicitante_id": "uid-origin",
+            "programa_id": "prog",
+        },
+        "transfer2": {
+            "student_id": "student2",
+            "status": "pendente",
+            "solicitante_id": "outro",
+            "programa_id": "prog",
+        },
+        "transfer3": {
+            "student_id": "student3",
+            "status": "pendente",
+            "solicitante_id": "uid-origin",
+            "programa_id": "outro",
+        },
+    }
+
+    coord_result = await TransferService().list_requests(_coord())
+    advisor_result = await TransferService().list_requests(_advisor_user())
+
+    assert {item["id"] for item in coord_result} == {"transfer1", "transfer2"}
+    assert {item["id"] for item in advisor_result} == {"transfer1", "transfer3"}
