@@ -8,8 +8,7 @@ Responsabilidades:
   creditos_grupo_tecnologico_max=4, creditos_total_min=24, max_prorrogacoes=1,
   duracao_prorrogacao_meses=6, meses_ate_qualificacao=12.
 - Popular programs/prog_default/vehicle_levels/ com os níveis de relevância padrão
-  (configuráveis): A1 (peso 1.0), A2 (0.85), A3 (0.7), A4 (0.7), B1 (0.5), B2 (0.5),
-  SC/Sem Classificação (0.2).
+  (configuráveis): A1 (peso 2.0), A2 (1.5), B (1.0), C (0.5).
 - Popular activity_types/ com os 4 tipos de atividade creditável NÃO bibliográfica:
   Disciplina Cursada (básico, 4), Estágio Docência (básico, 2),
   Software Registrado (tecnológico, 3, limite=4), Participação Banca (básico, 1).
