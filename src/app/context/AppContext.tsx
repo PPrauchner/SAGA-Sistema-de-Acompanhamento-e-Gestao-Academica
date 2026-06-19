@@ -41,6 +41,8 @@ interface AppContextType {
   notificationCount: number;
   mobileMenuOpen: boolean;
   loading: boolean;
+  profileUnavailable: boolean;
+  retryProfile: () => Promise<void>;
   login: (email: string, senha: string) => Promise<void>;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
@@ -72,7 +74,7 @@ const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
 };
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { profile, login, logout: signOut, loading } = useAuth();
+  const { currentUser: firebaseUser, profile, profileError, login, logout: signOut, loading, retryProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -93,21 +95,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     : null;
 
+  // Sessão Firebase válida, mas perfil indisponível (GET /auth/me falhou). Distinto
+  // de "deslogado": o usuário permanece na app em estado degradado, com retry.
+  const profileUnavailable = !!firebaseUser && profileError && !profile;
+
   // Guarda de rota: redireciona conforme o estado de autenticação e o papel.
   useEffect(() => {
     if (loading) return;
     const onAuthPage = AUTH_PAGES.includes(currentPage);
-    if (!profile) {
+    // Sem sessão Firebase → genuinamente deslogado.
+    if (!firebaseUser) {
       if (!onAuthPage) setCurrentPage("login");
       return;
     }
+    // Sessão válida, mas perfil ainda não carregado/indisponível: mantém o usuário na
+    // app (AppContent renderiza o estado degradado). Sem perfil não há papel a avaliar.
+    if (!profile) return;
     if (onAuthPage) {
       setCurrentPage("dashboard");
       return;
     }
     const allowed = PAGE_ROLES[currentPage] ?? ALL_ROLES;
     if (!allowed.includes(profile.role)) setCurrentPage("dashboard");
-  }, [loading, profile, currentPage]);
+  }, [loading, firebaseUser, profile, currentPage]);
 
   const toggleDarkMode = () => {
     setDarkMode((d) => {
@@ -134,6 +144,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         notificationCount,
         mobileMenuOpen,
         loading,
+        profileUnavailable,
+        retryProfile,
         login,
         setCurrentPage,
         setSelectedStudentId,
