@@ -14,6 +14,7 @@ export type PageId =
   | "producoes"
   | "checklist"
   | "prorrogacoes"
+  | "transferencias"
   | "relatorios"
   | "inferencia"
   | "auditoria"
@@ -42,6 +43,7 @@ interface AppContextType {
   notificationCount: number;
   mobileMenuOpen: boolean;
   loading: boolean;
+  token: string | null;
   login: (email: string, senha: string) => Promise<void>;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
@@ -54,7 +56,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { profile, login, logout: signOut, loading } = useAuth();
+  const { profile, token, login, logout: signOut, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -100,6 +102,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         notificationCount,
         mobileMenuOpen,
         loading,
+        token,
         login,
         setCurrentPage,
         setSelectedStudentId,
