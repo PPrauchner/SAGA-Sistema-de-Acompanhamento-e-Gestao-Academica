@@ -1,5 +1,5 @@
 """
-Aspecto A03 — Histórico de Alterações das Entidades (Before + After advice).
+Aspecto A03 — Histórico de Alterações (Before+After advice).
 
 Responsabilidades:
 - Implementar HistoryMeta (metaclasse) ou decorador @track_history para versionar entidades

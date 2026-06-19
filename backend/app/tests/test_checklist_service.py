@@ -18,6 +18,7 @@ def checklist_service() -> ChecklistService:
     return ChecklistService(InferenceService(repo), repo)
 
 
+@pytest.mark.anyio
 async def test_checklist_sem_conflito(checklist_service: ChecklistService) -> None:
     response = await checklist_service.get_checklist("aluno_apto")
     assert response.situacao_registrada == "em_fase_de_defesa"
@@ -31,6 +32,7 @@ async def test_checklist_sem_conflito(checklist_service: ChecklistService) -> No
     assert response.snapshot_id != ""
 
 
+@pytest.mark.anyio
 async def test_checklist_com_conflito(checklist_service: ChecklistService) -> None:
     response = await checklist_service.get_checklist("aluno_risco")
     # Registrada como 'regular', mas o motor infere 'em_risco'.
@@ -41,12 +43,14 @@ async def test_checklist_com_conflito(checklist_service: ChecklistService) -> No
     assert response.requisitos.plano_concluido.tasks_total_nao_defesa == 3
 
 
+@pytest.mark.anyio
 async def test_checklist_requisitos_com_descricao(checklist_service: ChecklistService) -> None:
     response = await checklist_service.get_checklist("aluno_regular")
     assert "créditos totais" in response.requisitos.creditos_minimos.descricao
     assert response.requisitos.creditos_grupo_tecnologico.maximo == 4
 
 
+@pytest.mark.anyio
 async def test_aluno_recem_todos_nao_cumpridos_pendente(checklist_service: ChecklistService) -> None:
     """Aluno no primeiro dia: nenhum flag de risco deve disparar → todos "pendente"."""
     response = await checklist_service.get_checklist("aluno_recem")
@@ -60,6 +64,7 @@ async def test_aluno_recem_todos_nao_cumpridos_pendente(checklist_service: Check
     assert response.requisitos.plano_concluido.status == "pendente"
 
 
+@pytest.mark.anyio
 async def test_aluno_credito_risco_itens_credito_em_risco(checklist_service: ChecklistService) -> None:
     """Aluno na metade do prazo sem créditos: itens de crédito "em_risco", demais "pendente"."""
     response = await checklist_service.get_checklist("aluno_credito_risco")
@@ -72,6 +77,7 @@ async def test_aluno_credito_risco_itens_credito_em_risco(checklist_service: Che
     assert response.requisitos.plano_concluido.status == "pendente"
 
 
+@pytest.mark.anyio
 async def test_aluno_qual_risco_qualificacao_em_risco(checklist_service: ChecklistService) -> None:
     """Qualificação pendente com prazo < 90 dias: qualificacao "em_risco", créditos cumpridos."""
     response = await checklist_service.get_checklist("aluno_qual_risco")
@@ -80,6 +86,7 @@ async def test_aluno_qual_risco_qualificacao_em_risco(checklist_service: Checkli
     assert response.requisitos.plano_concluido.status == "cumprido"
 
 
+@pytest.mark.anyio
 async def test_aluno_plano_risco_plano_em_risco(checklist_service: ChecklistService) -> None:
     """Plano 0% concluído com ~75% do prazo decorrido: plano_concluido "em_risco"."""
     response = await checklist_service.get_checklist("aluno_plano_risco")
@@ -88,6 +95,7 @@ async def test_aluno_plano_risco_plano_em_risco(checklist_service: ChecklistServ
     assert response.requisitos.qualificacao.status == "cumprido"
 
 
+@pytest.mark.anyio
 async def test_aluno_prazo_expirado_todos_pendentes_em_risco(checklist_service: ChecklistService) -> None:
     """Prazo expirado: proficiência e produção (sem cláusula própria) ficam "em_risco"."""
     response = await checklist_service.get_checklist("aluno_risco")

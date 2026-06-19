@@ -15,6 +15,7 @@ Responsabilidades:
 
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,7 +38,19 @@ class Settings(BaseSettings):
 
     # API
     api_version: str = "1.0.0-MVP"
-    cors_origins: list[str] = ["http://localhost:5173"]
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+    ]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
+        """Garante que strings separadas por vírgula no .env virem uma lista."""
+        if isinstance(v, str) and not v.startswith("["):
+            return [i.strip() for i in v.split(",")]
+        return v
 
     # Base do frontend — usada para montar o link de primeiro acesso no e-mail de convite.
     frontend_url: str = "http://localhost:5173"
