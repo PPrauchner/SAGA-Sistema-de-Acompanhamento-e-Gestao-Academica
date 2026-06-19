@@ -38,7 +38,7 @@ service = AdvisorService()
 
 
 @router.get("/advisors")
-@requires_role("coordenacao")
+@requires_role("coordenacao", "orientador")
 async def list_advisors(
     user: CurrentUser = Depends(
         get_current_user,
