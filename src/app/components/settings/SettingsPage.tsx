@@ -122,7 +122,7 @@ export function SettingsPage() {
         toast.success("Tipo de atividade atualizado!");
       } else {
         const created = await activityTypesApi.createActivityType(token, currentActivity);
-        setActivityTypes([...activityTypes, created]);
+        setActivityTypes([...activityTypes, { ...currentActivity, id: created.id }]);
         toast.success("Tipo de atividade criado!");
       }
       setIsActivityModalOpen(false);
