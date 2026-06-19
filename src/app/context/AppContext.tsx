@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, ReactNode } from "react";
+
 import { useAuth } from "@/hooks/useAuth";
 
 export type UserRole = "aluno" | "orientador" | "coordenacao";
@@ -52,25 +53,6 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Páginas de autenticação (acessíveis sem sessão). Fora deste conjunto, toda
-// página exige usuário autenticado.
-const AUTH_PAGES: PageId[] = [
-  "login", "register", "password-recovery", "first-access",
-];
-
-// Guarda de rota por papel — espelha os `roles` de NAV_ITEMS no Sidebar. Páginas
-// ausentes deste mapa são liberadas para qualquer usuário autenticado.
-const ALL_ROLES: UserRole[] = ["aluno", "orientador", "coordenacao"];
-const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
-  alunos: ["orientador", "coordenacao"],
-  "aluno-detail": ["orientador", "coordenacao"],
-  orientadores: ["coordenacao"],
-  "orientador-detail": ["coordenacao"],
-  relatorios: ["orientador", "coordenacao"],
-  inferencia: ["orientador", "coordenacao"],
-  auditoria: ["coordenacao"],
-};
-
 export function AppProvider({ children }: { children: ReactNode }) {
   const { profile, login, logout: signOut, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
@@ -93,22 +75,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     : null;
 
-  // Guarda de rota: redireciona conforme o estado de autenticação e o papel.
-  useEffect(() => {
-    if (loading) return;
-    const onAuthPage = AUTH_PAGES.includes(currentPage);
-    if (!profile) {
-      if (!onAuthPage) setCurrentPage("login");
-      return;
-    }
-    if (onAuthPage) {
-      setCurrentPage("dashboard");
-      return;
-    }
-    const allowed = PAGE_ROLES[currentPage] ?? ALL_ROLES;
-    if (!allowed.includes(profile.role)) setCurrentPage("dashboard");
-  }, [loading, profile, currentPage]);
-
   const toggleDarkMode = () => {
     setDarkMode((d) => {
       const next = !d;
@@ -120,7 +86,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     void signOut();
     setMobileMenuOpen(false);
-    // O efeito de guarda redireciona para "login" quando o perfil é limpo.
+    // PrivateRoute redireciona para "login" quando o perfil é limpo.
   };
 
   return (

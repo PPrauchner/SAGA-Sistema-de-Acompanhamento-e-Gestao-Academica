@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 
 import { AppProvider, useApp } from "./context/AppContext";
+import { PrivateRoute, isAuthPage } from "./router/PrivateRoute";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LoginPage } from "./components/auth/LoginPage";
 import { RegisterPage } from "./components/auth/RegisterPage";
@@ -90,23 +91,19 @@ function PageLoading() {
   );
 }
 
+function FullPageLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-screen"
+      style={{ background: "var(--background)", color: "var(--muted-foreground)", fontSize: "14px" }}>
+      Carregando…
+    </div>
+  );
+}
+
 function AppContent() {
-  const { currentPage, loading } = useApp();
+  const { currentPage } = useApp();
 
-  // Enquanto o estado de autenticação inicial não resolve, evita o flash da
-  // tela de login para usuários já autenticados.
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen"
-        style={{ background: "var(--background)", color: "var(--muted-foreground)", fontSize: "14px" }}>
-        Carregando…
-      </div>
-    );
-  }
-
-  const isAuthPage = ["login", "register", "password-recovery", "first-access"].includes(currentPage);
-
-  if (isAuthPage) {
+  if (isAuthPage(currentPage)) {
     switch (currentPage) {
       case "login": return <LoginPage />;
       case "register": return <RegisterPage />;
@@ -128,7 +125,9 @@ function AppContent() {
 export default function App() {
   return (
     <AppProvider>
-      <AppContent />
+      <PrivateRoute loadingFallback={<FullPageLoading />}>
+        <AppContent />
+      </PrivateRoute>
     </AppProvider>
   );
 }
