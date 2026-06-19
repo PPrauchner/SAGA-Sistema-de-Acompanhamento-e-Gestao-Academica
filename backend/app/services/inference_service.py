@@ -233,10 +233,10 @@ class InferenceService:
         facts.append(Compound("total_creditos", [sid, Atom(total)]))
 
         # Configuração do programa.
-        min_basico = int(program.get("min_creditos_basico", 12))
-        min_especifico = int(program.get("min_creditos_especifico", 8))
-        max_tecnologico = int(program.get("max_creditos_tecnologico", 4))
-        min_total = int(program.get("min_creditos_total", 24))
+        min_basico = int(program.get("creditos_grupo_basico_min", 12))
+        min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
+        max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
+        min_total = int(program.get("creditos_total_min", 24))
         facts.append(Compound("min_creditos_basico", [prog, Atom(min_basico)]))
         facts.append(Compound("min_creditos_especifico", [prog, Atom(min_especifico)]))
         facts.append(Compound("max_creditos_tecnologico", [prog, Atom(max_tecnologico)]))
@@ -446,10 +446,10 @@ class InferenceService:
         risk_flags: dict[str, bool],
     ) -> InferenceChecklist:
         """Monta o checklist resumido por item (status cumprido/pendente/em_risco)."""
-        min_basico = int(program.get("min_creditos_basico", 12))
-        min_especifico = int(program.get("min_creditos_especifico", 8))
-        max_tecnologico = int(program.get("max_creditos_tecnologico", 4))
-        min_total = int(program.get("min_creditos_total", 24))
+        min_basico = int(program.get("creditos_grupo_basico_min", 12))
+        min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
+        max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
+        min_total = int(program.get("creditos_total_min", 24))
 
         risco_creditos = risk_flags["creditos_insuficientes"]
         risco_qualificacao = risk_flags["qualificacao_prazo_proximo"]
@@ -517,7 +517,7 @@ class InferenceService:
             messages.append(f"Prazo final expirado em {student.get('prazo_final')}")
         if risk_flags["creditos_insuficientes"]:
             messages.append(
-                f"Créditos insuficientes ({totals['total']}/{program.get('min_creditos_total', 24)})"
+                f"Créditos insuficientes ({totals['total']}/{program.get('creditos_total_min', 24)})"
             )
         if risk_flags["qualificacao_prazo_proximo"]:
             messages.append("Qualificação pendente com prazo próximo")

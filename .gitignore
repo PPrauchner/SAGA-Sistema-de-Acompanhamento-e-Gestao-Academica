@@ -250,5 +250,8 @@ Thumbs.db
 
 # Relatórios de revisão de PR (gerados internamente)
 docs/relatorios/
+
 # Google API credentials
 .credentials/
+
+.gemini
