@@ -8,13 +8,13 @@
  * - createProduction(token, data): POST /api/v1/productions — motor RL05 calcula pontuação
  *   imediatamente, retornando pontuacao_calculada, nivel_veiculo e peso_aplicado.
  * - getVehicles(token): GET /api/v1/vehicles — carrega veículos com nível de relevância real
- *   para substituir o seletor Qualis fixo (A1/A2/B/C) da ProductionsPage.
+ *   para substituir o seletor Qualis fixo (escala Qualis Único: A1/A2/A3/A4/B1/B2/SC) da ProductionsPage.
  * - Todas as funções incluem Authorization: Bearer <token> obtido via useAuth().
  */
 
 import { API_URL } from "@/api/authApi";
 
-export type RelevanceLevel = "A1" | "A2" | "B" | "C";
+export type RelevanceLevel = "A1" | "A2" | "A3" | "A4" | "B1" | "B2" | "SC";
 export type TipoProducao = "artigo" | "livro" | "capitulo";
 export type StatusPublicacao = "publicado" | "submetido" | "aceito";
 
