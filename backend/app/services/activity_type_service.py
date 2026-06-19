@@ -10,7 +10,7 @@ Responsabilidades:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import HTTPException, status
 
@@ -30,11 +30,11 @@ class ActivityTypeService:
         """
         self.repository = repository or ActivityTypeRepository()
 
-    async def list_types(self) -> List[Dict[str, Any]]:
+    async def list_types(self) -> list[dict[str, Any]]:
         """Lista todos os tipos do programa (acessível a aluno, orientador e coordenação)."""
         return await self.repository.list_all()
 
-    async def get_all_by_program(self, programa_id: str) -> List[Dict[str, Any]]:
+    async def get_all_by_program(self, programa_id: str) -> list[dict[str, Any]]:
         """Busca todos os tipos de atividades pertencentes a um programa específico.
 
         Args:

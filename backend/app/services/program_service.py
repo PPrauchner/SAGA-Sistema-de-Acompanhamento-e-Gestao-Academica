@@ -7,7 +7,7 @@ Responsabilidades:
 - Coordenar com o ProgramRepository para persistência de dados.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 from backend.app.models.program_config import ProgramConfigUpdate
 from backend.app.models.vehicle_level import VehicleLevelUpdate, VehicleLevelCreate
 from backend.app.repositories.program_repository import ProgramRepository
@@ -24,7 +24,7 @@ class ProgramService:
         """
         self.repository = repository or ProgramRepository()
 
-    async def get_config(self, programa_id: str) -> Optional[Dict[str, Any]]:
+    async def get_config(self, programa_id: str) -> dict[str, Any] | None:
         """Busca a configuração de um determinado programa.
 
         Args:
@@ -48,7 +48,7 @@ class ProgramService:
         update_dict = data.model_dump(exclude_unset=True)
         return await self.repository.update_config(programa_id, update_dict)
 
-    async def get_vehicle_levels(self, programa_id: str) -> List[Dict[str, Any]]:
+    async def get_vehicle_levels(self, programa_id: str) -> list[dict[str, Any]]:
         """Busca todos os níveis de relevância de veículos para um programa.
 
         Args:

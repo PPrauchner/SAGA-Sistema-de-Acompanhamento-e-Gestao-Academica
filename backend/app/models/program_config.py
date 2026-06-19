@@ -1,26 +1,26 @@
 """
-Pydantic models for academic program configurations.
+Modelos Pydantic para configurações de programas acadêmicos.
 
 Responsabilidades:
-- Define the structure for program configuration data (credits, deadlines, extensions).
-- Provide validation for configuration updates.
-- Enable seamless mapping between Firestore documents and Python objects.
+- Definir a estrutura para dados de configuração do programa (créditos, prazos, prorrogações).
+- Fornecer validação para atualizações de configuração.
+- Permitir mapeamento direto entre documentos Firestore e objetos Python.
 """
 
 from pydantic import BaseModel, ConfigDict
 
 
 class ProgramConfigBase(BaseModel):
-    """Base schema for program configurations.
+    """Schema base para configurações de programas.
 
     Attributes:
-        creditos_grupo_basico_min: Minimum credits required for the basic group.
-        creditos_grupo_especifico_min: Minimum credits required for the specific group.
-        creditos_grupo_tecnologico_max: Maximum credits allowed for the technological group.
-        creditos_total_min: Minimum total credits required for the program.
-        max_prorrogacoes: Maximum number of extensions allowed for students.
-        duracao_prorrogacao_meses: Duration of each extension in months.
-        meses_ate_qualificacao: Standard number of months until qualification.
+        creditos_grupo_basico_min: Créditos mínimos exigidos para o grupo básico.
+        creditos_grupo_especifico_min: Créditos mínimos exigidos para o grupo específico.
+        creditos_grupo_tecnologico_max: Máximo de créditos permitidos para o grupo tecnológico.
+        creditos_total_min: Mínimo total de créditos exigidos para o programa.
+        max_prorrogacoes: Número máximo de prorrogações permitidas para os alunos.
+        duracao_prorrogacao_meses: Duração de cada prorrogação em meses.
+        meses_ate_qualificacao: Número padrão de meses até a qualificação.
     """
     creditos_grupo_basico_min: int
     creditos_grupo_especifico_min: int
@@ -32,14 +32,14 @@ class ProgramConfigBase(BaseModel):
 
 
 class ProgramConfigCreate(ProgramConfigBase):
-    """Schema for creating a new program configuration."""
+    """Schema para criar uma nova configuração de programa."""
     pass
 
 
 class ProgramConfigUpdate(BaseModel):
-    """Schema for updating an existing program configuration.
+    """Schema para atualizar uma configuração de programa existente.
 
-    All fields are optional to support partial updates (PATCH/PUT).
+    Todos os campos são opcionais para suportar atualizações parciais (PATCH/PUT).
     """
     creditos_grupo_basico_min: int | None = None
     creditos_grupo_especifico_min: int | None = None
@@ -51,7 +51,7 @@ class ProgramConfigUpdate(BaseModel):
 
 
 class ProgramConfig(ProgramConfigBase):
-    """Full representation of a program configuration, including its ID."""
+    """Representação completa de uma configuração de programa, incluindo seu ID."""
     model_config = ConfigDict(from_attributes=True)
 
     id: str

@@ -14,7 +14,7 @@ class VehicleLevelBase(BaseModel):
 
     Attributes:
         veiculo_id: O identificador único do veículo.
-        nivel: O nível de relevância (ex: 'A1', 'A2', 'B1').
+        nivel: O nível de relevância (ex: 'A1', 'A2', 'B', 'C').
         peso: O peso numérico atribuído a este nível para pontuação (RL05).
     """
     veiculo_id: str

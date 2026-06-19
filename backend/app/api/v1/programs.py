@@ -1,10 +1,10 @@
 """
-Router for academic program configuration endpoints.
+Router para os endpoints de configuração do programa acadêmico.
 
 Responsabilidades:
-- GET /config: Retrieve the current program configuration.
-- PUT /config: Update program configuration (coordination only).
-- Apply AOP aspects: @requires_role, @audit_operation, @track_history.
+- GET /config: Recuperar a configuração atual do programa.
+- PUT /config: Atualizar a configuração do programa (somente coordenação).
+- Aplicar aspectos AOP: @requires_role, @audit_operation, @track_history.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -26,7 +26,7 @@ async def get_config(
     user: CurrentUser = Depends(get_current_user),
     service: ProgramService = Depends(ProgramService)
 ):
-    """Fetches the configuration for the user's program."""
+    """Busca a configuração do programa do usuário."""
     config = await service.get_config(user.programa_id)
     if not config:
         raise HTTPException(status_code=404, detail="Configuração não encontrada")
@@ -42,7 +42,7 @@ async def update_config(
     user: CurrentUser = Depends(get_current_user),
     service: ProgramService = Depends(ProgramService)
 ):
-    """Updates the program configuration."""
+    """Atualiza a configuração do programa."""
     success = await service.update_config(user.programa_id, data)
     if not success:
         raise HTTPException(status_code=500, detail="Falha ao atualizar configuração")
