@@ -11,7 +11,6 @@ Responsabilidades:
   (média de data_conclusao - data_ingresso).
 - GET /api/v1/reports/productions: produção bibliográfica por aluno e por orientador com
   pontuação total e distribuição por nível de relevância. Aplica @audit_operation.
-
 Sem lógica de negócio — cada endpoint apenas recebe a request, delega ao ReportService e
 retorna a response.
 """
