@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from backend.app.repositories.activity_repository import ActivityRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.student_repository import StudentRepository
@@ -60,6 +61,7 @@ class InferenceRepository:
         self._students = StudentRepository()
         self._programs = FirebaseRepository("programs")
         self._productions = ProductionRepository()
+        self._activities = ActivityRepository()
         self._vehicles = VehicleRepository()
 
     async def get_student(self, student_id: str) -> dict[str, Any] | None:
@@ -135,10 +137,12 @@ class InferenceRepository:
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as produções aprovadas do aluno com nível do veículo e pontuação base.
 
-        Junta cada produção ao seu nível de relevância em programs/{id}/vehicle_levels/
-        (campo usado pelo fato RL05 nivel_relevancia). Filtra por status='aprovado' — o
-        fluxo de aprovação (orientador → coordenação) pertence à #45; até lá nenhuma
-        produção fica aprovada e o fato producao_bibliografica_validada não dispara.
+        Com a FK invertida, o vínculo aluno↔produção vive em students/{id}/activities
+        (activities.producao_id) e o status de validação fica na atividade, não na produção.
+        Lê as atividades do aluno com producao_id, filtra por status='aprovado' e busca cada
+        produção correspondente na coleção raiz productions/, juntando-a ao seu nível de
+        relevância em programs/{id}/vehicle_levels/ (campo usado pelo fato RL05
+        nivel_relevancia).
 
         Args:
             student_id: ID do documento em students/.
@@ -149,13 +153,17 @@ class InferenceRepository:
         student = await self._students.get(student_id)
         programa_id = student.get("programa_id", "prog_default") if student else "prog_default"
 
-        productions = await self._productions.list_by_student(student_id)
+        activities = await self._activities.list_by_student(student_id)
         levels = await self._vehicles.list_levels(programa_id)
         nivel_by_vehicle = {level["id"]: level.get("nivel") for level in levels}
 
         result: list[dict[str, Any]] = []
-        for production in productions:
-            if production.get("status") != "aprovado":
+        for activity in activities:
+            producao_id = activity.get("producao_id")
+            if not producao_id or activity.get("status") != "aprovado":
+                continue
+            production = await self._productions.get(producao_id)
+            if production is None:
                 continue
             veiculo_id = production.get("veiculo_id")
             result.append(

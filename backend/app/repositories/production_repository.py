@@ -1,12 +1,14 @@
 """
-Repositório concreto para a sub-coleção students/{id}/productions.
+Repositório concreto para a coleção raiz productions/.
 
 Responsabilidades:
-- create(student_id, data): cria documento de produção com auto-id na sub-coleção.
-- list_by_student(student_id): lista as produções de um aluno, incluindo o id de cada uma.
+- create(data): cria documento de produção com auto-id na coleção raiz.
+- get(production_id): lê uma produção por id (com o id injetado), ou None.
 
-Restrição: sem lógica de negócio — apenas leitura e escrita. Pontuação RL05 e níveis de
-veículo são resolvidos pelo ProductionService e pelo InferenceRepository.
+Restrição: sem lógica de negócio — apenas leitura e escrita. A produção é coleção raiz; o
+vínculo com cada aluno autor vive em students/{id}/activities (activities.producao_id). A
+pontuação RL05 e os níveis de veículo são resolvidos pelo ProductionService e pelo
+InferenceRepository.
 """
 
 from __future__ import annotations
@@ -15,21 +17,17 @@ from typing import Any
 
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
-_PRODUCTIONS_SUBCOLLECTION = "productions"
-
 
 class ProductionRepository:
-    """Repositório da sub-coleção productions de cada aluno."""
+    """Repositório da coleção raiz productions/."""
 
     def __init__(self) -> None:
-        self._students = FirebaseRepository("students")
+        self._productions = FirebaseRepository("productions")
 
-    async def create(self, student_id: str, data: dict[str, Any]) -> str:
-        return await self._students.set_subcollection_auto(
-            student_id, _PRODUCTIONS_SUBCOLLECTION, data
-        )
+    async def create(self, data: dict[str, Any]) -> str:
+        """Cria uma produção na coleção raiz e retorna o id gerado."""
+        return await self._productions.create(data)
 
-    async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
-        return await self._students.list_subcollection(
-            student_id, _PRODUCTIONS_SUBCOLLECTION
-        )
+    async def get(self, production_id: str) -> dict[str, Any] | None:
+        """Lê uma produção por id (com o id injetado), ou None se não existir."""
+        return await self._productions.get(production_id)
