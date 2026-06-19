@@ -6,6 +6,33 @@ import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
 import { toast } from "sonner";
 
+export interface ProgramConfig {
+  id?: string;
+  creditos_grupo_basico_min: number;
+  creditos_grupo_especifico_min: number;
+  creditos_grupo_tecnologico_max: number;
+  creditos_total_min: number;
+  meses_ate_qualificacao: number;
+}
+
+export interface ActivityType {
+  id?: string;
+  nome: string;
+  categoria: string;
+  pontuacao_base: number;
+  exige_comprovante?: boolean;
+  limite_maximo_creditos?: number | null;
+  permite_multiplas?: boolean;
+  ativo?: boolean;
+  programa_id?: string;
+}
+
+export interface VehicleLevel {
+  id: string;
+  nivel: string;
+  peso: number;
+}
+
 const BASE_TABS = [
   { id: "perfil", label: "Perfil", icon: <User size={16} /> },
   { id: "notificacoes", label: "Notificações", icon: <Bell size={16} /> },
@@ -22,15 +49,16 @@ export function SettingsPage() {
   const [loading, setLoading] = useState(false);
 
   // Program Config State
-  const [programConfig, setProgramConfig] = useState<any>(null);
-  const [activityTypes, setActivityTypes] = useState<any[]>([]);
+  const [programConfig, setProgramConfig] = useState<ProgramConfig | null>(null);
+  const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
+  const [vehicleLevels, setVehicleLevels] = useState<VehicleLevel[]>([]);
 
   // Modal States
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
-  const [currentActivity, setCurrentActivity] = useState<any>(null);
+  const [currentActivity, setCurrentActivity] = useState<ActivityType | null>(null);
   
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
-  const [currentVehicle, setCurrentVehicle] = useState<any>(null);
+  const [currentVehicle, setCurrentVehicle] = useState<VehicleLevel | null>(null);
 
   useEffect(() => {
     if (activeTab === "programa" && currentUser?.role === "coordenacao") {
@@ -42,12 +70,14 @@ export function SettingsPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const [config, types] = await Promise.all([
+      const [config, types, vLevels] = await Promise.all([
         programsApi.getProgramConfig(token),
-        activityTypesApi.getActivityTypes(token)
+        activityTypesApi.getActivityTypes(token),
+        programsApi.getVehicleLevels(token)
       ]);
       setProgramConfig(config);
       setActivityTypes(types);
+      setVehicleLevels(vLevels);
     } catch (error) {
       toast.error("Erro ao carregar dados do programa");
     } finally {
@@ -84,11 +114,11 @@ export function SettingsPage() {
 
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
+    if (!token || !currentActivity) return;
     try {
       if (currentActivity.id) {
-        const updated = await activityTypesApi.updateActivityType(token, currentActivity.id, currentActivity);
-        setActivityTypes(activityTypes.map(t => t.id === updated.id ? updated : t));
+        await activityTypesApi.updateActivityType(token, currentActivity.id, currentActivity);
+        setActivityTypes(activityTypes.map(t => t.id === currentActivity.id ? currentActivity : t));
         toast.success("Tipo de atividade atualizado!");
       } else {
         const created = await activityTypesApi.createActivityType(token, currentActivity);
@@ -103,13 +133,13 @@ export function SettingsPage() {
 
   const handleSaveVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token) return;
+    if (!token || !currentVehicle) return;
     try {
-      const updatedConfig = await programsApi.updateVehicleLevel(token, currentVehicle.id, {
+      await programsApi.updateVehicleLevel(token, currentVehicle.id, {
         nivel: currentVehicle.nivel,
         peso: currentVehicle.peso
       });
-      setProgramConfig(updatedConfig);
+      setVehicleLevels(vehicleLevels.map(v => v.id === currentVehicle.id ? currentVehicle : v));
       toast.success("Nível de veículo atualizado!");
       setIsVehicleModalOpen(false);
     } catch (error) {
@@ -118,16 +148,16 @@ export function SettingsPage() {
   };
 
   const openNewActivityModal = () => {
-    setCurrentActivity({ nome: "", categoria: "tecnologico", pontuacao_base: 10, exige_comprovante: true, maximo_creditos: null });
+    setCurrentActivity({ nome: "", categoria: "tecnologico", pontuacao_base: 10, exige_comprovante: true, limite_maximo_creditos: null, programa_id: currentUser?.programa_id });
     setIsActivityModalOpen(true);
   };
 
-  const openEditActivityModal = (type: any) => {
+  const openEditActivityModal = (type: ActivityType) => {
     setCurrentActivity({ ...type });
     setIsActivityModalOpen(true);
   };
 
-  const openEditVehicleModal = (level: any) => {
+  const openEditVehicleModal = (level: VehicleLevel) => {
     setCurrentVehicle({ ...level });
     setIsVehicleModalOpen(true);
   };
@@ -481,20 +511,20 @@ export function SettingsPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {programConfig?.niveis_veiculo?.map((level: any) => (
+                  {vehicleLevels.map((level) => (
                     <div key={level.id} className="flex items-center justify-between p-3 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
                       <div>
                         <p className="text-sm font-bold">{level.nivel}</p>
                         <p className="text-xs opacity-60">Peso Multiplicador: {level.peso}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <button onClick={() => openEditVehicleModal(level)} title="Editar Peso">
+                        <button type="button" onClick={() => openEditVehicleModal(level)} title="Editar Peso">
                           <Edit size={16} className="text-blue-600" />
                         </button>
                       </div>
                     </div>
                   ))}
-                  {(!programConfig?.niveis_veiculo || programConfig.niveis_veiculo.length === 0) && (
+                  {vehicleLevels.length === 0 && (
                     <p className="text-sm opacity-60">Nenhum nível de veículo configurado.</p>
                   )}
                 </div>

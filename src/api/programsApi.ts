@@ -40,5 +40,13 @@ export const programsApi = {
     });
     if (!response.ok) throw new Error('Failed to update vehicle level');
     return response.json();
+  },
+
+  getVehicleLevels: async (token: string) => {
+    const response = await fetch(`${API_BASE_URL}/vehicle-levels`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('Failed to fetch vehicle levels');
+    return response.json();
   }
 };
