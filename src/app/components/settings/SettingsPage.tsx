@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "../../../hooks/useAuth";
-import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building, Plus, CheckCircle2, XCircle, Edit } from "lucide-react";
+import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building, Plus, CheckCircle2, XCircle, Edit, ArrowRightLeft, Send, Ban } from "lucide-react";
 import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
+import { getAdvisors, type Advisor } from "../../../api/advisorsApi";
+import { coordinationTransfersApi, type CoordinationTransfer } from "../../../api/coordinationTransfersApi";
 import { toast } from "sonner";
 
 export interface ProgramConfig {
@@ -52,6 +54,9 @@ export function SettingsPage() {
   const [programConfig, setProgramConfig] = useState<ProgramConfig | null>(null);
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
   const [vehicleLevels, setVehicleLevels] = useState<VehicleLevel[]>([]);
+  const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [transfers, setTransfers] = useState<CoordinationTransfer[]>([]);
+  const [selectedSuccessorUid, setSelectedSuccessorUid] = useState("");
 
   // Modal States
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
@@ -65,6 +70,12 @@ export function SettingsPage() {
       fetchProgramData();
     }
   }, [activeTab, currentUser?.role]);
+
+  useEffect(() => {
+    if (activeTab === "transferencia" && token && (currentUser?.role === "coordenacao" || currentUser?.role === "orientador")) {
+      fetchTransferData();
+    }
+  }, [activeTab, token, currentUser?.role]);
 
   const fetchProgramData = async () => {
     if (!token) return;
@@ -80,6 +91,25 @@ export function SettingsPage() {
       setVehicleLevels(vLevels);
     } catch (error) {
       toast.error("Erro ao carregar dados do programa");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchTransferData = async () => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const transferList = await coordinationTransfersApi.list(token);
+      setTransfers(transferList);
+      if (currentUser?.role === "coordenacao") {
+        const advisorList = await getAdvisors(token);
+        const sameProgram = advisorList.filter((advisor) => advisor.programa_id === currentUser.programa);
+        setAdvisors(sameProgram);
+        setSelectedSuccessorUid((current) => current || sameProgram.find((advisor) => advisor.uid)?.uid || "");
+      }
+    } catch (error) {
+      toast.error("Erro ao carregar transferências");
     } finally {
       setLoading(false);
     }
@@ -148,7 +178,7 @@ export function SettingsPage() {
   };
 
   const openNewActivityModal = () => {
-    setCurrentActivity({ nome: "", categoria: "tecnologico", pontuacao_base: 10, exige_comprovante: true, limite_maximo_creditos: null, programa_id: currentUser?.programa_id });
+    setCurrentActivity({ nome: "", categoria: "tecnologico", pontuacao_base: 10, exige_comprovante: true, limite_maximo_creditos: null, programa_id: currentUser?.programa });
     setIsActivityModalOpen(true);
   };
 
@@ -162,9 +192,71 @@ export function SettingsPage() {
     setIsVehicleModalOpen(true);
   };
 
-  const tabs = currentUser?.role === "coordenacao" 
-    ? [...BASE_TABS, { id: "programa", label: "Regras do Programa", icon: <Building size={16} /> }]
-    : BASE_TABS;
+  const transferTab = { id: "transferencia", label: "Transferência", icon: <ArrowRightLeft size={16} /> };
+  const tabs = currentUser?.role === "coordenacao"
+    ? [...BASE_TABS, transferTab, { id: "programa", label: "Regras do Programa", icon: <Building size={16} /> }]
+    : currentUser?.role === "orientador"
+      ? [...BASE_TABS, transferTab]
+      : BASE_TABS;
+
+  const pendingTransfer = transfers.find((transfer) => transfer.status === "pendente");
+
+  const handleStartTransfer = async () => {
+    if (!token || !selectedSuccessorUid) return;
+    setLoading(true);
+    try {
+      await coordinationTransfersApi.start(token, selectedSuccessorUid);
+      toast.success("Transferência iniciada");
+      await fetchTransferData();
+    } catch (error) {
+      const status = (error as Error & { status?: number }).status;
+      toast.error(status === 409 ? "Já existe transferência pendente no programa" : "Erro ao iniciar transferência");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAcceptTransfer = async (transferId: string) => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      await coordinationTransfersApi.accept(token, transferId);
+      toast.success("Transferência aceita");
+      await fetchTransferData();
+    } catch (error) {
+      toast.error("Erro ao aceitar transferência");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRejectTransfer = async (transferId: string) => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      await coordinationTransfersApi.reject(token, transferId);
+      toast.success("Transferência rejeitada");
+      await fetchTransferData();
+    } catch (error) {
+      toast.error("Erro ao rejeitar transferência");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelTransfer = async (transferId: string) => {
+    if (!token) return;
+    setLoading(true);
+    try {
+      await coordinationTransfersApi.cancel(token, transferId);
+      toast.success("Transferência cancelada");
+      await fetchTransferData();
+    } catch (error) {
+      toast.error("Erro ao cancelar transferência");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSave = () => {
     setSaved(true);
@@ -438,6 +530,106 @@ export function SettingsPage() {
                   <strong style={{ color: "var(--foreground)" }}>Versão do Sistema:</strong> SAGA v2.4.1 · Build 2025.03.01
                 </p>
               </div>
+            </div>
+          )}
+
+          {activeTab === "transferencia" && (currentUser?.role === "coordenacao" || currentUser?.role === "orientador") && (
+            <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+              <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)", marginBottom: "20px" }}>Transferir coordenação</h2>
+
+              {currentUser?.role === "coordenacao" && (
+                <div className="space-y-5">
+                  {pendingTransfer ? (
+                    <div className="p-4 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
+                      <p className="text-sm font-bold text-[var(--foreground)]">Transferência pendente</p>
+                      <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                        Convite enviado para {advisors.find((advisor) => advisor.uid === pendingTransfer.successor_uid)?.nome ?? pendingTransfer.successor_uid}.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={loading}
+                        onClick={() => handleCancelTransfer(pendingTransfer.id)}
+                        className="mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-red-50 text-red-700 font-semibold text-sm disabled:opacity-60"
+                      >
+                        <Ban size={15} /> Cancelar transferência
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-3 items-end">
+                      <div>
+                        <label className="block text-xs font-semibold mb-1.5 text-[var(--muted-foreground)]">Orientador sucessor</label>
+                        <select
+                          value={selectedSuccessorUid}
+                          onChange={(event) => setSelectedSuccessorUid(event.target.value)}
+                          className="w-full rounded-xl px-4 py-2.5 bg-[var(--input-background)] border border-[var(--border)] text-sm outline-none"
+                        >
+                          <option value="">Selecione um orientador</option>
+                          {advisors.filter((advisor) => advisor.uid).map((advisor) => (
+                            <option key={advisor.id} value={advisor.uid ?? ""}>
+                              {advisor.nome} · {advisor.email}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={loading || !selectedSuccessorUid}
+                        onClick={handleStartTransfer}
+                        className="inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 bg-[#123C7A] text-white font-semibold text-sm disabled:opacity-60"
+                      >
+                        <Send size={15} /> Iniciar
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    {transfers.map((transfer) => (
+                      <div key={transfer.id} className="flex items-center justify-between p-3 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
+                        <div>
+                          <p className="text-sm font-bold text-[var(--foreground)]">{transfer.status}</p>
+                          <p className="text-xs text-[var(--muted-foreground)]">Sucessor: {advisors.find((advisor) => advisor.uid === transfer.successor_uid)?.nome ?? transfer.successor_uid}</p>
+                        </div>
+                        <span className="text-xs text-[var(--muted-foreground)]">{new Date(transfer.created_at).toLocaleDateString("pt-BR")}</span>
+                      </div>
+                    ))}
+                    {!loading && transfers.length === 0 && (
+                      <p className="text-sm text-[var(--muted-foreground)]">Nenhuma transferência registrada.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {currentUser?.role === "orientador" && (
+                <div className="space-y-3">
+                  {transfers.map((transfer) => (
+                    <div key={transfer.id} className="p-4 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
+                      <p className="text-sm font-bold text-[var(--foreground)]">Convite pendente</p>
+                      <p className="text-xs text-[var(--muted-foreground)] mt-1">Você foi convidado para assumir a coordenação deste programa.</p>
+                      <div className="mt-4 flex flex-wrap gap-3">
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleAcceptTransfer(transfer.id)}
+                          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-[#1F8A70] text-white font-semibold text-sm disabled:opacity-60"
+                        >
+                          <CheckCircle2 size={15} /> Aceitar
+                        </button>
+                        <button
+                          type="button"
+                          disabled={loading}
+                          onClick={() => handleRejectTransfer(transfer.id)}
+                          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-red-50 text-red-700 font-semibold text-sm disabled:opacity-60"
+                        >
+                          <XCircle size={15} /> Rejeitar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {!loading && transfers.length === 0 && (
+                    <p className="text-sm text-[var(--muted-foreground)]">Nenhum convite pendente.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
