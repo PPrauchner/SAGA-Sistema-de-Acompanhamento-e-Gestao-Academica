@@ -13,90 +13,58 @@ Responsabilidades:
   URL de download tokenizada. Aplica @requires_role('aluno') e @audit_operation.
 - PATCH /api/v1/activities/{activity_id}/validate: orientador emite parecer ou coordenação
   aprova/rejeita. Operação mais crítica do fluxo — aplica @requires_role, @audit_operation
-  e @trigger_alerts (notifica aluno após decisão). Motor verifica elegibilidade (RL04).
+  e @trigger_alerts (notifica aluno após decisão da coordenação). Motor verifica
+  elegibilidade (RL04) e gera fato producao_bibliografica_validada quando aplicável.
 """
 
-from typing import Any
+from typing import Union
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends
 
-from backend.app.aspects.alerts import trigger_alerts
-from backend.app.aspects.audit import audit_operation
-from backend.app.aspects.authorization import requires_role
-from backend.app.aspects.deadline_validation import check_deadlines
-from backend.app.core.auth import CurrentUser, get_current_user
+from backend.app.core.auth import get_current_user
 from backend.app.models.activity import (
-    ActivityCreateRequest,
-    ActivityCreateResponse,
     ActivityResponse,
-    ComprovanteUploadResponse,
+    ValidateActivityRequest,
+    ValidateActivityResponse,
 )
-from backend.app.services.activity_service import ActivityService
-from backend.app.services.comprovante_service import ComprovanteService
+from backend.app.services import activity_service
 
 router = APIRouter()
 
-service = ActivityService()
-comprovante_service = ComprovanteService()
 
-
-def _build_submission_alert(
-    result: dict[str, Any],
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-) -> dict[str, Any] | None:
-    """Builder do aspecto A05: notifica o orientador quando a atividade é submetida.
-
-    Retorna None quando a atividade ficou em rascunho ou não há orientador resolvido —
-    nesses casos nenhuma notificação é emitida.
-    """
-    if not result.get("notificacao_enviada") or not result.get("orientador_uid"):
-        return None
-    return {
-        "tipo": "atividade_submetida",
-        "titulo": "Nova atividade submetida",
-        "mensagem": f"Aluno {result.get('aluno_nome', '')} submeteu atividade para validação",
-        "destinatario_id": result["orientador_uid"],
-        "entidade_tipo": "activity",
-        "entidade_id": result["id"],
-        "programa_id": result.get("programa_id"),
-    }
-
-
-@router.get("/activities", response_model=list[ActivityResponse])
-@requires_role("aluno", "orientador", "coordenacao")
-async def list_activities(
-    student_id: str | None = Query(None),
-    status: str | None = Query(None),
-    categoria: str | None = Query(None),
-    user: CurrentUser = Depends(get_current_user),
-) -> list[dict]:
-    return await service.list_activities(user, student_id, status, categoria)
-
-
-@router.post(
-    "/activities",
-    response_model=ActivityCreateResponse,
-    status_code=status.HTTP_201_CREATED,
+@router.patch(
+    "/activities/{activity_id}/validate",
+    response_model=Union[ActivityResponse, ValidateActivityResponse],
 )
-@requires_role("aluno")
-@audit_operation
-@check_deadlines
-@trigger_alerts(_build_submission_alert)
-async def create_activity(
-    body: ActivityCreateRequest,
-    user: CurrentUser = Depends(get_current_user),
-) -> dict:
-    return await service.submit_activity(body, user)
-
-
-@router.post("/activities/{activity_id}/comprovante")
-@requires_role("aluno")
-@audit_operation
-async def upload_comprovante(
+async def validate_activity(
     activity_id: str,
-    arquivo: UploadFile = File(...),
-    user: CurrentUser = Depends(get_current_user),
-) -> ComprovanteUploadResponse:
-    result = await comprovante_service.upload(activity_id, arquivo, user)
-    return ComprovanteUploadResponse(**result)
+    payload: ValidateActivityRequest,
+    current_user: dict = Depends(get_current_user),
+) -> Union[ActivityResponse, ValidateActivityResponse]:
+    """
+    Valida uma atividade submetida.
+
+    Ação `parecer_orientador`:
+    - Apenas o orientador do próprio aluno pode emitir (A01 por propriedade)
+    - Operação auditada (A02)
+    - Retorna ActivityResponse com status atualizado para 'parecer_emitido'
+
+    Ação `aprovar` | `rejeitar` (coordenação):
+    - Apenas coordenação (A01)
+    - Operação mais crítica — auditada com detalhes (A02)
+    - Contabiliza créditos e gera fato para o motor se produção bibliográfica (RL04/RL05)
+    - Notifica o aluno do resultado (A05 — história 26)
+    - Retorna ValidateActivityResponse com novo_status, creditos_contabilizados e fato_gerado
+    """
+    if payload.acao.value == "parecer_orientador":
+        return await activity_service.emitir_parecer_orientador(
+            activity_id=activity_id,
+            payload=payload,
+            current_user=current_user,
+        )
+
+    return await activity_service.validate_activity(
+        activity_id=activity_id,
+        payload=payload,
+        current_user=current_user,
+    )
