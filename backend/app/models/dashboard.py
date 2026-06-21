@@ -117,6 +117,7 @@ class CoordDashboardResponse(BaseModel):
     """Resposta de GET /api/v1/dashboard/coordenacao."""
 
     programa_id: str
+    total_alunos: int = 0
     total_alunos_ativos: int = 0
     alunos_por_status: AlunosPorStatus = AlunosPorStatus()
     atividades_aguardando_validacao: int = 0

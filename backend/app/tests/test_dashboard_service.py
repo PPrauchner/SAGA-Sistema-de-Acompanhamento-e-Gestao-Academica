@@ -526,3 +526,33 @@ async def test_coord_dashboard_counts_total_concluidos_zero():
 
     assert result.total_concluidos == 0
 
+# ─── Cycle 15: total alunos e total alunos ativos ────────────────────────────
+
+@pytest.mark.asyncio
+async def test_coord_dashboard_counts_total_alunos_vs_ativos():
+    """total_alunos deve ser a contagem geral sem filtros, e total_alunos_ativos exclui concluidos/desligados."""
+    from backend.app.services.dashboard_service import DashboardService
+
+    students = [
+        _make_student({"id": "s1", "situacao_registrada": "regular"}),
+        _make_student({"id": "s2", "situacao_registrada": "em_risco"}),
+        _make_student({"id": "s3", "situacao_registrada": "concluido"}),
+        _make_student({"id": "s4", "situacao_registrada": "desligado"}),
+    ]
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockSR.return_value.list_all = AsyncMock(return_value=students)
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_coordenacao_dashboard()
+
+    assert result.total_alunos == 4
+    assert result.total_alunos_ativos == 2
+

@@ -262,12 +262,14 @@ class DashboardService:
 
         tempo_medio = _compute_avg_completion_time(all_students)
         total_concluidos = sum(1 for s in all_students if s.get("situacao_registrada") == "concluido")
+        total_alunos_ativos = sum(1 for s in all_students if s.get("situacao_registrada") not in ("concluido", "desligado"))
         audit_logs = await self._audit_logs.list_all()
         auditoria_recente = _build_recent_audit(audit_logs, limit=5)
 
         return CoordDashboardResponse(
             programa_id="prog_default",
-            total_alunos_ativos=len(all_students),
+            total_alunos=len(all_students),
+            total_alunos_ativos=total_alunos_ativos,
             alunos_por_status=AlunosPorStatus(**status_counts),
             atividades_aguardando_validacao=total_pending,
             prorrogacoes_pendentes=0,  # TODO: integrar com extensions/
