@@ -47,6 +47,11 @@ def _to_iso_date(value: Any) -> str | None:
     return str(value) or None
 
 
+def _uid(user: CurrentUser) -> str:
+    """Extrai o uid do usuário autenticado."""
+    return user.uid
+
+
 class ActivityService:
     """Serviço de negócio para registro e listagem de atividades creditáveis."""
 
@@ -166,7 +171,7 @@ class ActivityService:
 
     async def _resolve_student(self, user: CurrentUser) -> dict:
         students = await self._students.list_all()
-        student = next((item for item in students if item.get("uid") == user.uid), None)
+        student = next((item for item in students if item.get("uid") == _uid(user)), None)
         if student is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
         return student
@@ -179,14 +184,14 @@ class ActivityService:
 
     async def _advisor_id_for_user(self, user: CurrentUser) -> str | None:
         advisors = await self._advisors.list_all()
-        advisor = next((item for item in advisors if item.get("uid") == user.uid), None)
+        advisor = next((item for item in advisors if item.get("uid") == _uid(user)), None)
         return advisor["id"] if advisor else None
 
     async def _visible_student_ids(self, user: CurrentUser, student_id: str | None) -> list[str]:
         students = await self._students.list_all()
 
         if user.role == "aluno":
-            own = next((item for item in students if item.get("uid") == user.uid), None)
+            own = next((item for item in students if item.get("uid") == _uid(user)), None)
             ids = [own["id"]] if own else []
         elif user.role == "orientador":
             advisor_id = await self._advisor_id_for_user(user)
@@ -252,7 +257,7 @@ def _build_notificacao_validacao(result, args, kwargs):
 async def emitir_parecer_orientador(
     activity_id: str,
     payload: ValidateActivityRequest,
-    current_user: dict,
+    current_user: CurrentUser,
 ) -> ActivityResponse:
     if payload.acao != ValidateAction.parecer_orientador:
         raise HTTPException(
@@ -278,7 +283,7 @@ async def emitir_parecer_orientador(
     update_data = {
         "parecer_orientador": payload.parecer_orientador.model_dump(),
         "parecer_orientador_em": datetime.now(timezone.utc),
-        "parecer_orientador_por": current_user["uid"],
+        "parecer_orientador_por": current_user.uid,
     }
     updated = _repo.update_by_id(activity_id, update_data)
     return ActivityResponse(**updated)
@@ -290,7 +295,7 @@ async def emitir_parecer_orientador(
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
-    current_user: dict,
+    current_user: CurrentUser,
 ) -> ValidateActivityResponse:
     if payload.acao not in (ValidateAction.aprovar, ValidateAction.rejeitar):
         raise HTTPException(
@@ -318,7 +323,7 @@ async def validate_activity(
     update_data: dict = {
         "status": novo_status,
         "observacao_coordenacao": payload.observacao,
-        "aprovado_por": current_user["uid"],
+        "aprovado_por": current_user.uid,
         "aprovado_em": datetime.now(timezone.utc),
     }
 
@@ -356,7 +361,7 @@ async def validate_activity(
     acao_label = "aprovada" if aprovando else "rejeitada"
     logger.info(
         "[S6b] Atividade %s %s pela coordenação (uid=%s). Créditos: %s. Fato: %s",
-        activity_id, acao_label, current_user.get("uid"), creditos_contabilizados, fato_gerado,
+        activity_id, acao_label, current_user.uid, creditos_contabilizados, fato_gerado,
     )
 
     return ValidateActivityResponse(
