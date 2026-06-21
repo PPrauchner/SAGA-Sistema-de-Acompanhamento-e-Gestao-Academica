@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from backend.app.aspects.alerts import trigger_alerts
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
-from backend.app.aspects.deadline_validation import check_deadlines 
+from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
     ActivityCreateRequest,
@@ -65,11 +65,11 @@ def _build_notificacao_submissao(result, args, kwargs):
 # GET /activities
 # ---------------------------------------------------------------------------
 
-@requires_role("aluno", "orientador", "coordenacao")
 @router.get(
     "/activities",
     response_model=List[ActivityResponse],
 )
+@requires_role("aluno", "orientador", "coordenacao")
 async def list_activities(
     student_id: Optional[str] = None,
     status: Optional[str] = None,
@@ -96,15 +96,15 @@ async def list_activities(
 # POST /activities
 # ---------------------------------------------------------------------------
 
-@requires_role("aluno")
-@audit_operation
-@check_deadlines
-@trigger_alerts(_build_notificacao_submissao)
 @router.post(
     "/activities",
     response_model=ActivityCreateResponse,
     status_code=201,
 )
+@requires_role("aluno")
+@audit_operation
+@check_deadlines
+@trigger_alerts(_build_notificacao_submissao)
 async def submit_activity(
     payload: ActivityCreateRequest,
     user: CurrentUser = Depends(get_current_user),
@@ -126,12 +126,12 @@ async def submit_activity(
 # POST /activities/{activity_id}/comprovante
 # ---------------------------------------------------------------------------
 
-@requires_role("aluno")
-@audit_operation
 @router.post(
     "/activities/{activity_id}/comprovante",
     response_model=ComprovanteUploadResponse,
 )
+@requires_role("aluno")
+@audit_operation
 async def upload_comprovante(
     activity_id: str,
     file: UploadFile = File(...),
@@ -157,12 +157,12 @@ async def upload_comprovante(
 # PATCH /activities/{activity_id}/validate
 # ---------------------------------------------------------------------------
 
-@requires_role("orientador", "coordenacao")
-@audit_operation
 @router.patch(
     "/activities/{activity_id}/validate",
     response_model=Union[ActivityResponse, ValidateActivityResponse],
 )
+@requires_role("orientador", "coordenacao")
+@audit_operation
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
