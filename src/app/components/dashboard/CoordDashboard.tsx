@@ -12,7 +12,6 @@ import {
   LineChart, Line, ReferenceLine,
 } from "recharts";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
 
 type ReportType = "status" | "orientador" | "producao" | "integralizacao" | null;
 type ExportFormat = "pdf" | "excel" | "csv";
@@ -59,16 +58,13 @@ interface AlertItem {
   acao?: string;
 }
 
-// ─── Data ──────────────────────────────────────────────────────────────────
 
-// Initial fallback data
 const INITIAL_STATUS_DATA = [
   { name: "Regular", value: 142, color: "#1F8A70" },
   { name: "Qualificado", value: 38, color: "#123C7A" },
   { name: "Em Risco", value: 24, color: "#D4A017" },
   { name: "Prorrogação", value: 18, color: "#f97316" },
   { name: "Fase de Defesa", value: 16, color: "#8b5cf6" },
-  { name: "Crítico", value: 10, color: "#dc2626" },
 ];
 
 interface StatusDataProp { name: string; value: number; color: string; }
@@ -151,7 +147,6 @@ const PROGRAM_STATS = [
   { label: "Taxa de Evasão (12 meses)", value: "4,2%", sub: "-1,1 p.p. em relação ao ano anterior", trend: "down-good", color: "#1F8A70" },
 ];
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
 
 const URGENCIA_CFG = {
   alta: { label: "Alta", color: "#dc2626", bg: "#fef2f2" },
@@ -328,7 +323,7 @@ function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose:
             )})}
           </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-            Total: 248 alunos matriculados · Programa PPGCC · 2026
+            Total: {statusData.reduce((acc, d) => acc + d.value, 0)} alunos matriculados · Programa PPGCC
           </p>
         </div>
       ),
@@ -481,7 +476,6 @@ function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose:
   );
 }
 
-// ─── Chart Cards ───────────────────────────────────────────────────────────
 
 function StatusDistribChart({ onReport, statusData }: { onReport: () => void; statusData: StatusDataProp[] }) {
   const total = Math.max(1, statusData.reduce((s, d) => s + d.value, 0));
@@ -598,7 +592,6 @@ function IntegralizacaoChart({ onReport }: { onReport: () => void }) {
   );
 }
 
-// ─── Section Components ────────────────────────────────────────────────────
 
 function ValidationQueue() {
   const [filter, setFilter] = useState<"todos" | ValidationItem["tipo"] | "alta">("todos");
@@ -928,7 +921,6 @@ function ProgramStatistics() {
   );
 }
 
-// ─── Main Export ───────────────────────────────────────────────────────────
 
 export function CoordDashboard() {
   const { data: dashData, loading, error } = useCoordDashboard();
@@ -955,22 +947,20 @@ export function CoordDashboard() {
   }
 
   let statusData = INITIAL_STATUS_DATA;
-  if (dashData?.status_geral) {
+  if (dashData?.alunos_por_status) {
     statusData = [
-      { name: "Regular", value: dashData.status_geral.regular, color: "#1F8A70" },
-      { name: "Qualificado", value: dashData.status_geral.qualificado, color: "#123C7A" },
-      { name: "Em Risco", value: dashData.status_geral.em_risco, color: "#D4A017" },
-      { name: "Prorrogação", value: dashData.status_geral.em_prorrogacao, color: "#f97316" },
-      { name: "Fase de Defesa", value: dashData.status_geral.fase_defesa, color: "#8b5cf6" },
-      { name: "Crítico", value: dashData.casos_criticos, color: "#dc2626" },
+      { name: "Regular", value: dashData.alunos_por_status.regular, color: "#1F8A70" },
+      { name: "Qualificado", value: dashData.alunos_por_status.qualificado, color: "#123C7A" },
+      { name: "Em Risco", value: dashData.alunos_por_status.em_risco, color: "#D4A017" },
+      { name: "Prorrogação", value: dashData.alunos_por_status.em_prorrogacao, color: "#f97316" },
+      { name: "Fase de Defesa", value: dashData.alunos_por_status.fase_defesa, color: "#8b5cf6" },
     ].filter(s => s.value > 0);
   }
 
-  const totalAlunos = dashData?.total_alunos ?? statusData.reduce((s, d) => s + d.value, 0);
-  const ativos = totalAlunos - 12; // Assuming 12 concluded as historical avg
-  const emRisco = dashData?.status_geral?.em_risco ?? 0;
-  const emProrrogacao = dashData?.status_geral?.em_prorrogacao ?? 0;
-  const concluidos = 47;
+  const ativos = dashData?.total_alunos_ativos ?? statusData.reduce((s, d) => s + d.value, 0);
+  const emRisco = dashData?.alunos_por_status?.em_risco ?? 0;
+  const emProrrogacao = dashData?.alunos_por_status?.em_prorrogacao ?? 0;
+  const concluidos = dashData?.total_concluidos ?? 0;
 
   return (
     <div className="space-y-5">
@@ -989,9 +979,8 @@ export function CoordDashboard() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {[
-              { v: dashData?.atividades_pendentes ?? VALIDATIONS.length, l: "Na fila", color: "#D4A017" },
-              { v: EXTENSIONS.filter(e => e.status !== "aprovada" && e.status !== "negada").length, l: "Prorrogações", color: "#f97316" },
-              { v: dashData?.casos_criticos ?? ALERTS.filter(a => a.nivel === "critico").length, l: "Críticos", color: "#dc2626" },
+              { v: dashData?.atividades_aguardando_validacao ?? VALIDATIONS.length, l: "Na fila", color: "#D4A017" },
+              { v: dashData?.prorrogacoes_pendentes ?? EXTENSIONS.filter(e => e.status !== "aprovada" && e.status !== "negada").length, l: "Prorrogações", color: "#f97316" },
             ].map((s) => (
               <div key={s.l} className="text-center rounded-xl px-3 py-2 sm:px-4 sm:py-2.5" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <p style={{ fontSize: "clamp(16px,4vw,22px)", fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.v}</p>
@@ -1004,12 +993,11 @@ export function CoordDashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
-        <KpiCard icon={<Users size={20} />} label="Total Alunos" value={totalAlunos} sub="Todos os programas" color="#123C7A" trend="up" />
-        <KpiCard icon={<UserCheck size={20} />} label="Alunos Ativos" value={ativos} sub="Matrículas vigentes" color="#1F8A70" trend="up" />
+        <KpiCard icon={<Users size={20} />} label="Alunos Ativos" value={ativos} sub="Todos os programas" color="#123C7A" trend="up" />
         <KpiCard icon={<AlertTriangle size={20} />} label="Em Risco" value={emRisco} sub="Requerem ação imediata" color="#dc2626" trend="down" />
         <KpiCard icon={<Clock size={20} />} label="Em Prorrogação" value={emProrrogacao} sub="Com prazo estendido" color="#f97316" />
         <KpiCard icon={<CheckCircle2 size={20} />} label="Concluídos" value={concluidos} sub="Titulados em 2025–2026" color="#1F8A70" trend="up" />
-        <KpiCard icon={<TrendingUp size={20} />} label="Tempo Médio" value="26m" sub="Mestrado: 25m · Douto: 51m" color="#8b5cf6" />
+        <KpiCard icon={<TrendingUp size={20} />} label="Tempo Médio" value={dashData?.tempo_medio_integralizacao_meses ? `${dashData.tempo_medio_integralizacao_meses.toFixed(1)}m` : "N/D"} sub="Integralização" color="#8b5cf6" />
       </div>
 
       {/* Charts Row 1 */}
