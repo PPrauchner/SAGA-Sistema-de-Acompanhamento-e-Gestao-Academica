@@ -1,16 +1,13 @@
 """
-Repositório base genérico para operações no Firestore via Firebase Admin SDK.
+Repositório base genérico para operações no Firestore usando Firebase Admin SDK.
 
 Responsabilidades:
-- Definir a classe FirebaseRepository com métodos assíncronos genéricos reutilizados por
-  todos os repositórios concretos: get(collection, doc_id), create(collection, data),
-  update(collection, doc_id, data), delete(collection, doc_id), query(collection,
-  filters, order_by, limit).
+- Fornecer métodos assíncronos genéricos para operações CRUD (get, create, update, delete, query).
 - Encapsular o cliente Firestore assíncrono obtido de backend/app/core/firebase.py.
-- Converter Timestamps do Firestore para datetime Python e vice-versa.
-- Tratar DocumentNotFoundError lançando HTTPException(404) padronizada.
-- Ser a única camada que importa google.cloud.firestore — todos os outros módulos
-  acessam dados exclusivamente através dos repositórios concretos.
+- Tratar exceções comuns de banco de dados, como DocumentNotFoundError.
+- save_history_snapshot(doc_id, snapshot): persiste snapshot do aspecto A03 (history.py)
+  em {collection}/{doc_id}/history/{auto_id}, reutilizado por todos os repositórios cujas
+  entidades são versionadas (StudentRepository, ActivityTypeRepository, etc.).
 """
 
 from __future__ import annotations
@@ -40,16 +37,6 @@ class FirebaseRepository:
         """Retorna a referência síncrona do documento na coleção desta instância."""
         return get_firestore_client().collection(self.collection).document(doc_id)
 
-    async def create(self, data: dict[str, Any]) -> str:
-        """Cria um documento com auto-id e retorna o id gerado."""
-
-        def _create() -> str:
-            doc_ref = get_firestore_client().collection(self.collection).document()
-            doc_ref.set(data)
-            return doc_ref.id
-
-        return await asyncio.to_thread(_create)
-
     async def get(self, doc_id: str) -> dict[str, Any] | None:
         """Lê um documento por id.
 
@@ -57,12 +44,16 @@ class FirebaseRepository:
             doc_id: Identificador do documento na coleção.
 
         Returns:
-            O documento como dict, ou None se não existir.
+            O documento como dict com 'id' incluído, ou None se não existir.
         """
 
         def _read() -> dict[str, Any] | None:
             snapshot = self._document(doc_id).get()
-            return snapshot.to_dict() if snapshot.exists else None
+            if snapshot.exists:
+                data = snapshot.to_dict() or {}
+                data['id'] = snapshot.id
+                return data
+            return None
 
         return await asyncio.to_thread(_read)
 
@@ -75,21 +66,51 @@ class FirebaseRepository:
         """
         await asyncio.to_thread(self._document(doc_id).set, data)
 
-    async def update(self, doc_id: str, data: dict[str, Any]) -> None:
+    async def create(self, data: dict[str, Any], doc_id: str | None = None) -> str:
+        """Cria um novo documento na coleção.
+
+        Args:
+            data: Os dados a serem armazenados.
+            doc_id: ID fixo opcional para o documento.
+
+        Returns:
+            O ID do documento criado.
+        """
+        def _create() -> str:
+            if doc_id:
+                self._document(doc_id).set(data)
+                return doc_id
+            
+            # Usando add() para auto-id se não fornecido
+            _, doc_ref = get_firestore_client().collection(self.collection).add(data)
+            return doc_ref.id
+
+        return await asyncio.to_thread(_create)
+
+    async def update(self, doc_id: str, data: dict[str, Any]) -> bool:
         """Atualiza parcialmente os campos de um documento existente.
 
         Args:
             doc_id: Identificador do documento a atualizar.
             data: Mapa dos campos a alterar.
+            
+        Returns:
+            True se a atualização for executada.
         """
         await asyncio.to_thread(self._document(doc_id).update, data)
+        return True
 
-    async def delete(self, doc_id: str) -> None:
-        """Remove um documento da coleção."""
+    async def delete(self, doc_id: str) -> bool:
+        """Exclui um documento da coleção.
 
-        await asyncio.to_thread(
-            self._document(doc_id).delete,
-        )
+        Args:
+            doc_id: Identificador do documento a excluir.
+            
+        Returns:
+            True se a exclusão for executada.
+        """
+        await asyncio.to_thread(self._document(doc_id).delete)
+        return True
 
     async def list_all(self) -> list[dict[str, Any]]:
         """Lista todos os documentos da coleção."""
@@ -100,13 +121,56 @@ class FirebaseRepository:
             result = []
 
             for doc in docs:
-                item = doc.to_dict()
+                item = doc.to_dict() or {}
                 item["id"] = doc.id
                 result.append(item)
 
             return result
 
         return await asyncio.to_thread(_list)
+
+    async def query(
+        self, 
+        filters: list[tuple] | None = None, 
+        order_by: str | None = None, 
+        limit: int | None = None,
+        subcollection_path: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Realiza uma consulta na coleção ou subcoleção.
+
+        Args:
+            filters: Lista de tuplas (campo, operador, valor) para filtro.
+            order_by: Nome do campo para ordenação.
+            limit: Número máximo de resultados.
+            subcollection_path: Opcional, permite consultar subcoleções ignorando self.collection.
+
+        Returns:
+            Lista de documentos (dicts) que atendem aos critérios.
+        """
+        def _execute_query() -> list[dict[str, Any]]:
+            path = subcollection_path if subcollection_path else self.collection
+            query_ref = get_firestore_client().collection(path)
+            
+            if filters:
+                for field, op, value in filters:
+                    query_ref = query_ref.where(field, op, value)
+            
+            if order_by:
+                query_ref = query_ref.order_by(order_by)
+                
+            if limit:
+                query_ref = query_ref.limit(limit)
+                
+            docs = query_ref.stream()
+            results = []
+            for doc in docs:
+                data = doc.to_dict() or {}
+                data['id'] = doc.id
+                results.append(data)
+                
+            return results
+
+        return await asyncio.to_thread(_execute_query)
 
     async def set_subcollection_auto(
         self,
@@ -122,3 +186,30 @@ class FirebaseRepository:
             return doc_ref.id
 
         return await asyncio.to_thread(_create)
+
+    async def save_history_snapshot(
+        self,
+        doc_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        """Persiste snapshot do aspecto A03 (history.py) em {collection}/{doc_id}/history/."""
+
+        return await self.set_subcollection_auto(doc_id, "history", snapshot)
+
+    async def list_subcollection(
+        self,
+        doc_id: str,
+        subcollection: str,
+    ) -> list[dict[str, Any]]:
+        """Lista os documentos de {collection}/{doc_id}/{subcollection}/ com o id injetado."""
+
+        def _list() -> list[dict[str, Any]]:
+            docs = self._document(doc_id).collection(subcollection).stream()
+            result = []
+            for doc in docs:
+                item = doc.to_dict()
+                item["id"] = doc.id
+                result.append(item)
+            return result
+
+        return await asyncio.to_thread(_list)

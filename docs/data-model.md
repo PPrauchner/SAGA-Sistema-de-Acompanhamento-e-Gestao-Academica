@@ -371,9 +371,11 @@ erDiagram
   quem reivindica crédito (só alunos cadastrados que registraram a atividade).
 - Relatórios de "produções do programa" contam `productions` raiz (sem duplicação).
 
-> **Desvio consciente vs. spec 03**, que punha `productions` como sub-coleção de `students`
-> referenciando `activity_id`. A opção C inverte a referência e promove `productions` à raiz
-> para suportar co-autoria entre alunos sem perda de crédito.
+> **Decisão Q8 (opção C):** `productions` é **coleção raiz** e a FK é invertida
+> (`activities.producao_id → productions`), para suportar co-autoria entre alunos sem perda de
+> crédito. Os specs 03/07 foram alinhados a este modelo (ver `data-model-decisions.md` → R3).
+> Historicamente a spec 03 punha `productions` como sub-coleção de `students` referenciando
+> `activity_id` — modelo superado.
 
 ### `activities` 🔲 — sub-coleção de `students` — chave: `auto-id`
 
@@ -401,7 +403,7 @@ erDiagram
 | `titulo` | string | | |
 | `doi` | string\|null | | chave natural de deduplicação quando presente |
 | `veiculo_id` | string | →`vehicles` | |
-| `tipo_producao` | string | | `artigo_publicado`\|`artigo_submetido`\|`livro`\|`capitulo` (dimensão bibliográfica) |
+| `tipo_producao` | string | | `artigo`\|`livro`\|`capitulo` (natureza bibliográfica; situação em `status_publicacao`) |
 | `status_publicacao` | string | | `publicado`\|`submetido`\|`aceito` |
 | `observacao` | string\|null | | impactos específicos |
 | `autores` | array | →`users.uid` **ou** string livre | inclui autores externos |
@@ -446,11 +448,14 @@ Config de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode e
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `veiculo_id` | string (PK = id do veículo) | |
-| `nivel` | string | `A1`\|`A2`\|`B`\|`C` |
-| `peso` | float | A1=2.0, A2=1.5, B=1.0, C=0.5 |
+| `nivel` | string | `A1`\|`A2`\|`A3`\|`A4`\|`B1`\|`B2`\|`SC` (Qualis Único; `SC` = Sem Classificação) |
+| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.7, B1=0.5, B2=0.5, SC=0.2 |
 | `atualizado_em` / `atualizado_por` | timestamp / uid | |
 
-> **Sem nível configurado:** RL05 usa **peso default `C` = 0.5** (fallback). Reclassificar recalcula o score.
+> **Sem nível configurado:** RL05 usa **peso default `SC` = 0.2** (fallback). Reclassificar recalcula o score.
+>
+> ⚠️ **A confirmar:** os pesos `A3=A4=0.7` e `B1=B2=0.5` foram herdados do código (PR #111); avaliar
+> se devem ser monotônicos (ex.: Qualis normalizado `A4=0.55`, `B1=0.4`, `B2=0.3`).
 
 ---
 

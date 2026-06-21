@@ -16,7 +16,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from backend.app.models.checklist import ChecklistResponse
 from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.services.checklist_service import ChecklistService
-from backend.app.services.inference_service import InferenceService, StudentNotFoundError
+from backend.app.services.inference_service import (
+    InferenceService,
+    StudentNotFoundError,
+)
 
 router = APIRouter()
 

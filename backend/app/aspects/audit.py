@@ -1,116 +1,181 @@
+"""
+Aspecto A02 – Auditoria de Operações.
+
+Responsabilidades:
+- Registrar no Firestore toda operação sensível executada nos endpoints.
+- Capturar autoria (usuario_id, role, programa_id), nome da operação,
+  módulo, recurso afetado, argumentos de entrada e resultado.
+- Permitir desativação via aspect_config.AUDIT_ENABLED sem alterar endpoints.
+
+Join Point : qualquer endpoint FastAPI decorado com @audit_operation.
+Advice     : Around – envolve a execução da função original.
+Weaving    : decorador Python aplicado manualmente sobre funções de negócio.
+"""
+
+from __future__ import annotations
+
 import functools
 import inspect
 import logging
 from datetime import datetime, timezone
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 from backend.app.aspects import aspect_config
 from backend.app.core.firebase import get_firestore_client
 
 logger = logging.getLogger(__name__)
 
+_COLLECTION = "audit_logs"
+
+
+class FirebaseRepository:
+    """Repositório Firestore para registros de auditoria."""
+
+    def __init__(self, collection: str) -> None:
+        self.collection = collection
+
+    async def create(self, data: dict[str, Any]) -> str:
+        try:
+            db = get_firestore_client()
+            _, doc_ref = db.collection(self.collection).add(data)
+            return doc_ref.id
+        except Exception as exc:
+            logger.error("[A02] Falha ao gravar audit_log: %s", exc)
+            return ""
+
+
+def _extrair_usuario(args: tuple, kwargs: dict) -> dict[str, Any]:
+    candidatos = list(kwargs.values()) + list(args)
+    for v in candidatos:
+        if isinstance(v, dict) and "role" in v:
+            return {
+                "usuario_id": v.get("uid", ""),
+                "role": v.get("role", ""),
+                "programa_id": v.get("programa_id", ""),
+            }
+        if hasattr(v, "role") and hasattr(v, "uid"):
+            return {
+                "usuario_id": v.uid,
+                "role": v.role,
+                "programa_id": getattr(v, "programa_id", ""),
+            }
+    return {"usuario_id": "", "role": "", "programa_id": ""}
+
+
+def _extrair_recurso_dos_args(
+    sig: inspect.Signature,
+    bound: inspect.BoundArguments,
+) -> str | None:
+    for nome, valor in bound.arguments.items():
+        if nome.endswith("_id") and isinstance(valor, str):
+            return f"{nome}/{valor}"
+    return None
+
+
+def _extrair_recurso_do_resultado(resultado: Any) -> str | None:
+    if isinstance(resultado, dict) and "id" in resultado:
+        return f"id/{resultado['id']}"
+    if hasattr(resultado, "id"):
+        return f"id/{resultado.id}"
+    return None
+
+
+def _extrair_valor_entrada(
+    sig: inspect.Signature,
+    bound: inspect.BoundArguments,
+) -> dict[str, Any]:
+    resultado: dict[str, Any] = {}
+    for nome, valor in bound.arguments.items():
+        if isinstance(valor, dict) and "role" in valor:
+            continue
+        if hasattr(valor, "role") and hasattr(valor, "uid"):
+            continue
+        resultado[nome] = valor
+    return resultado
+
 
 def audit_operation(
-    operacao: str,
-    entidade: str,
-    get_entity_id_fn: Optional[Callable] = None,
+    func: Callable | None = None,
+    *,
+    operacao: str | None = None,
+    entidade: str | None = None,
 ) -> Callable:
-    def decorator(func: Callable) -> Callable:
-        @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
+    """Aspecto A02 – suporta uso bare e parametrizado.
+
+    Uso bare         : @audit_operation
+    Uso parametrizado: @audit_operation(operacao="nome", entidade="recurso")
+    """
+
+    def _decorator(fn: Callable) -> Callable:
+        sig = inspect.signature(fn)
+        modulo = inspect.getmodule(fn)
+        modulo_nome = modulo.__name__ if modulo else "desconhecido"
+        operacao_nome = operacao or fn.__name__
+
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             if not aspect_config.AUDIT_ENABLED:
-                return await func(*args, **kwargs)
+                return await fn(*args, **kwargs)
 
-            current_user: dict | None = None
-            for v in list(kwargs.values()) + list(args):
-                if isinstance(v, dict) and "role" in v:
-                    current_user = v
-                    break
-                if hasattr(v, "role") and hasattr(v, "uid"):
-                    current_user = {"uid": v.uid, "email": getattr(v, "email", None), "role": v.role}
-                    break
+            usuario = _extrair_usuario(args, kwargs)
 
             try:
-                bound = inspect.signature(func).bind(*args, **kwargs)
+                bound = sig.bind(*args, **kwargs)
                 bound.apply_defaults()
-                valor_entrada = {k: repr(v) for k, v in bound.arguments.items() if k != "current_user"}
-            except Exception:
-                valor_entrada = {}
+            except TypeError:
+                bound = None
 
-            modulo = inspect.getmodule(func)
-            modulo_nome = modulo.__name__ if modulo else "desconhecido"
+            valor_entrada: dict[str, Any] = {}
+            if bound:
+                valor_entrada = _extrair_valor_entrada(sig, bound)
 
-            entity_id = None
-            if get_entity_id_fn:
-                try:
-                    entity_id = get_entity_id_fn(kwargs)
-                except Exception:
-                    pass
+            recurso_dos_args: str | None = None
+            if bound:
+                recurso_dos_args = _extrair_recurso_dos_args(sig, bound)
 
-            timestamp_inicio = datetime.now(timezone.utc)
-            resultado = "sucesso"
-            detalhe_erro = None
-            result = None
+            resultado_status = "sucesso"
+            erro_mensagem: str | None = None
+            result: Any = None
 
             try:
-                result = await func(*args, **kwargs)
+                result = await fn(*args, **kwargs)
             except Exception as exc:
-                resultado = "erro"
-                detalhe_erro = str(exc)
+                resultado_status = "erro"
+                erro_mensagem = str(exc)
                 raise
             finally:
-                duracao_ms = int((datetime.now(timezone.utc) - timestamp_inicio).total_seconds() * 1000)
-                await _gravar_audit_log(
-                    current_user=current_user,
-                    operacao=operacao,
-                    entidade=entidade,
-                    entidade_id=entity_id,
-                    modulo=modulo_nome,
-                    valor_entrada=valor_entrada,
-                    timestamp=timestamp_inicio,
-                    resultado=resultado,
-                    detalhe_erro=detalhe_erro,
-                    duracao_ms=duracao_ms,
+                recurso = recurso_dos_args
+                if recurso is None and result is not None:
+                    recurso = _extrair_recurso_do_resultado(result)
+                if recurso is None:
+                    recurso = entidade or operacao_nome
+
+                registro: dict[str, Any] = {
+                    **usuario,
+                    "operacao": operacao_nome,
+                    "modulo": modulo_nome,
+                    "recurso": recurso,
+                    "valor_entrada": valor_entrada,
+                    "resultado_status": resultado_status,
+                    "timestamp": datetime.now(timezone.utc),
+                }
+                if erro_mensagem is not None:
+                    registro["erro_mensagem"] = erro_mensagem
+
+                repo = FirebaseRepository(_COLLECTION)
+                await repo.create(registro)
+
+                logger.debug(
+                    "[A02] Auditoria: op=%s recurso=%s resultado=%s",
+                    operacao_nome,
+                    recurso,
+                    resultado_status,
                 )
 
             return result
+
         return wrapper
-    return decorator
 
-
-async def _gravar_audit_log(
-    current_user: dict | None,
-    operacao: str,
-    entidade: str,
-    entidade_id: str | None,
-    modulo: str,
-    valor_entrada: dict,
-    timestamp: datetime,
-    resultado: str,
-    detalhe_erro: str | None,
-    duracao_ms: int,
-) -> None:
-    try:
-        db = get_firestore_client()
-        log_entry: dict[str, Any] = {
-            # Nomes esperados pelos testes
-            "uid_usuario": current_user.get("uid") if current_user else None,
-            "email_usuario": current_user.get("email") if current_user else None,
-            "role_usuario": current_user.get("role") if current_user else None,
-            "operacao": operacao,
-            "modulo": modulo,
-            "recurso": entidade,
-            "entidade_id": entidade_id,
-            "valor_entrada": valor_entrada,
-            "timestamp": timestamp,
-            "resultado": resultado,       # era "resultado_status"
-            "duracao_ms": duracao_ms,
-        }
-        if detalhe_erro:
-            log_entry["detalhe_erro"] = detalhe_erro   # era "erro_mensagem"
-
-        db.collection("audit_logs").add(log_entry)
-        logger.debug("[A02] Auditoria gravada: op=%s entidade=%s id=%s resultado=%s duracao=%dms",
-                     operacao, entidade, entidade_id, resultado, duracao_ms)
-    except Exception as exc:
-        logger.error("[A02] Falha ao gravar audit_log: %s", exc)
+    if func is not None:
+        return _decorator(func)
+    return _decorator

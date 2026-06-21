@@ -35,26 +35,39 @@ sys.modules["backend.app.core.firebase"] = MagicMock()
 
 from fastapi import HTTPException
 
+from backend.app.core.auth import CurrentUser
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def user_coordenacao():
-    return {"uid": "coord-uid-001", "email": "coord@saga.com", "role": "coordenacao"}
+    return CurrentUser(uid="coord-uid-001", email="coord@saga.com", role="coordenacao", programa_id="prog-001")
 
 @pytest.fixture
 def user_orientador():
-    return {"uid": "orient-uid-002", "email": "orient@saga.com", "role": "orientador"}
+    return CurrentUser(uid="orient-uid-002", email="orient@saga.com", role="orientador", programa_id="prog-001")
 
 @pytest.fixture
 def user_aluno():
-    return {"uid": "aluno-uid-003", "email": "aluno@saga.com", "role": "aluno"}
+    return CurrentUser(uid="aluno-uid-003", email="aluno@saga.com", role="aluno", programa_id="prog-001")
 
 def make_db_mock():
     db = MagicMock()
     db.collection.return_value.add = MagicMock()
     return db
+
+def _build_alerta(activity_id, destinatario_id):
+    """Helper: retorna um build callable para testes de trigger_alerts."""
+    def build(result, args, kwargs):
+        return {
+            "tipo": "atividade_aprovada",
+            "titulo": "Atividade aprovada",
+            "mensagem": f"Atividade {kwargs.get('activity_id', activity_id)} aprovada.",
+            "destinatario_id": destinatario_id,
+        }
+    return build
 
 # ===========================================================================
 # A01 — @requires_role
@@ -68,7 +81,7 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao", "orientador")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             assert await handler(current_user=user_coordenacao) == "ok"
@@ -79,7 +92,7 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             with pytest.raises(HTTPException) as exc:
@@ -105,7 +118,7 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "bypassed"
 
             assert await handler(current_user=user_aluno) == "bypassed"
@@ -116,8 +129,8 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao", "orientador", "aluno")
-            async def handler(current_user):
-                return current_user["role"]
+            async def handler(current_user: CurrentUser):
+                return current_user.role
 
             assert await handler(current_user=user_orientador) == "orientador"
 
@@ -133,7 +146,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "orient-uid-002")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "ok"
 
             assert await handler(activity_id="act-1", current_user=user_orientador) == "ok"
@@ -144,7 +157,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "outro-uid")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "ok"
 
             with pytest.raises(HTTPException) as exc:
@@ -157,7 +170,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "qualquer-outro-uid")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "coord-ok"
 
             assert await handler(activity_id="act-1", current_user=user_coordenacao) == "coord-ok"
@@ -168,7 +181,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: None)
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "ok"
 
             with pytest.raises(HTTPException) as exc:
@@ -181,7 +194,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "outro-uid")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "bypassed"
 
             assert await handler(activity_id="act-1", current_user=user_aluno) == "bypassed"
@@ -199,23 +212,18 @@ class TestAuditOperation:
              patch("backend.app.aspects.audit.get_firestore_client", return_value=db):
             from backend.app.aspects.audit import audit_operation
 
-            @audit_operation(
-                operacao="aprovar_atividade",
-                entidade="activities",
-                get_entity_id_fn=lambda kw: kw.get("activity_id"),
-            )
-            async def handler(activity_id, current_user):
+            @audit_operation(operacao="aprovar_atividade", entidade="activities")
+            async def handler(activity_id, current_user: CurrentUser):
                 return {"status": "aprovada"}
 
             result = await handler(activity_id="act-123", current_user=user_coordenacao)
 
         assert result == {"status": "aprovada"}
         doc = db.collection.return_value.add.call_args[0][0]
-        assert doc["resultado"] == "sucesso"
+        assert doc["resultado_status"] == "sucesso"
         assert doc["operacao"] == "aprovar_atividade"
-        assert doc["entidade_id"] == "act-123"
-        assert doc["uid_usuario"] == "coord-uid-001"
-        assert doc["role_usuario"] == "coordenacao"
+        assert doc["usuario_id"] == "coord-uid-001"
+        assert doc["role"] == "coordenacao"
 
     @pytest.mark.asyncio
     async def test_grava_log_erro_e_relanca(self, user_orientador):
@@ -225,15 +233,15 @@ class TestAuditOperation:
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation(operacao="op_falha", entidade="activities")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 raise ValueError("erro simulado")
 
             with pytest.raises(ValueError, match="erro simulado"):
                 await handler(activity_id="act-err", current_user=user_orientador)
 
         doc = db.collection.return_value.add.call_args[0][0]
-        assert doc["resultado"] == "erro"
-        assert "erro simulado" in doc["detalhe_erro"]
+        assert doc["resultado_status"] == "erro"
+        assert "erro simulado" in doc["erro_mensagem"]
 
     @pytest.mark.asyncio
     async def test_desabilitado_nao_chama_firestore(self, user_coordenacao):
@@ -243,7 +251,7 @@ class TestAuditOperation:
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation(operacao="op_off", entidade="activities")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             result = await handler(current_user=user_coordenacao)
@@ -258,7 +266,7 @@ class TestAuditOperation:
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation(operacao="op_resiliente", entidade="activities")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             assert await handler(current_user=user_coordenacao) == "ok"
@@ -277,8 +285,7 @@ class TestAuditOperation:
             await handler()
 
         doc = db.collection.return_value.add.call_args[0][0]
-        assert doc["uid_usuario"] is None
-        assert doc["email_usuario"] is None
+        assert doc["usuario_id"] == ""
 
 # ===========================================================================
 # A05 — @trigger_alerts
@@ -294,14 +301,14 @@ class TestTriggerAlerts:
             from backend.app.aspects.alerts import trigger_alerts
 
             @trigger_alerts(
-                tipo="atividade_aprovada",
-                titulo="Atividade aprovada",
-                get_mensagem_fn=lambda r, kw: f"Atividade {kw.get('activity_id')} aprovada.",
-                get_destinatario_fn=lambda kw: "aluno-uid-003",
-                entidade_tipo="activities",
-                get_entidade_id_fn=lambda kw: kw.get("activity_id"),
+                lambda result, args, kwargs: {
+                    "tipo": "atividade_aprovada",
+                    "titulo": "Atividade aprovada",
+                    "mensagem": f"Atividade {kwargs.get('activity_id')} aprovada.",
+                    "destinatario_id": "aluno-uid-003",
+                }
             )
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return {"novo_status": "aprovada"}
 
             result = await handler(activity_id="act-789", current_user=user_coordenacao)
@@ -324,13 +331,14 @@ class TestTriggerAlerts:
             from backend.app.aspects.alerts import trigger_alerts
 
             @trigger_alerts(
-                tipo="teste_ordem",
-                titulo="Ordem",
-                get_mensagem_fn=lambda r, kw: "msg",
-                get_destinatario_fn=lambda kw: "aluno-uid-003",
-                entidade_tipo="activities",
+                lambda result, args, kwargs: {
+                    "tipo": "teste_ordem",
+                    "titulo": "Ordem",
+                    "mensagem": "msg",
+                    "destinatario_id": "aluno-uid-003",
+                }
             )
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 ordem.append("funcao")
                 return "ok"
 
@@ -345,14 +353,13 @@ class TestTriggerAlerts:
              patch("backend.app.aspects.alerts.get_firestore_client", return_value=db):
             from backend.app.aspects.alerts import trigger_alerts
 
-            @trigger_alerts(
-                tipo="test_off",
-                titulo="Off",
-                get_mensagem_fn=lambda r, kw: "msg",
-                get_destinatario_fn=lambda kw: "aluno-uid-003",
-                entidade_tipo="activities",
-            )
-            async def handler(current_user):
+            @trigger_alerts(lambda result, args, kwargs: {
+                "tipo": "test_off",
+                "titulo": "Off",
+                "mensagem": "msg",
+                "destinatario_id": "aluno-uid-003",
+            })
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             result = await handler(current_user=user_coordenacao)
@@ -367,14 +374,8 @@ class TestTriggerAlerts:
              patch("backend.app.aspects.alerts.get_firestore_client", return_value=db):
             from backend.app.aspects.alerts import trigger_alerts
 
-            @trigger_alerts(
-                tipo="test_sem_dest",
-                titulo="Sem dest",
-                get_mensagem_fn=lambda r, kw: "msg",
-                get_destinatario_fn=lambda kw: None,
-                entidade_tipo="activities",
-            )
-            async def handler(current_user):
+            @trigger_alerts(lambda result, args, kwargs: None)
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             await handler(current_user=user_coordenacao)
@@ -387,14 +388,13 @@ class TestTriggerAlerts:
              patch("backend.app.aspects.alerts.get_firestore_client", side_effect=Exception("firestore down")):
             from backend.app.aspects.alerts import trigger_alerts
 
-            @trigger_alerts(
-                tipo="test_resiliente",
-                titulo="Resiliente",
-                get_mensagem_fn=lambda r, kw: "msg",
-                get_destinatario_fn=lambda kw: "aluno-uid-003",
-                entidade_tipo="activities",
-            )
-            async def handler(current_user):
+            @trigger_alerts(lambda result, args, kwargs: {
+                "tipo": "test_resiliente",
+                "titulo": "Resiliente",
+                "mensagem": "msg",
+                "destinatario_id": "aluno-uid-003",
+            })
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             assert await handler(current_user=user_coordenacao) == "ok"
@@ -483,27 +483,23 @@ class TestDecoratorStack:
             from backend.app.aspects.alerts import trigger_alerts
 
             @requires_role("coordenacao")
-            @audit_operation(
-                operacao="aprovar_stack",
-                entidade="activities",
-                get_entity_id_fn=lambda kw: kw.get("activity_id"),
-            )
+            @audit_operation(operacao="aprovar_stack", entidade="activities")
             @trigger_alerts(
-                tipo="aprovacao_stack",
-                titulo="Aprovado",
-                get_mensagem_fn=lambda r, kw: f"Aprovado: {kw.get('activity_id')}",
-                get_destinatario_fn=lambda kw: "aluno-uid-003",
-                entidade_tipo="activities",
-                get_entidade_id_fn=lambda kw: kw.get("activity_id"),
+                lambda result, args, kwargs: {
+                    "tipo": "aprovacao_stack",
+                    "titulo": "Aprovado",
+                    "mensagem": f"Aprovado: {kwargs.get('activity_id')}",
+                    "destinatario_id": "aluno-uid-003",
+                }
             )
-            async def validate_activity(activity_id, current_user):
+            async def validate_activity(activity_id, current_user: CurrentUser):
                 return {"novo_status": "aprovada", "creditos": 10}
 
             result = await validate_activity(activity_id="act-stack-001", current_user=user_coordenacao)
 
         assert result["novo_status"] == "aprovada"
         assert len(audit_docs) == 1
-        assert audit_docs[0]["resultado"] == "sucesso"
+        assert audit_docs[0]["resultado_status"] == "sucesso"
         assert len(alert_docs) == 1
 
     @pytest.mark.asyncio
@@ -522,14 +518,13 @@ class TestDecoratorStack:
 
             @requires_role("coordenacao")
             @audit_operation(operacao="bloqueada", entidade="activities")
-            @trigger_alerts(
-                tipo="bloqueada",
-                titulo="Nunca",
-                get_mensagem_fn=lambda r, kw: "msg",
-                get_destinatario_fn=lambda kw: "aluno-uid-003",
-                entidade_tipo="activities",
-            )
-            async def validate_activity(activity_id, current_user):
+            @trigger_alerts(lambda result, args, kwargs: {
+                "tipo": "bloqueada",
+                "titulo": "Nunca",
+                "mensagem": "msg",
+                "destinatario_id": "aluno-uid-003",
+            })
+            async def validate_activity(activity_id, current_user: CurrentUser):
                 return "nunca executa"
 
             with pytest.raises(HTTPException) as exc:
@@ -559,19 +554,18 @@ class TestDecoratorStack:
 
             @requires_role("coordenacao")
             @audit_operation(operacao="op_com_erro", entidade="activities")
-            @trigger_alerts(
-                tipo="nunca_dispara",
-                titulo="Nunca",
-                get_mensagem_fn=lambda r, kw: "msg",
-                get_destinatario_fn=lambda kw: "aluno-uid-003",
-                entidade_tipo="activities",
-            )
-            async def validate_activity(activity_id, current_user):
+            @trigger_alerts(lambda result, args, kwargs: {
+                "tipo": "nunca_dispara",
+                "titulo": "Nunca",
+                "mensagem": "msg",
+                "destinatario_id": "aluno-uid-003",
+            })
+            async def validate_activity(activity_id, current_user: CurrentUser):
                 raise ValueError("erro de negócio")
 
             with pytest.raises(ValueError):
                 await validate_activity(activity_id="act-err", current_user=user_coordenacao)
 
         assert len(audit_docs) == 1
-        assert audit_docs[0]["resultado"] == "erro"
+        assert audit_docs[0]["resultado_status"] == "erro"
         assert len(alert_docs) == 0

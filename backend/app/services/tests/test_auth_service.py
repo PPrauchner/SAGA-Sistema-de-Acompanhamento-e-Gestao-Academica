@@ -16,8 +16,23 @@ from fastapi import HTTPException
 from firebase_admin import auth as firebase_auth
 
 from backend.app.core.auth import CurrentUser
+from backend.app.core.config import settings
+from backend.app.core.email import EmailError
 from backend.app.models.user import InviteRequest
 from backend.app.services.auth_service import AuthService
+
+
+class _FakeEmail:
+    """EmailSender fake: registra os envios ou simula falha de envio."""
+
+    def __init__(self, falha: bool = False) -> None:
+        self.falha = falha
+        self.enviados: list[tuple[str, str, str]] = []
+
+    def send(self, to: str, subject: str, html_body: str) -> None:
+        if self.falha:
+            raise EmailError("falha simulada")
+        self.enviados.append((to, subject, html_body))
 
 
 class _FakeRepo:
@@ -95,6 +110,63 @@ async def test_create_invite_email_existente_409() -> None:
             InviteRequest(email="aluno@x.com", role="aluno", nome="Aluno X"), _coordenacao()
         )
     assert exc.value.status_code == 409
+
+
+async def test_create_invite_envia_email() -> None:
+    invites, users = _FakeRepo(), _FakeRepo()
+    email = _FakeEmail()
+    service = AuthService(
+        invite_repo=invites, user_repo=users, auth_client=_FakeAuth(), email_sender=email
+    )
+
+    resp = await service.create_invite(
+        InviteRequest(email="aluno@x.com", role="aluno", nome="Aluno X"), _coordenacao()
+    )
+
+    assert len(email.enviados) == 1
+    destinatario, _assunto, corpo = email.enviados[0]
+    assert destinatario == "aluno@x.com"
+    # O corpo carrega o código (token) e o link de primeiro acesso.
+    assert resp.token in corpo
+    assert "/first-access" in corpo
+
+
+async def test_create_invite_token_oculto_quando_nao_exposto(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "expose_invite_token", False)
+    invites, users = _FakeRepo(), _FakeRepo()
+    email = _FakeEmail()
+    service = AuthService(
+        invite_repo=invites, user_repo=users, auth_client=_FakeAuth(), email_sender=email
+    )
+
+    resp = await service.create_invite(
+        InviteRequest(email="aluno@x.com", role="aluno", nome="Aluno X"), _coordenacao()
+    )
+
+    # Token sai só por e-mail; a resposta não o expõe, mas o convite foi persistido.
+    assert resp.token is None
+    assert len(invites.store) == 1
+    assert email.enviados[0][0] == "aluno@x.com"
+
+
+async def test_create_invite_falha_email_nao_derruba_convite() -> None:
+    invites, users = _FakeRepo(), _FakeRepo()
+    service = AuthService(
+        invite_repo=invites,
+        user_repo=users,
+        auth_client=_FakeAuth(),
+        email_sender=_FakeEmail(falha=True),
+    )
+
+    resp = await service.create_invite(
+        InviteRequest(email="aluno@x.com", role="aluno", nome="Aluno X"), _coordenacao()
+    )
+
+    # Falha de envio é tratada: o convite persiste e o token segue como fallback.
+    assert resp.token in invites.store
+    assert invites.store[resp.token]["usado"] is False
 
 
 async def test_first_access_ativa_conta() -> None:

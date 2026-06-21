@@ -30,6 +30,7 @@ from backend.app.api.v1 import (
     inference,
     notifications,
     productions,
+    programs,
     reports,
     students,
     vehicles,
@@ -80,6 +81,7 @@ app.include_router(productions.router, prefix=_PREFIX, tags=["productions"])
 app.include_router(vehicles.router, prefix=_PREFIX, tags=["vehicles"])
 app.include_router(extensions.router, prefix=_PREFIX, tags=["extensions"])
 app.include_router(checklist.router, prefix=_PREFIX, tags=["checklist"])
+app.include_router(programs.router, prefix=_PREFIX, tags=["programs"])
 app.include_router(inference.router, prefix=_PREFIX, tags=["inference"])
 app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
 app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])

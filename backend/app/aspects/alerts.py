@@ -16,36 +16,9 @@ Responsabilidades:
 - Frontend assina onSnapshot em notifications/ filtrado por destinatario_id para receber
   alertas em tempo real.
 """
-"""
-Aspecto A05 — Geração de Alertas e Notificações (After advice).
 
-Preocupação transversal encapsulada:
-    Disparar notificações para os usuários corretos após operações relevantes,
-    sem que a lógica de negócio conheça o sistema de alertas.
+from __future__ import annotations
 
-Join Points:
-    - ActivityService.submit_activity()   → notifica orientador após submissão do aluno
-    - ActivityService.validate_activity() → notifica aluno após decisão da coordenação
-    - ExtensionService.approve_extension()→ notifica aluno após decisão de prorrogação
-    - WorkPlanService.add_update()        → notifica orientador após progresso do aluno
-    - A04 (check_deadlines) delega aqui quando detecta prazo crítico
-
-Advice (After):
-    1. Verifica flag ALERTS_ENABLED em aspect_config; se False, retorna sem efeito.
-    2. Extrai resultado da função original e IDs relevantes do contexto.
-    3. Determina destinatários (aluno_id → orientador_id via Firestore lookup quando
-       necessário).
-    4. Monta documento Notification com {tipo, titulo, mensagem, destinatario_id,
-       entidade_tipo, entidade_id, lida: false, timestamp, programa_id}.
-    5. Persiste em notifications/{auto_id} no Firestore.
-    6. Frontend usa onSnapshot filtrado por destinatario_id para receber em tempo real.
-
-Weaving:
-    Decorador @trigger_alerts aplicado após @requires_role e @audit_operation.
-    Ordem canônica: @requires_role → @audit_operation → @trigger_alerts → def func(...)
-"""
-
-import asyncio
 import functools
 import inspect
 import logging
@@ -57,118 +30,78 @@ from backend.app.core.firebase import get_firestore_client
 
 logger = logging.getLogger(__name__)
 
-PROGRAMA_ID_DEFAULT = "prog_default"
+_COLLECTION = "notifications"
 
 
-def trigger_alerts(
-    tipo: str,
-    titulo: str,
-    get_mensagem_fn: Callable[[Any, dict], str],
-    get_destinatario_fn: Callable[[dict], Optional[str]],
-    entidade_tipo: str,
-    get_entidade_id_fn: Optional[Callable[[dict], Optional[str]]] = None,
-) -> Callable:
-    """
-    Decorador After que dispara notificações no Firestore após a execução da função.
+class FirebaseRepository:
+    """Repositório Firestore para notificações (exposto para monkeypatch em testes)."""
 
-    Parâmetros:
-    - tipo: identificador do tipo de notificação (ex: 'atividade_validada')
-    - titulo: título fixo da notificação
-    - get_mensagem_fn(result, kwargs): constrói a mensagem personalizada a partir
-      do resultado da função e dos kwargs da chamada
-    - get_destinatario_fn(kwargs): resolve o uid do destinatário a partir dos kwargs
-    - entidade_tipo: tipo da entidade afetada (ex: 'activities')
-    - get_entidade_id_fn(kwargs): extrai o ID da entidade dos kwargs (opcional)
+    def __init__(self, collection: str) -> None:
+        self.collection = collection
+
+    async def create(self, data: dict[str, Any]) -> str:
+        try:
+            db = get_firestore_client()
+            _, doc_ref = db.collection(self.collection).add(data)
+            return doc_ref.id
+        except Exception as exc:
+            logger.error("[A05] Falha ao gravar notificação: %s", exc)
+            return ""
+
+
+def trigger_alerts(build: Callable) -> Callable:
+    """Decorador After que dispara notificações após a execução da função.
+
+    Args:
+        build: Callable (síncrono ou assíncrono) com assinatura
+               (result, args, kwargs) -> dict | list[dict] | None.
+               Retorna um ou mais documentos de notificação, ou None para não disparar.
 
     Advice: After — executa APÓS a função original, nunca interrompe o fluxo.
     Erros no advice são logados mas não propagados.
     """
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
-        async def wrapper(*args, **kwargs):
-            # Executa a função original primeiro (advice After)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
             result = await func(*args, **kwargs)
 
             if not aspect_config.ALERTS_ENABLED:
                 return result
 
             try:
-                # support sync or async resolvers
-                res_dest = get_destinatario_fn(kwargs)
-                if inspect.isawaitable(res_dest):
-                    destinatario_id = await res_dest
-                else:
-                    destinatario_id = res_dest
+                raw = build(result, args, kwargs)
+                if inspect.isawaitable(raw):
+                    raw = await raw
 
-                if not destinatario_id:
-                    logger.warning(
-                        "[A05] Destinatário não encontrado para notificação tipo='%s'",
-                        tipo,
-                    )
+                if raw is None:
                     return result
-                res_msg = get_mensagem_fn(result, kwargs)
-                if inspect.isawaitable(res_msg):
-                    mensagem = await res_msg
-                else:
-                    mensagem = res_msg
 
-                entidade_id = None
-                if get_entidade_id_fn:
-                    res_eid = get_entidade_id_fn(kwargs)
-                    if inspect.isawaitable(res_eid):
-                        entidade_id = await res_eid
-                    else:
-                        entidade_id = res_eid
+                specs = raw if isinstance(raw, list) else [raw]
 
-                await _gravar_notificacao(
-                    tipo=tipo,
-                    titulo=titulo,
-                    mensagem=mensagem,
-                    destinatario_id=destinatario_id,
-                    entidade_tipo=entidade_tipo,
-                    entidade_id=entidade_id,
-                )
+                repo = FirebaseRepository(_COLLECTION)
+                for spec in specs:
+                    if not spec:
+                        continue
+                    doc = {
+                        **spec,
+                        "lida": spec.get("lida", False),
+                        "timestamp": spec.get("timestamp", datetime.now(timezone.utc)),
+                    }
+                    await repo.create(doc)
+                    logger.debug(
+                        "[A05] Notificação gravada: tipo=%s destinatario=%s",
+                        spec.get("tipo"),
+                        spec.get("destinatario_id"),
+                    )
             except Exception as exc:
-                # A05 nunca derruba a operação principal
-                logger.error("[A05] Falha ao disparar notificação tipo='%s': %s", tipo, exc)
+                logger.error("[A05] Falha ao disparar notificação: %s", exc)
 
             return result
 
         return wrapper
+
     return decorator
-
-
-async def _gravar_notificacao(
-    tipo: str,
-    titulo: str,
-    mensagem: str,
-    destinatario_id: str,
-    entidade_tipo: str,
-    entidade_id: Optional[str],
-) -> None:
-    """Persiste o documento de notificação na coleção notifications/ do Firestore."""
-    try:
-        db = get_firestore_client()
-        doc: dict[str, Any] = {
-            "tipo": tipo,
-            "titulo": titulo,
-            "mensagem": mensagem,
-            "destinatario_id": destinatario_id,
-            "entidade_tipo": entidade_tipo,
-            "entidade_id": entidade_id,
-            "lida": False,
-            "timestamp": datetime.now(timezone.utc),
-            "programa_id": PROGRAMA_ID_DEFAULT,
-        }
-        db.collection("notifications").add(doc)
-        logger.debug(
-            "[A05] Notificação gravada: tipo=%s destinatario=%s entidade_id=%s",
-            tipo,
-            destinatario_id,
-            entidade_id,
-        )
-    except Exception as exc:
-        logger.error("[A05] Erro ao gravar notificação no Firestore: %s", exc)
 
 
 async def disparar_alerta_prazo(
@@ -178,31 +111,43 @@ async def disparar_alerta_prazo(
     dias_restantes: int,
     student_id: str,
 ) -> None:
-    """
-    Ponto de entrada para o aspecto A04 delegar alertas de prazo ao A05.
+    """Ponto de entrada para o aspecto A04 delegar alertas de prazo ao A05.
 
     Chamado por @check_deadlines quando detecta prazo crítico.
     Não é um decorador — é uma função direta usada via delegação entre aspectos.
 
-    Parâmetros:
-    - destinatario_id: uid do aluno ou orientador a notificar
-    - nome_aluno: nome do aluno para interpolação da mensagem
-    - tipo_prazo: 'qualificacao' | 'final'
-    - dias_restantes: quantidade de dias restantes
-    - student_id: ID do aluno no Firestore (usado como entidade_id)
+    Args:
+        destinatario_id: uid do aluno ou orientador a notificar.
+        nome_aluno: nome do aluno para interpolação da mensagem.
+        tipo_prazo: 'qualificacao' | 'final'.
+        dias_restantes: quantidade de dias restantes.
+        student_id: ID do aluno no Firestore (usado como entidade_id).
     """
     if not aspect_config.ALERTS_ENABLED:
         return
 
     tipo_label = "qualificação" if tipo_prazo == "qualificacao" else "entrega final"
-    await _gravar_notificacao(
-        tipo="prazo_critico",
-        titulo="Prazo crítico",
-        mensagem=(
+    doc: dict[str, Any] = {
+        "tipo": "prazo_critico",
+        "titulo": "Prazo crítico",
+        "mensagem": (
             f"Atenção: prazo de {tipo_label} de {nome_aluno} "
             f"vence em {dias_restantes} dia(s)."
         ),
-        destinatario_id=destinatario_id,
-        entidade_tipo="students",
-        entidade_id=student_id,
-    )
+        "destinatario_id": destinatario_id,
+        "entidade_tipo": "students",
+        "entidade_id": student_id,
+        "lida": False,
+        "timestamp": datetime.now(timezone.utc),
+    }
+
+    try:
+        repo = FirebaseRepository(_COLLECTION)
+        await repo.create(doc)
+        logger.debug(
+            "[A05] Alerta de prazo gravado: tipo_prazo=%s destinatario=%s",
+            tipo_prazo,
+            destinatario_id,
+        )
+    except Exception as exc:
+        logger.error("[A05] Falha ao gravar alerta de prazo: %s", exc)

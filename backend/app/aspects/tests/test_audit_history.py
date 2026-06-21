@@ -219,6 +219,54 @@ async def test_track_history_salva_observacao_no_snapshot(
     assert snapshot["observacao"] == "Mudanca revisada pela coordenacao"
 
 
+class _ActivityTypeRepo:
+    documents: dict[str, dict[str, Any]] = {
+        "type1": {"nome": "Disciplina", "pontuacao_base": 4.0}
+    }
+    history: list[tuple[str, dict[str, Any]]] = []
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        data = self.documents.get(doc_id)
+        return dict(data) if data else None
+
+    async def update(self, doc_id: str, data: dict[str, Any]) -> None:
+        self.documents.setdefault(doc_id, {}).update(data)
+
+    async def save_history_snapshot(
+        self,
+        type_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        self.history.append((type_id, dict(snapshot)))
+        return "hist1"
+
+
+async def test_track_history_resolve_activity_type_por_type_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ActivityTypeRepo.documents = {"type1": {"nome": "Disciplina", "pontuacao_base": 4.0}}
+    _ActivityTypeRepo.history = []
+    monkeypatch.setattr(history_module, "ActivityTypeRepository", _ActivityTypeRepo)
+
+    @track_history
+    async def update_type(
+        type_id: str,
+        body: dict[str, float],
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        await _ActivityTypeRepo().update(type_id, body)
+        return {"message": "ok"}
+
+    await update_type("type1", {"pontuacao_base": 6.0}, _user())
+
+    type_id, snapshot = _ActivityTypeRepo.history[0]
+    assert type_id == "type1"
+    assert snapshot["entidade_tipo"] == "activity_type"
+    assert snapshot["entidade_id"] == "type1"
+    assert snapshot["valor_anterior"]["pontuacao_base"] == 4.0
+    assert snapshot["valor_novo"]["pontuacao_base"] == 6.0
+
+
 async def test_track_history_respeita_flag_desativada(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

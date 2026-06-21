@@ -237,6 +237,8 @@ dist-ssr/
 .DS_Store
 Thumbs.db
 
+.credentials/
+/docs/relatorios/
 # Claude Code — arquivo de estado local
 .claude/current-issue
 .claude/root-issue
@@ -248,5 +250,8 @@ Thumbs.db
 
 # Relatórios de revisão de PR (gerados internamente)
 docs/relatorios/
+
 # Google API credentials
 .credentials/
+
+.gemini

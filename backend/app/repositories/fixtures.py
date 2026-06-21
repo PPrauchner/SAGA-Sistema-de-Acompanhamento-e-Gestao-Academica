@@ -38,10 +38,10 @@ def _iso(days_from_today: int) -> str:
 
 _PROGRAM: dict[str, Any] = {
     "id": "prog_default",
-    "min_creditos_basico": 12,
-    "min_creditos_especifico": 8,
-    "max_creditos_tecnologico": 4,
-    "min_creditos_total": 24,
+    "creditos_grupo_basico_min": 12,
+    "creditos_grupo_especifico_min": 8,
+    "creditos_grupo_tecnologico_max": 4,
+    "creditos_total_min": 24,
     "max_prorrogacoes": 2,
     "relevancia_pesos": {"A1": 2.0, "A2": 1.5, "B": 1.0, "C": 0.5},
 }

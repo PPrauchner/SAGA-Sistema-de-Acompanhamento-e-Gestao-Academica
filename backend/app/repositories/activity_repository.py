@@ -1,93 +1,96 @@
 """
-Repositório concreto para as sub-coleções de atividades e produções no Firestore.
-
-Responsabilidades:
-- Acessar e persistir dados em students/{id}/activities/ e students/{id}/productions/.
-- Métodos de atividade: create_activity(student_id, data), get_activity(activity_id),
-  update_activity(activity_id, data), list_activities(student_id, filters).
-- Métodos de produção: create_production(student_id, data), list_productions(student_id).
-- get_approved_activities_by_category(student_id): agrega créditos por categoria
-  (básico, específico, tecnológico) para alimentar os fatos creditos_grupo_* do motor.
-- get_approved_productions(student_id): lista produções aprovadas para verificação do
-  fato producao_bibliografica_validada.
-- Salvar histórico de tipos de atividade em activity_types/{id}/history/ para o aspecto A03.
+Repositório concreto para a sub-coleção students/{id}/activities/ no Firestore.
 """
 
-from datetime import datetime, timezone
-from typing import Optional
+from __future__ import annotations
+
+import asyncio
+from typing import Any
 
 from backend.app.core.firebase import get_firestore_client
+from backend.app.repositories.firebase_repository import FirebaseRepository
 
 
-class ActivityRepository:
-    COLLECTION = "activities"
+class ActivityRepository(FirebaseRepository):
+    """Repositório da sub-coleção students/{id}/activities/."""
 
-    def _db(self):
-        return get_firestore_client()
+    def __init__(self) -> None:
+        super().__init__("students")
 
-    def get_by_id(self, activity_id: str) -> Optional[dict]:
-        doc = self._db().collection(self.COLLECTION).document(activity_id).get()
-        if not doc.exists:
-            return None
-        return {"id": doc.id, **doc.to_dict()}
+    def _activity_doc(self, student_id: str, activity_id: str):
+        return (
+            get_firestore_client()
+            .collection("students")
+            .document(student_id)
+            .collection("activities")
+            .document(activity_id)
+        )
 
-    def update(self, activity_id: str, data: dict) -> dict:
-        data["atualizado_em"] = datetime.now(timezone.utc)
-        ref = self._db().collection(self.COLLECTION).document(activity_id)
-        ref.update(data)
-        doc = ref.get()
-        return {"id": doc.id, **doc.to_dict()}
+    # -- usado por submit_activity / list_activities / comprovante (async, original) --
 
-    def get_advisor_uid_by_student(self, student_id: str) -> Optional[str]:
-        """Retorna o uid do orientador responsável pelo aluno."""
-        doc = self._db().collection("students").document(student_id).get()
+    async def create_activity(self, student_id: str, data: dict[str, Any]) -> str:
+        return await self.set_subcollection_auto(student_id, "activities", data)
+
+    async def get_activity(self, student_id: str, activity_id: str) -> dict[str, Any] | None:
+        def _read():
+            snapshot = self._activity_doc(student_id, activity_id).get()
+            if not snapshot.exists:
+                return None
+            item = snapshot.to_dict()
+            item["id"] = snapshot.id
+            item["student_id"] = student_id
+            return item
+        return await asyncio.to_thread(_read)
+
+    async def update_activity(self, student_id: str, activity_id: str, data: dict[str, Any]) -> None:
+        await asyncio.to_thread(self._activity_doc(student_id, activity_id).update, data)
+
+    async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
+        return await self.list_subcollection(student_id, "activities")
+
+    # -- usado pelo fluxo de validação (PATCH /validate), que só tem activity_id na URL --
+    # síncronos de propósito, pra não mudar o comportamento dos decoradores já testados
+
+    def get_by_id(self, activity_id: str) -> dict[str, Any] | None:
+        for snapshot in get_firestore_client().collection_group("activities").stream():
+            if snapshot.id == activity_id:
+                item = snapshot.to_dict()
+                item["id"] = snapshot.id
+                item["student_id"] = snapshot.reference.parent.parent.id
+                return item
+        return None
+
+    def update_by_id(self, activity_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        for snapshot in get_firestore_client().collection_group("activities").stream():
+            if snapshot.id == activity_id:
+                snapshot.reference.update(data)
+                updated = snapshot.reference.get()
+                item = updated.to_dict()
+                item["id"] = updated.id
+                item["student_id"] = updated.reference.parent.parent.id
+                return item
+        raise ValueError(f"Atividade {activity_id} não encontrada.")
+
+    def get_advisor_uid_by_student(self, student_id: str) -> str | None:
+        doc = get_firestore_client().collection("students").document(student_id).get()
         if not doc.exists:
             return None
         return doc.to_dict().get("orientador_uid")
 
-    def get_student_uid_by_activity(self, activity_id: str) -> Optional[str]:
-        """
-        Retorna o uid Firebase Auth do aluno dono da atividade.
-
-        Usado pelo aspecto A05 para determinar o destinatário da notificação
-        de resultado da validação.
-        """
-        activity = self.get_by_id(activity_id)
-        if not activity:
-            return None
-        student_id = activity.get("student_id")
-        if not student_id:
-            return None
-        doc = self._db().collection("students").document(student_id).get()
-        if not doc.exists:
-            return None
-        return doc.to_dict().get("uid")
-
-    def get_activity_type(self, tipo_id: str) -> Optional[dict]:
-        """
-        Retorna os metadados do tipo de atividade (pontuacao_base, categoria, etc.).
-
-        Usado pelo service para determinar créditos a contabilizar quando a
-        coordenação não fornece creditos_concedidos explícitos.
-        """
-        doc = self._db().collection("activity_types").document(tipo_id).get()
+    def get_activity_type(self, tipo_id: str) -> dict[str, Any] | None:
+        doc = get_firestore_client().collection("activity_types").document(tipo_id).get()
         if not doc.exists:
             return None
         return {"id": doc.id, **doc.to_dict()}
 
     def count_approved_productions(self, student_id: str) -> int:
-        """
-        Conta produções bibliográficas aprovadas do aluno.
-
-        Usado para decidir se o fato producao_bibliografica_validada deve
-        ser gerado após uma aprovação.
-        """
         docs = (
-            self._db()
-            .collection(self.COLLECTION)
-            .where("student_id", "==", student_id)
+            get_firestore_client()
+            .collection("students")
+            .document(student_id)
+            .collection("activities")
             .where("categoria", "==", "producao_bibliografica")
-            .where("status", "==", "aprovada")
+            .where("status", "==", "aprovado")
             .stream()
         )
         return sum(1 for _ in docs)
