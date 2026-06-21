@@ -114,8 +114,8 @@ async def upload_comprovante(
     """
     result = await _comprovante_service.upload(
         activity_id=activity_id,
-        file=file,
-        current_user=current_user,
+        arquivo=file,
+        user=current_user,
     )
     return ComprovanteUploadResponse(
         comprovante_url=result["comprovante_url"],
