@@ -5,8 +5,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from backend.app.aspects.alerts import trigger_alerts
-from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.models.work_plan import (
     ActorContext,
     CreatePlanResponse,
@@ -30,6 +28,10 @@ from backend.app.models.work_plan import (
 )
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
 
+STATUS_CONCLUIDO = "concluido"
+STATUS_ATRASADO = "atrasado"
+STAGE_KIND_DEFESA = "defesa"
+
 
 class WorkPlanNotFoundError(Exception):
     """Recurso de plano de trabalho não encontrado."""
@@ -39,28 +41,23 @@ async def _build_progress_update_alert(
     result: ProgressUpdateCreated,
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
-) -> None:
-    service = args[0] if args else None
-    task_id = args[1] if len(args) > 1 else kwargs.get("task_id")
-    actor = args[3] if len(args) > 3 else kwargs.get("actor")
+) -> dict[str, Any] | None:
+    service = next((value for value in (*kwargs.values(), *args) if hasattr(value, "_repo")), None)
+    task_id = kwargs.get("task_id") or next((value for value in args if isinstance(value, str)), None)
+    actor = kwargs.get("actor") or next((value for value in args if isinstance(value, ActorContext)), None)
     if service is None or task_id is None or not hasattr(service, "_repo"):
         return None
 
     plan, _, task = await service._repo.get_task_context(task_id)
-    await service._repo.create_notification(
-        {
-            "tipo": "progresso_task",
-            "titulo": "Atualizacao de progresso",
-            "mensagem": f"{actor.nome if actor else 'Sistema'} atualizou {task['titulo']}.",
-            "destinatario_id": "orientador",
-            "entidade_id": task_id,
-            "student_id": plan["student_id"],
-            "lida": False,
-            "timestamp": datetime.now(timezone.utc),
-        }
-    )
     result.notificacao_enviada_ao_orientador = True
-    return None
+    return {
+        "tipo": "progresso_task",
+        "titulo": "Atualizacao de progresso",
+        "mensagem": f"{actor.nome if actor else 'Sistema'} atualizou {task['titulo']}.",
+        "destinatario_id": "orientador",
+        "entidade_id": task_id,
+        "student_id": plan["student_id"],
+    }
 
 
 class WorkPlanService:
@@ -101,7 +98,7 @@ class WorkPlanService:
             plan, _ = await self._repo.get_stage_context(stage_id)
         except KeyError as exc:
             raise WorkPlanNotFoundError(str(exc)) from exc
-            await self._recalculate(plan)
+        await self._recalculate(plan)
         return {"message": "Etapa atualizada"}
 
     async def create_task(self, stage_id: str, payload: TaskCreate) -> CreateTaskResponse:
@@ -124,13 +121,13 @@ class WorkPlanService:
 
     async def update_task_status(self, task_id: str, status: str) -> TaskStatusResponse:
         try:
-            await self._repo.update_task(task_id, {"status": status, "progresso_percentual": 100.0 if status == "concluida" else None})
+            await self._repo.update_task(task_id, {"status": status, "progresso_percentual": 100.0 if status == STATUS_CONCLUIDO else None})
             plan, _, _ = await self._repo.get_task_context(task_id)
         except KeyError as exc:
             raise WorkPlanNotFoundError(str(exc)) from exc
 
         task_fact = None
-        if status == "concluida":
+        if status == STATUS_CONCLUIDO:
             task_fact = f"task_concluida({task_id}, {plan['student_id']})"
             await self._repo.save_fact(plan["student_id"], task_fact)
 
@@ -143,8 +140,6 @@ class WorkPlanService:
             fato_plano_concluido=plan_fact,
         )
 
-    @trigger_alerts(_build_progress_update_alert)
-    @check_deadlines
     async def add_progress_update(
         self,
         task_id: str,
@@ -202,27 +197,27 @@ class WorkPlanService:
                 stage["status"] = stage.get("status", "pendente")
                 continue
             stage["progresso_percentual"] = round(sum(float(t.get("progresso_percentual", 0)) for t in tasks) / len(tasks), 2)
-            if all(t.get("status") == "concluida" for t in tasks):
-                stage["status"] = "concluida"
-            elif any(t.get("status") == "atrasada" for t in tasks):
-                stage["status"] = "atrasada"
+            if all(t.get("status") == STATUS_CONCLUIDO for t in tasks):
+                stage["status"] = STATUS_CONCLUIDO
+            elif any(t.get("status") == STATUS_ATRASADO for t in tasks):
+                stage["status"] = STATUS_ATRASADO
             elif any(t.get("status") == "em_andamento" for t in tasks):
                 stage["status"] = "em_andamento"
             else:
                 stage["status"] = "pendente"
 
         plan["progresso_percentual"] = round(sum(float(t.get("progresso_percentual", 0)) for t in all_tasks) / len(all_tasks), 2) if all_tasks else 0
-        if stages and all(stage["status"] == "concluida" for stage in stages):
-            plan["status_geral"] = "concluida"
-        elif any(stage["status"] == "atrasada" for stage in stages):
-            plan["status_geral"] = "atrasada"
+        if stages and all(stage["status"] == STATUS_CONCLUIDO for stage in stages):
+            plan["status_geral"] = STATUS_CONCLUIDO
+        elif any(stage["status"] == STATUS_ATRASADO for stage in stages):
+            plan["status_geral"] = STATUS_ATRASADO
         elif any(stage["status"] == "em_andamento" for stage in stages):
             plan["status_geral"] = "em_andamento"
         else:
             plan["status_geral"] = "pendente"
 
-        non_defesa = [task for stage in stages if stage["nome"].lower() != "defesa" for task in stage["tasks"]]
-        plano_concluido = bool(non_defesa) and all(task.get("status") == "concluida" for task in non_defesa)
+        non_defesa = [task for stage in stages if not _is_defense_stage(stage) for task in stage["tasks"]]
+        plano_concluido = bool(non_defesa) and all(task.get("status") == STATUS_CONCLUIDO for task in non_defesa)
         fact = f"plano_concluido({plan['student_id']})"
         if plano_concluido:
             await self._repo.save_fact(plan["student_id"], fact)
@@ -248,3 +243,7 @@ class WorkPlanService:
             fato_plano_concluido=fact if fact in plan.get("facts", []) else None,
             stages=stages,
         )
+
+
+def _is_defense_stage(stage: dict[str, Any]) -> bool:
+    return stage.get("tipo") == STAGE_KIND_DEFESA or str(stage.get("nome", "")).casefold() == STAGE_KIND_DEFESA
