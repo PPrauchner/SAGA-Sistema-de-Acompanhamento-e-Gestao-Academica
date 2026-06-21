@@ -473,3 +473,56 @@ async def test_coord_dashboard_includes_recent_audit():
     assert len(result.auditoria_recente) == 2
     assert result.auditoria_recente[0].operacao == "update_student"  # mais recente primeiro
 
+
+# ─── Cycle 14: total concluidos ──────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_coord_dashboard_counts_total_concluidos():
+    """coordenação com N alunos concluídos retorna N, sem alunos retorna 0."""
+    from backend.app.services.dashboard_service import DashboardService
+
+    students = [
+        _make_student({"id": "s1", "situacao_registrada": "regular"}),
+        _make_student({"id": "s2", "situacao_registrada": "concluido"}),
+        _make_student({"id": "s3", "situacao_registrada": "concluido"}),
+    ]
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockSR.return_value.list_all = AsyncMock(return_value=students)
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_coordenacao_dashboard()
+
+    assert result.total_concluidos == 2
+
+@pytest.mark.asyncio
+async def test_coord_dashboard_counts_total_concluidos_zero():
+    """coordenação sem alunos concluídos retorna total_concluidos == 0."""
+    from backend.app.services.dashboard_service import DashboardService
+
+    students = [
+        _make_student({"id": "s1", "situacao_registrada": "regular"}),
+    ]
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockSR.return_value.list_all = AsyncMock(return_value=students)
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_coordenacao_dashboard()
+
+    assert result.total_concluidos == 0
+

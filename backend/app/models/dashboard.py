@@ -122,5 +122,6 @@ class CoordDashboardResponse(BaseModel):
     atividades_aguardando_validacao: int = 0
     prorrogacoes_pendentes: int = 0
     producoes_ultimo_mes: int = 0
+    total_concluidos: int = 0
     tempo_medio_integralizacao_meses: float | None = None
     auditoria_recente: list[AuditoriaRecenteItem] = []

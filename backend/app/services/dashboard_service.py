@@ -261,6 +261,7 @@ class DashboardService:
             )
 
         tempo_medio = _compute_avg_completion_time(all_students)
+        total_concluidos = sum(1 for s in all_students if s.get("situacao_registrada") == "concluido")
         audit_logs = await self._audit_logs.list_all()
         auditoria_recente = _build_recent_audit(audit_logs, limit=5)
 
@@ -271,6 +272,7 @@ class DashboardService:
             atividades_aguardando_validacao=total_pending,
             prorrogacoes_pendentes=0,  # TODO: integrar com extensions/
             producoes_ultimo_mes=0,  # TODO: integrar com productions/ (coleção raiz)
+            total_concluidos=total_concluidos,
             tempo_medio_integralizacao_meses=tempo_medio,
             auditoria_recente=auditoria_recente,
         )
