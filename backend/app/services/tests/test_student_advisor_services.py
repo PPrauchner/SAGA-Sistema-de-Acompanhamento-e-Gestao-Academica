@@ -213,6 +213,18 @@ async def test_create_advisor_usa_auto_id_e_retorna_invite_token() -> None:
     assert _FakeAdvisorRepository.store["advisor1"]["email"] == "orientador@x.com"
 
 
+async def test_list_advisors_orientador_filtra_por_programa() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador", "programa_id": "prog"},
+        "advisor2": {"uid": "outro", "nome": "Outro", "programa_id": "outro"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.list_advisors(_advisor_user())
+
+    assert [advisor["id"] for advisor in result] == ["advisor1"]
+
+
 async def test_get_advisor_retorna_orientandos_ativos() -> None:
     _FakeAdvisorRepository.store = {
         "advisor1": {"uid": "uid-advisor", "nome": "Orientador"},
