@@ -958,6 +958,7 @@ export function CoordDashboard() {
   }
 
   const ativos = dashData?.total_alunos_ativos ?? statusData.reduce((s, d) => s + d.value, 0);
+  const totalAlunos = dashData?.total_alunos ?? ativos;
   const emRisco = dashData?.alunos_por_status?.em_risco ?? 0;
   const emProrrogacao = dashData?.alunos_por_status?.em_prorrogacao ?? 0;
   const concluidos = dashData?.total_concluidos ?? 0;
@@ -993,7 +994,8 @@ export function CoordDashboard() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 md:gap-4">
-        <KpiCard icon={<Users size={20} />} label="Alunos Ativos" value={ativos} sub="Todos os programas" color="#123C7A" trend="up" />
+        <KpiCard icon={<Users size={20} />} label="Total Alunos" value={totalAlunos} sub="Todos os programas" color="#123C7A" trend="up" />
+        <KpiCard icon={<UserCheck size={20} />} label="Alunos Ativos" value={ativos} sub="Matrículas vigentes" color="#1F8A70" trend="up" />
         <KpiCard icon={<AlertTriangle size={20} />} label="Em Risco" value={emRisco} sub="Requerem ação imediata" color="#dc2626" trend="down" />
         <KpiCard icon={<Clock size={20} />} label="Em Prorrogação" value={emProrrogacao} sub="Com prazo estendido" color="#f97316" />
         <KpiCard icon={<CheckCircle2 size={20} />} label="Concluídos" value={concluidos} sub="Titulados em 2025–2026" color="#1F8A70" trend="up" />
