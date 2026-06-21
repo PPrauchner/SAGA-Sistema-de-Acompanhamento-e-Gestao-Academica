@@ -93,7 +93,11 @@ export function TransfersPage() {
           advisor.id !== selectedStudent.orientador_id,
       )
     : [];
-  const pendingTransfers = transfers.filter((transfer) => transfer.status === "pendente");
+  const selectedAdvisor = advisorId ? advisorById.get(advisorId) : null;
+  const selectedAdvisorHasCapacity = selectedAdvisor
+    ? selectedAdvisor.orientandos_ativos < selectedAdvisor.limite_orientandos
+    : false;
+  const listedTransfers = transfers;
 
   async function runAction(action: () => Promise<{ message: string }>): Promise<void> {
     if (!token) return;
@@ -182,14 +186,15 @@ export function TransfersPage() {
           </h2>
           {loading ? (
             <div className="py-16 text-center" style={{ color: "var(--muted-foreground)" }}>Carregando...</div>
-          ) : pendingTransfers.length === 0 ? (
-            <div className="py-16 text-center" style={{ color: "var(--muted-foreground)" }}>Nenhuma solicitação pendente.</div>
+          ) : listedTransfers.length === 0 ? (
+            <div className="py-16 text-center" style={{ color: "var(--muted-foreground)" }}>Nenhuma solicitação encontrada.</div>
           ) : (
             <div className="space-y-3">
-              {pendingTransfers.map((transfer) => {
+              {listedTransfers.map((transfer) => {
                 const student = studentById.get(transfer.student_id);
                 const origin = transfer.orientador_origem_id ? advisorById.get(transfer.orientador_origem_id) : null;
                 const destination = advisorById.get(transfer.orientador_destino_id);
+                const isPending = transfer.status === "pendente";
                 return (
                   <div key={transfer.id} className="rounded-lg p-4" style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}>
                     <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
@@ -202,7 +207,7 @@ export function TransfersPage() {
                           {statusLabel(transfer.status)}
                         </span>
                       </div>
-                      {isCoord ? (
+                      {isPending && isCoord ? (
                         <div className="flex flex-col gap-2 md:min-w-[260px]">
                           <input
                             value={rejectReason[transfer.id] ?? ""}
@@ -234,7 +239,7 @@ export function TransfersPage() {
                             </button>
                           </div>
                         </div>
-                      ) : (
+                      ) : isPending ? (
                         <button
                           type="button"
                           disabled={saving}
@@ -245,6 +250,10 @@ export function TransfersPage() {
                           <XCircle size={14} />
                           Cancelar
                         </button>
+                      ) : (
+                        <span style={{ color: "var(--muted-foreground)", fontSize: "12px" }}>
+                          Sem ações pendentes
+                        </span>
                       )}
                     </div>
                   </div>
@@ -311,8 +320,13 @@ export function TransfersPage() {
             >
               <option value="">Selecione...</option>
               {availableAdvisors.map((advisor) => (
-                <option key={advisor.id} value={advisor.id}>
+                <option
+                  key={advisor.id}
+                  value={advisor.id}
+                  disabled={advisor.orientandos_ativos >= advisor.limite_orientandos}
+                >
                   {advisor.nome} ({advisor.orientandos_ativos}/{advisor.limite_orientandos})
+                  {advisor.orientandos_ativos >= advisor.limite_orientandos ? " - sem capacidade" : ""}
                 </option>
               ))}
             </select>
@@ -329,9 +343,15 @@ export function TransfersPage() {
 
           <button
             type="submit"
-            disabled={saving || !selectedStudent || !advisorId || selectedStudentTerminal}
+            disabled={
+              saving ||
+              !selectedStudent ||
+              !advisorId ||
+              selectedStudentTerminal ||
+              !selectedAdvisorHasCapacity
+            }
             className="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2"
-            style={{ background: saving || !selectedStudent || !advisorId ? "var(--muted)" : "#123C7A", color: "#fff", fontSize: "14px", fontWeight: 700, opacity: saving ? 0.7 : 1 }}
+            style={{ background: saving || !selectedStudent || !advisorId || !selectedAdvisorHasCapacity ? "var(--muted)" : "#123C7A", color: "#fff", fontSize: "14px", fontWeight: 700, opacity: saving ? 0.7 : 1 }}
           >
             {isCoord ? <UserCheck size={16} /> : <Send size={16} />}
             {saving ? "Salvando..." : isCoord ? "Confirmar transferência" : "Enviar solicitação"}

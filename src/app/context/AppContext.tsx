@@ -28,6 +28,8 @@ export interface User {
   role: UserRole;
   avatar?: string;
   student_id?: string;
+  advisor_id?: string;
+  programa_id?: string;
   matricula?: string;
   programa?: string;
   orientador?: string;
@@ -73,7 +75,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         email: profile.email,
         role: profile.role,
         programa: profile.programaId,
+        programa_id: profile.programaId,
         student_id: profile.studentId ?? undefined,
+        advisor_id: profile.advisorId ?? undefined,
       }
     : null;
 
