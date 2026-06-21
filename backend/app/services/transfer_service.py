@@ -140,6 +140,13 @@ class TransferService:
     ) -> dict[str, Any]:
         now = datetime.now(timezone.utc)
         pending = await self._transfers.get_pending_by_student(data.student_id)
+
+        result = await self._execute_transfer(
+            data.student_id,
+            data.orientador_destino_id,
+            user,
+        )
+
         if pending is not None:
             await self._transfers.cancel(
                 pending["id"],
@@ -152,12 +159,6 @@ class TransferService:
                     "cancel_reason": "Transferencia direta realizada pela coordenacao",
                 },
             )
-
-        result = await self._execute_transfer(
-            data.student_id,
-            data.orientador_destino_id,
-            user,
-        )
 
         transfer_id = await self._transfers.create_request(
             {
