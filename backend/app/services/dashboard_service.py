@@ -1,23 +1,10 @@
 """
-Serviço de negócio para agregação de dados dos dashboards dos três perfis.
-
-Responsabilidades:
-- get_aluno_dashboard(student_id) -> AlunoDashboardResponse: agrega situação atual,
-  progresso do plano, créditos por grupo, resumo do checklist, tasks próximas, produções
-  aprovadas e atividades pendentes de validação. Exibe badge de conflito se
-  situacao_registrada != situacao_inferida. Não executa o motor em tempo real — lê
-  situacao_inferida já persistida pelo InferenceService.
-- get_orientador_dashboard(advisor_id) -> OrientadorDashboardResponse: visão agregada dos
-  orientandos — contagem por status, atividades aguardando parecer, lista de orientandos
-  com progresso e alertas.
-- get_coordenacao_dashboard() -> CoordDashboardResponse: visão macro do programa — totais
-  por status, atividades aguardando validação, prorrogações pendentes, produções do último
-  mês, tempo médio de integralização e auditoria recente.
+Serviço de agregação de dados dos dashboards dos três perfis.
 """
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 
@@ -100,7 +87,6 @@ _STATUS_FIELD_MAP: dict[str, str] = {
     "em_fase_de_defesa": "fase_defesa",
     "em_prorrogacao": "em_prorrogacao",
 }
-"""Mapeia valores de situacao_inferida no Firestore para atributos do modelo."""
 
 
 def _count_by_status(
@@ -196,10 +182,10 @@ class DashboardService:
         
         tasks = await self._work_plan.get_all_tasks_for_student(student_id)
         total_tasks = len(tasks)
-        concluidas = sum(1 for t in tasks if t.get("concluida"))
+        concluidas = sum(1 for t in tasks if t.get("status") == "concluida")
         progresso = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
         
-        pendentes = [t for t in tasks if not t.get("concluida")]
+        pendentes = [t for t in tasks if t.get("status") != "concluida"]
         try:
             pendentes.sort(key=lambda x: str(x.get("prazo") or "9999-12-31"))
         except Exception:
@@ -274,10 +260,9 @@ class DashboardService:
             student_id = s.get("id", "")
             resumo = _build_orientando_resumo(s)
             
-            # Fetch tasks and calculate progress
             tasks = await self._work_plan.get_all_tasks_for_student(student_id)
             total_tasks = len(tasks)
-            concluidas = sum(1 for t in tasks if t.get("concluida"))
+            concluidas = sum(1 for t in tasks if t.get("status") == "concluida")
             resumo.progresso_plano = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
             
             orientandos_resumo.append(resumo)
@@ -321,15 +306,14 @@ class DashboardService:
         prorrogacoes_pendentes = sum(1 for e in all_exts if e.get("status") == "pendente")
         
         all_prods = await self._productions.list_all()
-        import datetime
-        thirty_days_ago = datetime.date.today() - datetime.timedelta(days=30)
+        thirty_days_ago = date.today() - timedelta(days=30)
         producoes_ultimo_mes = 0
         for p in all_prods:
-            d = p.get("data")
+            d = p.get("criado_em")
             if d:
-                if isinstance(d, datetime.datetime):
+                if isinstance(d, datetime):
                     d = d.date()
-                if isinstance(d, datetime.date) and d >= thirty_days_ago:
+                if isinstance(d, date) and d >= thirty_days_ago:
                     producoes_ultimo_mes += 1
 
         return CoordDashboardResponse(
@@ -347,7 +331,10 @@ class DashboardService:
 
 
 def _compute_avg_completion_time(students: list[dict]) -> float | None:
-    """Calcula média de integralização dos alunos com situacao_registrada=concluido."""
+    """Calcula média de integralização dos alunos com situacao_registrada=concluido.
+    Nota: utiliza prazo_final como fallback quando data_conclusao está ausente.
+    Trata-se de uma aproximação que pode inflar o tempo médio.
+    """
     durations: list[float] = []
     for s in students:
         if s.get("situacao_registrada") != "concluido":

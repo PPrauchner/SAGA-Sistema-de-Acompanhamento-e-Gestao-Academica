@@ -1,10 +1,3 @@
-"""
-Testes TDD do DashboardService — ciclo red-green por comportamento.
-
-Mocks na fronteira de I/O (repositórios Firestore). Cada teste verifica um
-comportamento observável do serviço público, não detalhes de implementação.
-"""
-
 from __future__ import annotations
 
 import os
@@ -622,11 +615,11 @@ async def test_aluno_dashboard_calculates_real_progress():
 
     student = _make_student()
     tasks = [
-        {"id": "t1", "concluida": True, "titulo": "T1", "prazo": "2026-06-25"},
-        {"id": "t2", "concluida": False, "titulo": "T2", "prazo": "2026-06-21"}, # mais próxima
-        {"id": "t3", "concluida": False, "titulo": "T3", "prazo": "2026-06-30"},
-        {"id": "t4", "concluida": False, "titulo": "T4", "prazo": "2026-06-28"},
-        {"id": "t5", "concluida": False, "titulo": "T5", "prazo": "2026-07-05"}, # deve ser cortada (limite 3)
+        {"id": "t1", "status": "concluida", "titulo": "T1", "prazo": "2026-06-25"},
+        {"id": "t2", "status": "pendente", "titulo": "T2", "prazo": "2026-06-21"}, # mais próxima
+        {"id": "t3", "status": "pendente", "titulo": "T3", "prazo": "2026-06-30"},
+        {"id": "t4", "status": "pendente", "titulo": "T4", "prazo": "2026-06-28"},
+        {"id": "t5", "status": "pendente", "titulo": "T5", "prazo": "2026-07-05"}, # deve ser cortada (limite 3)
     ]
 
     with (
@@ -663,10 +656,10 @@ async def test_orientador_dashboard_shows_orientando_progress():
         _make_student({"id": "stu_001", "orientador_id": "adv_001"}),
     ]
     tasks_stu1 = [
-        {"id": "t1", "concluida": True},
-        {"id": "t2", "concluida": True},
-        {"id": "t3", "concluida": False},
-        {"id": "t4", "concluida": False},
+        {"id": "t1", "status": "concluida"},
+        {"id": "t2", "status": "concluida"},
+        {"id": "t3", "status": "pendente"},
+        {"id": "t4", "status": "pendente"},
     ] # 50%
 
     async def mock_get_all_tasks(student_id):
