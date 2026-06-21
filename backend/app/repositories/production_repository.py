@@ -5,7 +5,9 @@ Responsabilidades:
 - Herdar FirebaseRepository e especializar a leitura da coleção raiz productions/.
 - list_all(): herdado — produções cruas com id injetado.
 - list_productions(): produções com campos normalizados para os relatórios gerenciais
-  (titulo, veiculo_id, tipo_producao, autores, pontuacao_calculada, nivel, programa_id).
+  (titulo, veiculo_id, tipo_producao, autores, pontuacao_calculada, nivel, programa_id). O
+  nivel é resolvido por junção com programs/{programa_id}/vehicle_levels/ via veiculo_id —
+  productions/ não persiste nivel (data-model §3); veículos sem classificação caem no padrão C.
 
 Restrição: sem lógica de negócio — apenas leitura e mapeamento de campos. A junção com
 activities/ (quem reivindica crédito por produção) e a agregação por aluno/orientador são
@@ -18,32 +20,34 @@ from typing import Any
 
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
-""""
- Nível de relevância usado quando o veículo da produção não foi classificado em
- programs/{id}/vehicle_levels/ — espelha o fallback C (peso 0.5) da RL05 (data-model §3).
- """
-
+# Nível de relevância usado quando o veículo da produção não foi classificado em
+# programs/{id}/vehicle_levels/ — espelha o fallback C (peso 0.5) da RL05 (data-model §3).
 _NIVEL_PADRAO = "C"
 
 
-def _normalize_production(production: dict[str, Any]) -> dict[str, Any]:
+def _normalize_production(
+    production: dict[str, Any], niveis_por_veiculo: dict[str, str]
+) -> dict[str, Any]:
     """Mapeia um documento de produção para os campos consumidos pelos relatórios.
 
     Args:
         production: Documento cru de productions/ (com id injetado por list_all).
+        niveis_por_veiculo: Mapa veiculo_id → nivel lido de vehicle_levels/.
 
     Returns:
-        Dict com os campos de relatório normalizados; nivel cai para o padrão C quando
-        o veículo não tem classificação, e pontuacao_calculada é coagida para float.
+        Dict com os campos de relatório normalizados; nivel vem da classificação do veículo
+        em vehicle_levels/ e cai para o padrão C quando ele não está classificado, e
+        pontuacao_calculada é coagida para float.
     """
+    veiculo_id = production.get("veiculo_id")
     return {
         "id": production.get("id"),
         "titulo": production.get("titulo", ""),
-        "veiculo_id": production.get("veiculo_id"),
+        "veiculo_id": veiculo_id,
         "tipo_producao": production.get("tipo_producao"),
         "autores": production.get("autores", []),
         "pontuacao_calculada": float(production.get("pontuacao_calculada", 0) or 0),
-        "nivel": production.get("nivel") or _NIVEL_PADRAO,
+        "nivel": niveis_por_veiculo.get(veiculo_id, _NIVEL_PADRAO),
         "programa_id": production.get("programa_id"),
     }
 
@@ -55,7 +59,34 @@ class ProductionRepository(FirebaseRepository):
         super().__init__("productions")
 
     async def list_productions(self) -> list[dict[str, Any]]:
-        """Lista produções com campos normalizados para os relatórios gerenciais."""
+        """Lista produções normalizadas, com o nivel resolvido por junção com vehicle_levels."""
+        productions = await self.list_all()
+        program_ids = {
+            production["programa_id"]
+            for production in productions
+            if production.get("programa_id")
+        }
+        niveis_por_veiculo = await self._vehicle_levels(program_ids)
         return [
-            _normalize_production(production) for production in await self.list_all()
+            _normalize_production(production, niveis_por_veiculo)
+            for production in productions
         ]
+
+    async def _vehicle_levels(self, program_ids: set[str]) -> dict[str, str]:
+        """Mapa veiculo_id → nivel lido de programs/{id}/vehicle_levels/ dos programas dados.
+
+        Args:
+            program_ids: Programas cujas classificações de veículo devem ser carregadas.
+
+        Returns:
+            Mapa do veiculo_id para o nivel classificado; veículos sem classificação
+            simplesmente não aparecem (o chamador aplica o fallback C).
+        """
+        niveis: dict[str, str] = {}
+        for programa_id in program_ids:
+            levels = FirebaseRepository(f"programs/{programa_id}/vehicle_levels")
+            for level in await levels.list_all():
+                veiculo_id = level.get("veiculo_id") or level.get("id")
+                if veiculo_id and level.get("nivel"):
+                    niveis[veiculo_id] = level["nivel"]
+        return niveis
