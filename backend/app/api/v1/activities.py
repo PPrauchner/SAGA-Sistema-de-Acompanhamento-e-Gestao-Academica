@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from backend.app.aspects.alerts import trigger_alerts
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
-from backend.app.aspects.deadlines import check_deadlines
+from backend.app.aspects.deadline_validation import check_deadlines 
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
     ActivityCreateRequest,
