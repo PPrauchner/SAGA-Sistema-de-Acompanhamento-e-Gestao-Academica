@@ -1,5 +1,8 @@
 import { useState, useRef, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
+import { useAlunoDashboard } from "@/hooks/useDashboard";
+import type { AlunoDashboardData } from "@/api/dashboardApi";
+import { useAuth } from "@/hooks/useAuth";
 import {
   CheckCircle2, X, Calendar, ChevronRight, AlertTriangle,
   Bell, Clock, FileText, BookOpen, GraduationCap, Shield,
@@ -27,10 +30,9 @@ type ModalData =
   | null;
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
-const CURRENT_MONTH = 18;
-const TOTAL_MONTHS = 24;
-const COURSE_ELAPSED = 30;
-const COURSE_TOTAL = 48;
+// Valores default (usados quando a API ainda não retornou dados)
+const DEFAULT_TOTAL_MONTHS = 24;
+const DEFAULT_COURSE_TOTAL = 48;
 
 const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: string; border: string; desc: string; emoji: string }> = {
   regular: { label: "Regular", color: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)", border: "var(--tint-teal-border)", desc: "Todos os requisitos em dia. Continue assim!", emoji: "✓" },
@@ -39,7 +41,7 @@ const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: str
   "em-prorrogacao": { label: "Em Prorrogação", color: "var(--tint-orange-text)", bg: "var(--tint-orange-bg)", border: "var(--tint-orange-border)", desc: "Prazo regular encerrado. Prorrogação ativa até Junho/2027.", emoji: "↻" },
   "fase-defesa": { label: "Fase de Defesa", color: "var(--tint-violet-text)", bg: "var(--tint-violet-bg)", border: "var(--tint-violet-border)", desc: "Tese aprovada para defesa. Banca em fase de marcação.", emoji: "🎓" },
 };
-const CURRENT_STATUS: AcademicStatus = "em-risco";
+// CURRENT_STATUS agora vem dos dados da API (props.dashData.situacao_inferida)
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const CHECKLIST: ChecklistItem[] = [
@@ -425,10 +427,19 @@ function Modal({ data, onClose }: { data: ModalData; onClose: () => void }) {
 
 // ─── MOBILE KPI CAROUSEL ──────────────────────────────────────────────────────
 
-function MobileKpiCarousel() {
-  const s = STATUS_CFG[CURRENT_STATUS];
-  const creditPct = Math.round((42 / 60) * 100);
-  const coursePct = Math.round((COURSE_ELAPSED / COURSE_TOTAL) * 100);
+interface KpiProps {
+  situacao: AcademicStatus;
+  creditos: number;
+  minCreditos: number;
+  progressoPct: number;
+  producoes: number;
+  diasRestantes: number;
+}
+
+function MobileKpiCarousel({ situacao, creditos, minCreditos, progressoPct, producoes, diasRestantes }: KpiProps) {
+  const s = STATUS_CFG[situacao];
+  const creditPct = Math.min(100, Math.round((creditos / Math.max(1, minCreditos)) * 100));
+  const mesesRestantes = Math.max(0, Math.round(diasRestantes / 30));
 
   const cards = [
     {
@@ -452,13 +463,13 @@ function MobileKpiCarousel() {
       content: (
         <div className="flex items-center gap-3 mt-2">
           <div className="relative" style={{ width: 52, height: 52, flexShrink: 0 }}>
-            <Ring value={42} max={60} color="#123C7A" size={52} stroke={6} />
+            <Ring value={creditos} max={minCreditos} color="#123C7A" size={52} stroke={6} />
             <div className="absolute inset-0 flex items-center justify-center">
               <span style={{ fontSize: "10px", fontWeight: 800, color: "#123C7A" }}>{creditPct}%</span>
             </div>
           </div>
           <div>
-            <p style={{ fontSize: "26px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>42/60</p>
+            <p style={{ fontSize: "26px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>{creditos}/{minCreditos}</p>
             <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>créditos obtidos</p>
           </div>
         </div>
@@ -472,13 +483,13 @@ function MobileKpiCarousel() {
       content: (
         <div className="flex items-center gap-3 mt-2">
           <div className="relative" style={{ width: 52, height: 52, flexShrink: 0 }}>
-            <Ring value={2} max={5} color="#D4A017" size={52} stroke={6} />
+            <Ring value={producoes} max={3} color="#D4A017" size={52} stroke={6} />
             <div className="absolute inset-0 flex items-center justify-center">
-              <span style={{ fontSize: "10px", fontWeight: 800, color: "#D4A017" }}>40%</span>
+              <span style={{ fontSize: "10px", fontWeight: 800, color: "#D4A017" }}>{Math.round((producoes / 3) * 100)}%</span>
             </div>
           </div>
           <div>
-            <p style={{ fontSize: "26px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>2/5</p>
+            <p style={{ fontSize: "26px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>{producoes}/3</p>
             <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>artigos Qualis</p>
           </div>
         </div>
@@ -491,12 +502,12 @@ function MobileKpiCarousel() {
       title: "Prazo Restante",
       content: (
         <div className="mt-2">
-          <p style={{ fontSize: "34px", fontWeight: 800, color: "#8b5cf6", lineHeight: 1 }}>18</p>
+          <p style={{ fontSize: "34px", fontWeight: 800, color: "#8b5cf6", lineHeight: 1 }}>{mesesRestantes}</p>
           <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: 2 }}>meses restantes</p>
           <div className="rounded-full overflow-hidden mt-3" style={{ height: 6, background: "#e2e8f0" }}>
-            <div style={{ height: "100%", width: `${coursePct}%`, background: "#8b5cf6", borderRadius: 999 }} />
+            <div style={{ height: "100%", width: `${progressoPct}%`, background: "#8b5cf6", borderRadius: 999 }} />
           </div>
-          <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: 3 }}>Mês {COURSE_ELAPSED}/{COURSE_TOTAL}</p>
+          <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: 3 }}>Progresso do plano: {progressoPct}%</p>
         </div>
       ),
       accent: "#8b5cf6",
@@ -548,10 +559,10 @@ function MobileKpiCarousel() {
 
 // ─── DESKTOP KPI GRID ─────────────────────────────────────────────────────────
 
-function DesktopKpiCards() {
-  const s = STATUS_CFG[CURRENT_STATUS];
-  const creditPct = Math.round((42 / 60) * 100);
-  const coursePct = Math.round((COURSE_ELAPSED / COURSE_TOTAL) * 100);
+function DesktopKpiCards({ situacao, creditos, minCreditos, progressoPct, producoes, diasRestantes }: KpiProps) {
+  const s = STATUS_CFG[situacao];
+  const creditPct = Math.min(100, Math.round((creditos / Math.max(1, minCreditos)) * 100));
+  const mesesRestantes = Math.max(0, Math.round(diasRestantes / 30));
 
   return (
     <div className="hidden md:grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -572,21 +583,21 @@ function DesktopKpiCards() {
         <p style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "10px" }}>Créditos Obtidos</p>
         <div className="flex items-center gap-3">
           <div className="relative" style={{ width: 52, height: 52, flexShrink: 0 }}>
-            <Ring value={42} max={60} color="#123C7A" size={52} stroke={6} />
+            <Ring value={creditos} max={minCreditos} color="#123C7A" size={52} stroke={6} />
             <div className="absolute inset-0 flex items-center justify-center">
               <span style={{ fontSize: "10px", fontWeight: 800, color: "#123C7A" }}>{creditPct}%</span>
             </div>
           </div>
           <div>
-            <p style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>42</p>
-            <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>de 60 créditos</p>
+            <p style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>{creditos}</p>
+            <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>de {minCreditos} créditos</p>
           </div>
         </div>
       </div>
 
       <div className="rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <p style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "10px" }}>Créditos Necessários</p>
-        <p style={{ fontSize: "32px", fontWeight: 800, color: "#dc2626", lineHeight: 1 }}>18</p>
+        <p style={{ fontSize: "32px", fontWeight: 800, color: "#dc2626", lineHeight: 1 }}>{Math.max(0, minCreditos - creditos)}</p>
         <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "3px" }}>para concluir</p>
         <div className="rounded-full overflow-hidden mt-3" style={{ height: 5, background: "#e2e8f0" }}>
           <div style={{ height: "100%", width: `${creditPct}%`, background: "linear-gradient(90deg,#123C7A,#1a4f9a)", borderRadius: 999 }} />
@@ -597,13 +608,13 @@ function DesktopKpiCards() {
         <p style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "10px" }}>Produções Validadas</p>
         <div className="flex items-center gap-3">
           <div className="relative" style={{ width: 52, height: 52, flexShrink: 0 }}>
-            <Ring value={2} max={5} color="#D4A017" size={52} stroke={6} />
+            <Ring value={producoes} max={3} color="#D4A017" size={52} stroke={6} />
             <div className="absolute inset-0 flex items-center justify-center">
-              <span style={{ fontSize: "10px", fontWeight: 800, color: "#D4A017" }}>40%</span>
+              <span style={{ fontSize: "10px", fontWeight: 800, color: "#D4A017" }}>{Math.round((producoes / 3) * 100)}%</span>
             </div>
           </div>
           <div>
-            <p style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>2/5</p>
+            <p style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>{producoes}/3</p>
             <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>artigos Qualis</p>
           </div>
         </div>
@@ -611,12 +622,12 @@ function DesktopKpiCards() {
 
       <div className="rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <p style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: "10px" }}>Prazo Restante</p>
-        <p style={{ fontSize: "32px", fontWeight: 800, color: "#8b5cf6", lineHeight: 1 }}>18</p>
+        <p style={{ fontSize: "32px", fontWeight: 800, color: "#8b5cf6", lineHeight: 1 }}>{mesesRestantes}</p>
         <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "3px" }}>meses restantes</p>
         <div className="rounded-full overflow-hidden mt-3" style={{ height: 5, background: "#e2e8f0" }}>
-          <div style={{ height: "100%", width: `${coursePct}%`, background: "#8b5cf6", borderRadius: 999 }} />
+          <div style={{ height: "100%", width: `${progressoPct}%`, background: "#8b5cf6", borderRadius: 999 }} />
         </div>
-        <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "3px" }}>Mês {COURSE_ELAPSED}/{COURSE_TOTAL}</p>
+        <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "3px" }}>Progresso do plano: {progressoPct}%</p>
       </div>
     </div>
   );
@@ -624,14 +635,14 @@ function DesktopKpiCards() {
 
 // ─── ACADEMIC STATUS CARD ─────────────────────────────────────────────────────
 
-function AcademicStatusCard() {
-  const cfg = STATUS_CFG[CURRENT_STATUS];
+function AcademicStatusCard({ situacao, conflito }: { situacao: AcademicStatus; conflito: boolean }) {
+  const cfg = STATUS_CFG[situacao];
   const factors = [
     { label: "Créditos integralizados (70%)", ok: true },
     { label: "Proficiência em língua estrangeira", ok: true },
     { label: "Qualificação aprovada", ok: true },
-    { label: "Produções científicas ⚠ abaixo da meta", ok: false },
-    { label: "Prazo do doutorado: 18 meses restantes", ok: true },
+    { label: "Produções científicas ⚠ abaixo da meta", ok: situacao !== "em-risco" },
+    { label: conflito ? "Sistema constata conflito com registro oficial" : "Situação alinhada com registro oficial", ok: !conflito },
   ];
 
   return (
@@ -1058,6 +1069,8 @@ function MobilePhasesCard() {
 
 export function AlunoDashboard() {
   const { currentUser } = useApp();
+  const { studentId } = useAuth();
+  const { data: dashData, loading, error } = useAlunoDashboard(studentId ?? currentUser?.student_id);
   const [modal, setModal] = useState<ModalData>(null);
   const [tasks, setTasks] = useState(TASKS);
 
@@ -1066,6 +1079,33 @@ export function AlunoDashboard() {
   const openNotif = (notif: Notif) => setModal({ type: "notif", notif });
   const openDeadline = (deadline: Deadline) => setModal({ type: "deadline", deadline });
   const handleDone = (id: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: true } : t));
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 400 }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full border-4 border-t-transparent" style={{ width: 40, height: 40, borderColor: "var(--border)", borderTopColor: "transparent" }} />
+          <p style={{ fontSize: "14px", color: "var(--muted-foreground)", marginTop: 16 }}>Carregando dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl p-6 text-center" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+        <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--tint-danger-text)" }}>Erro ao carregar dashboard</p>
+        <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{error}</p>
+      </div>
+    );
+  }
+
+  // Dados da API com fallback para valores default
+  const situacaoInferida = (dashData?.situacao_inferida?.replace(/_/g, "-") ?? "regular") as AcademicStatus;
+  const creditosTotal = dashData?.creditos?.total ?? 0;
+  const creditosMin = dashData?.creditos?.minimo_requerido ?? 24;
+  const diasRestantes = dashData?.dias_restantes ?? 0;
+  const producoesAprovadas = dashData?.producoes_aprovadas ?? 0;
 
   return (
     <div className="space-y-4 md:space-y-5">
@@ -1077,17 +1117,17 @@ export function AlunoDashboard() {
         <div className="relative z-10">
           <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "12px" }}>Bem-vindo(a) de volta</p>
           <h2 style={{ color: "#fff", fontSize: "18px", fontWeight: 800, marginTop: "2px", marginBottom: "2px" }}>
-            {currentUser?.name.split(" ").slice(0, 2).join(" ")}
+            {dashData?.nome ?? currentUser?.name?.split(" ").slice(0, 2).join(" ")}
           </h2>
           <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "11px", marginBottom: "12px" }}>{currentUser?.programa}</p>
 
           {/* Stats row — horizontal scroll on mobile */}
           <div className="flex gap-4 overflow-x-auto pb-1" style={{ scrollbarWidth: "none" }}>
             {[
-              { label: "Progresso", value: `${Math.round((COURSE_ELAPSED / COURSE_TOTAL) * 100)}%`, color: "#D4A017" },
-              { label: "Mês", value: `${COURSE_ELAPSED}/${COURSE_TOTAL}`, color: "#fff" },
-              { label: "Créditos", value: "42/60", color: "#fff" },
-              { label: "Produções", value: "2/5", color: "#fff" },
+              { label: "Progresso", value: `${dashData?.progresso_plano_percentual ?? 0}%`, color: "#D4A017" },
+              { label: "Dias Rest.", value: `${diasRestantes}`, color: "#fff" },
+              { label: "Créditos", value: `${creditosTotal}/${creditosMin}`, color: "#fff" },
+              { label: "Produções", value: `${producoesAprovadas}`, color: "#fff" },
             ].map((stat) => (
               <div key={stat.label} className="flex-shrink-0 text-center" style={{ minWidth: 56 }}>
                 <p style={{ color: stat.color, fontSize: "18px", fontWeight: 800, lineHeight: 1 }}>{stat.value}</p>
@@ -1099,12 +1139,26 @@ export function AlunoDashboard() {
       </div>
 
       {/* ── Mobile KPI Carousel / Desktop KPI Grid ── */}
-      <MobileKpiCarousel />
-      <DesktopKpiCards />
+      <MobileKpiCarousel
+        situacao={situacaoInferida}
+        creditos={creditosTotal}
+        minCreditos={creditosMin}
+        progressoPct={dashData?.progresso_plano_percentual ?? 0}
+        producoes={producoesAprovadas}
+        diasRestantes={diasRestantes}
+      />
+      <DesktopKpiCards
+        situacao={situacaoInferida}
+        creditos={creditosTotal}
+        minCreditos={creditosMin}
+        progressoPct={dashData?.progresso_plano_percentual ?? 0}
+        producoes={producoesAprovadas}
+        diasRestantes={diasRestantes}
+      />
 
       {/* ── Academic Status + Gantt (desktop side-by-side) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-        <AcademicStatusCard />
+        <AcademicStatusCard situacao={situacaoInferida} conflito={dashData?.conflito_situacao ?? false} />
         <div className="lg:col-span-2 space-y-4 md:space-y-5">
           <GanttTimeline />
           <MobilePhasesCard />

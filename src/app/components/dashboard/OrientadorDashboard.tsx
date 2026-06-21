@@ -1,5 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
+import { useAuth } from "@/hooks/useAuth";
+import { useOrientadorDashboard } from "@/hooks/useDashboard";
 import {
   AlertTriangle, X, FileText, Calendar, ChevronRight,
   CheckCircle2, Bell, Plus, RefreshCw, Star, Send,
@@ -99,6 +101,16 @@ const CREDIT_CHART = STUDENTS.map((s) => ({
   Obtidos: s.creditos,
   Restantes: Math.max(s.creditosMax - s.creditos, 0),
 }));
+
+// API prop types for components
+interface OrientadorStatsProps {
+  total: number;
+  emRisco: number;
+  qualificados: number;
+  defesa: number;
+  prorrogacao: number;
+  pendentes: number;
+}
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
 
@@ -442,18 +454,16 @@ function QuickActionModal({ type, onClose }: { type: Exclude<QA, null>; onClose:
 
 // ─── SECTIONS ─────────────────────────────────────────────────────────────────
 
-function KpiCards() {
-  const total = STUDENTS.length;
-  const atRisk = STUDENTS.filter((s) => s.status === "em-risco" || s.status === "prorrogacao").length;
-  const qualif = STUDENTS.filter((s) => s.status === "qualificado").length;
-  const defesa = STUDENTS.filter((s) => s.status === "fase-defesa").length;
-  const dout = STUDENTS.filter((s) => s.nivel === "Doutorado").length;
-  const mest = STUDENTS.filter((s) => s.nivel === "Mestrado").length;
+function KpiCards({ total, emRisco, qualificados, defesa, prorrogacao }: OrientadorStatsProps) {
+  const atRisk = emRisco + prorrogacao;
+  // Doutorado/Mestrado counts are not returned by the API yet, keeping placeholder logic for sub-text
+  const dout = Math.round(total * 0.6); 
+  const mest = total - dout;
 
   const cards = [
     { icon: <Users size={20} />, label: "Total de Orientandos", value: total, sub: `${dout} doutorado · ${mest} mestrado`, color: "#123C7A", bg: "#eef3fc" },
     { icon: <AlertTriangle size={20} />, label: "Em Risco / Prorrogação", value: atRisk, sub: "Requerem atenção imediata", color: "#dc2626", bg: "#fef2f2" },
-    { icon: <GraduationCap size={20} />, label: "Qualificados", value: qualif, sub: "Fase avançada de pesquisa", color: "#123C7A", bg: "#eef3fc" },
+    { icon: <GraduationCap size={20} />, label: "Qualificados", value: qualificados, sub: "Fase avançada de pesquisa", color: "#123C7A", bg: "#eef3fc" },
     { icon: <Star size={20} />, label: "Aptos à Defesa", value: defesa, sub: "Prontos para a banca", color: "#8b5cf6", bg: "#f5f3ff" },
     { icon: <CheckCircle2 size={20} />, label: "Concluídos (histórico)", value: 12, sub: "Total de títulos orientados", color: "#1F8A70", bg: "#dcfce7" },
   ];
@@ -611,7 +621,16 @@ function StudentTable({ onSelect }: { onSelect: (s: Student) => void }) {
   );
 }
 
-function SituationChart() {
+function SituationChart({ total, emRisco, qualificados, defesa, prorrogacao }: OrientadorStatsProps) {
+  const regular = Math.max(0, total - (emRisco + qualificados + defesa + prorrogacao));
+  const distribData = [
+    { name: "Regular", value: regular, color: "#1F8A70" },
+    { name: "Em Risco", value: emRisco, color: "#D4A017" },
+    { name: "Prorrogação", value: prorrogacao, color: "#f97316" },
+    { name: "Qualificado", value: qualificados, color: "#123C7A" },
+    { name: "Apto à Defesa", value: defesa, color: "#8b5cf6" },
+  ].filter(d => d.value > 0);
+
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead title="Distribuição" sub="Situações acadêmicas" />
@@ -619,20 +638,20 @@ function SituationChart() {
       <div className="flex justify-center mb-4">
         <div className="relative">
           <PieChart width={160} height={160}>
-            <Pie data={DISTRIB_DATA} cx={75} cy={75} innerRadius={48} outerRadius={75} paddingAngle={3} dataKey="value" isAnimationActive={false}>
-              {DISTRIB_DATA.map((entry, i) => <Cell key={`distrib-${i}`} fill={entry.color} />)}
+            <Pie data={distribData} cx={75} cy={75} innerRadius={48} outerRadius={75} paddingAngle={3} dataKey="value" isAnimationActive={false}>
+              {distribData.map((entry, i) => <Cell key={`distrib-${i}`} fill={entry.color} />)}
             </Pie>
             <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
           </PieChart>
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <p style={{ fontSize: "26px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>8</p>
+            <p style={{ fontSize: "26px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1 }}>{total}</p>
             <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>orientandos</p>
           </div>
         </div>
       </div>
 
       <div className="space-y-2">
-        {DISTRIB_DATA.map((d) => (
+        {distribData.map((d) => (
           <div key={d.name} className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <div className="rounded-full flex-shrink-0" style={{ width: 10, height: 10, background: d.color }} />
@@ -640,7 +659,7 @@ function SituationChart() {
             </div>
             <div className="flex items-center gap-2">
               <div className="rounded-full overflow-hidden" style={{ width: 48, height: 5, background: "#e2e8f0" }}>
-                <div style={{ height: "100%", width: `${(d.value / 8) * 100}%`, background: d.color, borderRadius: 999 }} />
+                <div style={{ height: "100%", width: `${(d.value / Math.max(1, total)) * 100}%`, background: d.color, borderRadius: 999 }} />
               </div>
               <span style={{ fontSize: "13px", fontWeight: 800, color: d.color, minWidth: 14, textAlign: "right" }}>{d.value}</span>
             </div>
@@ -992,12 +1011,41 @@ function AttentionStudents({
   );
 }
 
-// ─── MAIN EXPORT ─────────────────────────────────────────────────────────────
-
 export function OrientadorDashboard() {
   const { currentUser } = useApp();
+  const { advisorId } = useAuth();
+  const { data: dashData, loading, error } = useOrientadorDashboard(advisorId ?? currentUser?.id);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [quickAction, setQuickAction] = useState<QA>(null);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 400 }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full border-4 border-t-transparent" style={{ width: 40, height: 40, borderColor: "var(--border)", borderTopColor: "transparent" }} />
+          <p style={{ fontSize: "14px", color: "var(--muted-foreground)", marginTop: 16 }}>Carregando dashboard do orientador...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl p-6 text-center" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+        <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--tint-danger-text)" }}>Erro ao carregar dashboard</p>
+        <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{error}</p>
+      </div>
+    );
+  }
+
+  const stats: OrientadorStatsProps = {
+    total: dashData?.total_orientandos ?? 0,
+    emRisco: dashData?.orientandos_por_status?.em_risco ?? 0,
+    qualificados: dashData?.orientandos_por_status?.qualificado ?? 0,
+    defesa: dashData?.orientandos_por_status?.fase_defesa ?? 0,
+    prorrogacao: dashData?.orientandos_por_status?.em_prorrogacao ?? 0,
+    pendentes: dashData?.atividades_aguardando_parecer ?? 0,
+  };
 
   return (
     <div className="space-y-5">
@@ -1012,16 +1060,16 @@ export function OrientadorDashboard() {
           <div className="flex-1">
             <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "12px" }}>Painel do Orientador · SAGA</p>
             <h2 style={{ color: "#fff", fontSize: "20px", fontWeight: 800, marginTop: "2px", marginBottom: "2px" }}>
-              {currentUser?.name}
+              {dashData?.nome ?? currentUser?.name}
             </h2>
             <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "12px" }}>
               {currentUser?.departamento} · {currentUser?.programa}
             </p>
             <div className="flex items-center gap-4 mt-3">
               {[
-                { v: STUDENTS.length, l: "Orientandos" },
-                { v: STUDENTS.filter((s) => s.status === "em-risco" || s.status === "prorrogacao").length, l: "Em Atenção" },
-                { v: REVIEWS.filter((r) => r.urgency !== "normal").length, l: "Pendentes" },
+                { v: stats.total, l: "Orientandos" },
+                { v: stats.emRisco + stats.prorrogacao, l: "Em Atenção" },
+                { v: stats.pendentes, l: "Pendentes" },
               ].map((stat) => (
                 <div key={stat.l}>
                   <p style={{ color: "#D4A017", fontSize: "20px", fontWeight: 800, lineHeight: 1 }}>{stat.v}</p>
@@ -1035,14 +1083,14 @@ export function OrientadorDashboard() {
       </div>
 
       {/* ── KPI Cards ── */}
-      <KpiCards />
+      <KpiCards {...stats} />
 
       {/* ── Row: Table + Distribution ── */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
         <div className="lg:col-span-3">
           <StudentTable onSelect={setSelectedStudent} />
         </div>
-        <SituationChart />
+        <SituationChart {...stats} />
       </div>
 
       {/* ── Credit Bar Chart ── */}
