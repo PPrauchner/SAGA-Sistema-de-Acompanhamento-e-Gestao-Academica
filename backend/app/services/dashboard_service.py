@@ -39,6 +39,7 @@ from backend.app.repositories.activity_type_repository import ActivityTypeReposi
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
 
 
 
@@ -150,6 +151,7 @@ class DashboardService:
         self._audit_logs = FirebaseRepository("audit_logs")
         self._extensions = FirebaseRepository("extensions")
         self._productions = FirebaseRepository("productions")
+        self._work_plan = WorkPlanRepository()
 
 
     async def get_aluno_dashboard(self, student_id: str) -> AlunoDashboardResponse:
@@ -179,7 +181,6 @@ class DashboardService:
 
         activities = await self._activities.list_by_student(student_id)
         
-        # M1: Load types to map categoria
         types_list = await self._activity_types.list_all()
         types_map = {t.get("id"): t.get("categoria", "") for t in types_list}
         creditos = _aggregate_credits(activities, types_map)
@@ -193,14 +194,27 @@ class DashboardService:
             1 for a in activities if a.get("status") == "enviado"
         )
         
-        # M4 mock/fallback as required
-        progresso = 0.0
-        if situacao_inf == "regular":
-            progresso = 50.0
-        elif situacao_inf in ("qualificado", "em_fase_de_defesa"):
-            progresso = 80.0
+        tasks = await self._work_plan.get_all_tasks_for_student(student_id)
+        total_tasks = len(tasks)
+        concluidas = sum(1 for t in tasks if t.get("concluida"))
+        progresso = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
+        
+        pendentes = [t for t in tasks if not t.get("concluida")]
+        try:
+            pendentes.sort(key=lambda x: str(x.get("prazo") or "9999-12-31"))
+        except Exception:
+            pass
             
-        checklist = ChecklistResumo(total=10, cumpridos=int(progresso/10), pendentes=10 - int(progresso/10), em_risco=0)
+        tasks_proximas_list = []
+        for t in pendentes[:3]:
+            tasks_proximas_list.append(TaskProxima(
+                task_id=t.get("id", ""),
+                titulo=t.get("titulo", "Tarefa sem título"),
+                prazo=str(t.get("prazo") or "Sem prazo"),
+                status="Pendente"
+            ))
+
+        checklist = ChecklistResumo(total=total_tasks, cumpridos=concluidas, pendentes=total_tasks - concluidas, em_risco=0)
 
         return AlunoDashboardResponse(
             student_id=student_id,
@@ -213,7 +227,7 @@ class DashboardService:
             progresso_plano_percentual=progresso,
             creditos=creditos,
             checklist_resumo=checklist,
-            tasks_proximas=[],
+            tasks_proximas=tasks_proximas_list,
             producoes_aprovadas=producoes_aprovadas,
             atividades_pendentes_validacao=atividades_pendentes,
         )
@@ -255,7 +269,18 @@ class DashboardService:
                 1 for a in activities if a.get("status") == "enviado"
             )
 
-        orientandos_resumo = [_build_orientando_resumo(s) for s in orientandos]
+        orientandos_resumo = []
+        for s in orientandos:
+            student_id = s.get("id", "")
+            resumo = _build_orientando_resumo(s)
+            
+            # Fetch tasks and calculate progress
+            tasks = await self._work_plan.get_all_tasks_for_student(student_id)
+            total_tasks = len(tasks)
+            concluidas = sum(1 for t in tasks if t.get("concluida"))
+            resumo.progresso_plano = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
+            
+            orientandos_resumo.append(resumo)
 
         return OrientadorDashboardResponse(
             advisor_id=advisor_id,
@@ -292,7 +317,6 @@ class DashboardService:
         audit_logs = await self._audit_logs.list_all()
         auditoria_recente = _build_recent_audit(audit_logs, limit=5)
         
-        # M5: fetch real counts for extensions and productions
         all_exts = await self._extensions.list_all()
         prorrogacoes_pendentes = sum(1 for e in all_exts if e.get("status") == "pendente")
         
