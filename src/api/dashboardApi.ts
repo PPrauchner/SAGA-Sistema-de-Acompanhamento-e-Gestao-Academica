@@ -11,8 +11,6 @@
 
 import { apiGet } from "./http";
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
 export interface CreditosResumo {
   total: number;
   basico: number;
@@ -93,16 +91,16 @@ export interface AuditoriaRecenteItem {
 
 export interface CoordDashboardData {
   programa_id: string;
+  total_alunos: number;
   total_alunos_ativos: number;
   alunos_por_status: AlunosPorStatus;
   atividades_aguardando_validacao: number;
   prorrogacoes_pendentes: number;
   producoes_ultimo_mes: number;
+  total_concluidos: number;
   tempo_medio_integralizacao_meses: number | null;
   auditoria_recente: AuditoriaRecenteItem[];
 }
-
-// ─── API Functions ──────────────────────────────────────────────────────────
 
 export function getAlunoDashboard(
   studentId: string,
