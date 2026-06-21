@@ -23,15 +23,15 @@ type Modal =
 const STATUS_COLUMNS: { id: TaskStatus; label: string; icon: JSX.Element }[] = [
   { id: "pendente", label: "Pendente", icon: <Circle size={14} /> },
   { id: "em_andamento", label: "Em andamento", icon: <Clock3 size={14} /> },
-  { id: "atrasada", label: "Atrasada", icon: <AlertCircle size={14} /> },
-  { id: "concluida", label: "Concluida", icon: <CheckCircle2 size={14} /> },
+  { id: "atrasado", label: "Atrasado", icon: <AlertCircle size={14} /> },
+  { id: "concluido", label: "Concluido", icon: <CheckCircle2 size={14} /> },
 ];
 
 const STATUS_LABEL: Record<TaskStatus, string> = {
   pendente: "Pendente",
   em_andamento: "Em andamento",
-  atrasada: "Atrasada",
-  concluida: "Concluida",
+  atrasado: "Atrasado",
+  concluido: "Concluido",
 };
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
@@ -70,7 +70,7 @@ export function WorkPlanPage() {
   }, [targetStudentId, token]);
 
   const tasks = useMemo(() => plan?.stages.flatMap((stage) => stage.tasks.map((task) => ({ ...task, stage }))) ?? [], [plan]);
-  const concludedStages = plan?.stages.filter((stage) => stage.status === "concluida").length ?? 0;
+  const concludedStages = plan?.stages.filter((stage) => stage.status === "concluido").length ?? 0;
 
   async function changeStatus(taskId: string, status: TaskStatus) {
     setSaving(true);
@@ -264,7 +264,7 @@ function TaskCard({
         <span>{Math.round(task.progresso_percentual)}%</span>
       </div>
       <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--muted)" }}>
-        <div className="h-full rounded-full" style={{ width: `${task.progresso_percentual}%`, background: task.status === "atrasada" ? "#dc2626" : "#1F8A70" }} />
+        <div className="h-full rounded-full" style={{ width: `${task.progresso_percentual}%`, background: task.status === "atrasado" ? "#dc2626" : "#1F8A70" }} />
       </div>
       {task.ultima_atualizacao && (
         <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 8 }}>

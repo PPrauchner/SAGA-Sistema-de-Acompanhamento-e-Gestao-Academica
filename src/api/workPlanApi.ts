@@ -1,7 +1,7 @@
 import { apiGet, apiPatch, apiPost, apiPut } from "@/api/http";
 
-export type StageStatus = "pendente" | "em_andamento" | "concluida" | "atrasada";
-export type TaskStatus = "pendente" | "em_andamento" | "concluida" | "atrasada";
+export type StageStatus = "pendente" | "em_andamento" | "concluido" | "atrasado";
+export type TaskStatus = "pendente" | "em_andamento" | "concluido" | "atrasado";
 export type TaskPriority = "baixa" | "media" | "alta";
 
 export interface ProgressUpdate {
