@@ -7,9 +7,15 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-StageStatus = Literal["pendente", "em_andamento", "concluida", "atrasada"]
-TaskStatus = Literal["pendente", "em_andamento", "concluida", "atrasada"]
+StageStatus = Literal["pendente", "em_andamento", "concluido", "atrasado"]
+TaskStatus = Literal["pendente", "em_andamento", "concluido", "atrasado"]
 TaskPriority = Literal["baixa", "media", "alta"]
+
+_LEGACY_STATUS = {"concluida": "concluido", "atrasada": "atrasado"}
+
+
+def _normalize_status(value: str | None) -> str | None:
+    return _LEGACY_STATUS.get(value, value)
 
 
 class WorkPlanCreate(BaseModel):
@@ -39,6 +45,11 @@ class StageUpdate(BaseModel):
     data_fim: datetime | None = None
     status: StageStatus | None = None
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_stage_status(cls, value: str | None) -> str | None:
+        return _normalize_status(value)
+
 
 class TaskCreate(BaseModel):
     titulo: str = Field(..., min_length=1)
@@ -54,9 +65,19 @@ class TaskUpdate(BaseModel):
     prioridade: TaskPriority | None = None
     status: TaskStatus | None = None
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_task_status(cls, value: str | None) -> str | None:
+        return _normalize_status(value)
+
 
 class TaskStatusPatch(BaseModel):
     status: TaskStatus
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_patch_status(cls, value: str | None) -> str | None:
+        return _normalize_status(value)
 
 
 class ProgressUpdateCreate(BaseModel):

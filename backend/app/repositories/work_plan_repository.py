@@ -1,4 +1,4 @@
-"""Repositório em memória para plano de trabalho do MVP."""
+"""Repositorio de plano de trabalho para o MVP."""
 
 from __future__ import annotations
 
@@ -6,6 +6,10 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
+
+STATUS_CONCLUIDO = "concluido"
+STATUS_ATRASADO = "atrasado"
+STAGE_KIND_DEFESA = "defesa"
 
 
 def _dt(value: str) -> datetime:
@@ -42,10 +46,10 @@ def _seed() -> dict[str, dict[str, Any]]:
             "ordem": 1,
             "data_inicio": _dt("2025-01-01T00:00:00"),
             "data_fim": _dt("2025-04-30T00:00:00"),
-            "status": "concluida",
+            "status": STATUS_CONCLUIDO,
             "tasks": [
-                _task("task_revisao_1", "stage_revisao", "Levantamento bibliografico", "2025-02-28T00:00:00", "concluida", "alta", 100),
-                _task("task_revisao_2", "stage_revisao", "Sintese da literatura", "2025-04-15T00:00:00", "concluida", "media", 100),
+                _task("task_revisao_1", "stage_revisao", "Levantamento bibliografico", "2025-02-28T00:00:00", STATUS_CONCLUIDO, "alta", 100),
+                _task("task_revisao_2", "stage_revisao", "Sintese da literatura", "2025-04-15T00:00:00", STATUS_CONCLUIDO, "media", 100),
             ],
         },
         {
@@ -56,7 +60,7 @@ def _seed() -> dict[str, dict[str, Any]]:
             "data_fim": _dt("2026-08-30T00:00:00"),
             "status": "em_andamento",
             "tasks": [
-                _task("task_dev_1", "stage_desenvolvimento", "Prototipo inicial", "2026-03-30T00:00:00", "concluida", "alta", 100),
+                _task("task_dev_1", "stage_desenvolvimento", "Prototipo inicial", "2026-03-30T00:00:00", STATUS_CONCLUIDO, "alta", 100),
                 _task("task_dev_2", "stage_desenvolvimento", "Experimentos principais", "2026-08-30T00:00:00", "em_andamento", "alta", 55),
                 _task("task_dev_3", "stage_desenvolvimento", "Analise dos resultados", "2026-09-30T00:00:00", "pendente", "media", 0),
             ],
@@ -64,6 +68,7 @@ def _seed() -> dict[str, dict[str, Any]]:
         {
             "stage_id": "stage_defesa",
             "nome": "Defesa",
+            "tipo": STAGE_KIND_DEFESA,
             "ordem": 3,
             "data_inicio": _dt("2026-09-01T00:00:00"),
             "data_fim": _dt("2026-12-15T00:00:00"),
@@ -96,7 +101,7 @@ def _seed() -> dict[str, dict[str, Any]]:
             "data_fim_prevista": _dt("2026-12-15T00:00:00"),
             "descricao": "Todas as etapas nao-defesa concluidas.",
             "progresso_percentual": 100.0,
-            "status_geral": "concluida",
+            "status_geral": STATUS_CONCLUIDO,
             "stages": [
                 {
                     "stage_id": "stage_apto",
@@ -104,11 +109,11 @@ def _seed() -> dict[str, dict[str, Any]]:
                     "ordem": 1,
                     "data_inicio": _dt("2024-01-01T00:00:00"),
                     "data_fim": _dt("2026-05-30T00:00:00"),
-                    "status": "concluida",
+                    "status": STATUS_CONCLUIDO,
                     "tasks": [
-                        _task("task_apto_1", "stage_apto", "Dissertacao final", "2026-05-30T00:00:00", "concluida", "alta", 100),
-                        _task("task_apto_2", "stage_apto", "Revisao final", "2026-06-15T00:00:00", "concluida", "alta", 100),
-                        _task("task_apto_3", "stage_apto", "Deposito preliminar", "2026-07-01T00:00:00", "concluida", "media", 100),
+                        _task("task_apto_1", "stage_apto", "Dissertacao final", "2026-05-30T00:00:00", STATUS_CONCLUIDO, "alta", 100),
+                        _task("task_apto_2", "stage_apto", "Revisao final", "2026-06-15T00:00:00", STATUS_CONCLUIDO, "alta", 100),
+                        _task("task_apto_3", "stage_apto", "Deposito preliminar", "2026-07-01T00:00:00", STATUS_CONCLUIDO, "media", 100),
                     ],
                 }
             ],
@@ -124,7 +129,7 @@ def _seed() -> dict[str, dict[str, Any]]:
             "data_fim_prevista": _dt("2024-03-01T00:00:00"),
             "descricao": "Plano com tarefas atrasadas.",
             "progresso_percentual": 0.0,
-            "status_geral": "atrasada",
+            "status_geral": STATUS_ATRASADO,
             "stages": [
                 {
                     "stage_id": "stage_risco",
@@ -132,9 +137,9 @@ def _seed() -> dict[str, dict[str, Any]]:
                     "ordem": 1,
                     "data_inicio": _dt("2023-01-01T00:00:00"),
                     "data_fim": _dt("2024-03-01T00:00:00"),
-                    "status": "atrasada",
+                    "status": STATUS_ATRASADO,
                     "tasks": [
-                        _task("task_risco_1", "stage_risco", "Regularizar entregas", "2024-01-31T00:00:00", "atrasada", "alta", 0),
+                        _task("task_risco_1", "stage_risco", "Regularizar entregas", "2024-01-31T00:00:00", STATUS_ATRASADO, "alta", 0),
                         _task("task_risco_2", "stage_risco", "Atualizar cronograma", "2024-02-10T00:00:00", "pendente", "alta", 0),
                         _task("task_risco_3", "stage_risco", "Enviar relatorio", "2024-02-20T00:00:00", "pendente", "media", 0),
                     ],
@@ -147,43 +152,54 @@ def _seed() -> dict[str, dict[str, Any]]:
     }
 
 
-_PLANS = _seed()
-_NOTIFICATIONS: list[dict[str, Any]] = []
+def _is_defense_stage(stage: dict[str, Any]) -> bool:
+    return stage.get("tipo") == STAGE_KIND_DEFESA or str(stage.get("nome", "")).casefold() == STAGE_KIND_DEFESA
+
+
+class WorkPlanStore:
+    """Store mutavel explicitamente injetado no repositorio."""
+
+    def __init__(self) -> None:
+        self.plans = _seed()
+        self.notifications: list[dict[str, Any]] = []
 
 
 class WorkPlanRepository:
-    """Persistência em memória, com a mesma forma esperada pelo serviço."""
+    """Persistencia do plano com estado isolado por store."""
+
+    def __init__(self, store: WorkPlanStore | None = None) -> None:
+        self._store = store or WorkPlanStore()
 
     async def get_plan(self, student_id: str) -> dict[str, Any] | None:
-        plan = _PLANS.get(student_id)
+        plan = self._store.plans.get(student_id)
         return deepcopy(plan) if plan else None
 
     async def get_plan_by_id(self, plan_id: str) -> dict[str, Any] | None:
-        for plan in _PLANS.values():
+        for plan in self._store.plans.values():
             if plan["plan_id"] == plan_id:
                 return deepcopy(plan)
         return None
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
-        plan = _PLANS.get(student_id)
+        plan = self._store.plans.get(student_id)
         if plan is None:
             return []
         tasks: list[dict[str, Any]] = []
         for stage in plan["stages"]:
-            is_defesa = stage["nome"].lower() == "defesa"
+            is_defesa = _is_defense_stage(stage)
             for task in stage["tasks"]:
                 tasks.append(
                     {
                         "id": task["task_id"],
                         "is_defesa": is_defesa,
-                        "concluida": task.get("status") == "concluida",
+                        "concluida": task.get("status") == STATUS_CONCLUIDO,
                     }
                 )
         return tasks
 
     async def create_plan(self, student_id: str, data: dict[str, Any]) -> str:
         plan_id = f"plan_{uuid4().hex}"
-        _PLANS[student_id] = {
+        self._store.plans[student_id] = {
             "plan_id": plan_id,
             "student_id": student_id,
             "titulo": data["titulo"],
@@ -207,6 +223,8 @@ class WorkPlanRepository:
     async def create_stage(self, plan_id: str, data: dict[str, Any]) -> str:
         plan = self._find_plan(plan_id)
         stage_id = f"stage_{uuid4().hex}"
+        if str(data.get("nome", "")).casefold() == STAGE_KIND_DEFESA:
+            data["tipo"] = STAGE_KIND_DEFESA
         plan["stages"].append({"stage_id": stage_id, "status": "pendente", "tasks": [], **data})
         return stage_id
 
@@ -239,7 +257,7 @@ class WorkPlanRepository:
         task["updates"].append({"update_id": update_id, **data})
         task["progresso_percentual"] = float(data["percentual"])
         if task["progresso_percentual"] >= 100:
-            task["status"] = "concluida"
+            task["status"] = STATUS_CONCLUIDO
         elif task["status"] == "pendente":
             task["status"] = "em_andamento"
         return update_id
@@ -248,7 +266,7 @@ class WorkPlanRepository:
         return deepcopy(self._find_task(task_id)["updates"])
 
     async def get_task_context(self, task_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-        for plan in _PLANS.values():
+        for plan in self._store.plans.values():
             for stage in plan["stages"]:
                 for task in stage["tasks"]:
                     if task["task_id"] == task_id:
@@ -256,44 +274,44 @@ class WorkPlanRepository:
         raise KeyError(task_id)
 
     async def get_stage_context(self, stage_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
-        for plan in _PLANS.values():
+        for plan in self._store.plans.values():
             for stage in plan["stages"]:
                 if stage["stage_id"] == stage_id:
                     return plan, stage
         raise KeyError(stage_id)
 
     async def save_fact(self, student_id: str, fact: str) -> None:
-        plan = _PLANS[student_id]
+        plan = self._store.plans[student_id]
         if fact not in plan["facts"]:
             plan["facts"].append(fact)
 
     async def remove_fact(self, student_id: str, fact: str) -> None:
-        plan = _PLANS[student_id]
+        plan = self._store.plans[student_id]
         plan["facts"] = [item for item in plan["facts"] if item != fact]
 
     async def create_notification(self, notification: dict[str, Any]) -> str:
         notification_id = f"notif_{uuid4().hex}"
-        _NOTIFICATIONS.append({"id": notification_id, **notification})
+        self._store.notifications.append({"id": notification_id, **notification})
         return notification_id
 
     async def list_notifications(self) -> list[dict[str, Any]]:
-        return deepcopy(_NOTIFICATIONS)
+        return deepcopy(self._store.notifications)
 
     def _find_plan(self, plan_id: str) -> dict[str, Any]:
-        for plan in _PLANS.values():
+        for plan in self._store.plans.values():
             if plan["plan_id"] == plan_id:
                 return plan
         raise KeyError(plan_id)
 
     def _find_stage(self, stage_id: str) -> dict[str, Any]:
-        for plan in _PLANS.values():
+        for plan in self._store.plans.values():
             for stage in plan["stages"]:
                 if stage["stage_id"] == stage_id:
                     return stage
         raise KeyError(stage_id)
 
     def _find_task(self, task_id: str) -> dict[str, Any]:
-        for plan in _PLANS.values():
+        for plan in self._store.plans.values():
             for stage in plan["stages"]:
                 for task in stage["tasks"]:
                     if task["task_id"] == task_id:
