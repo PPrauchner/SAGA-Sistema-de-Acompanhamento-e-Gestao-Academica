@@ -50,7 +50,12 @@ class _FakeAdvisorRepository(_FakeRepo):
         if advisor is None:
             return False
         students = await _FakeStudentRepository().list_all()
-        current = sum(1 for student in students if student.get("orientador_id") == advisor_id)
+        current = sum(
+            1
+            for student in students
+            if student.get("orientador_id") == advisor_id
+            and student.get("situacao_registrada") not in {"concluido", "desligado"}
+        )
         return current < advisor.get("limite_orientandos", 5)
 
 
@@ -203,6 +208,23 @@ async def test_direct_transfer_bloqueia_destino_cheio() -> None:
     assert "limite" in str(exc_info.value.detail)
 
 
+async def test_direct_transfer_ignora_alunos_terminais_na_capacidade() -> None:
+    _FakeAdvisorRepository.store["advisor2"]["limite_orientandos"] = 1
+    _FakeStudentRepository.store["student2"] = {
+        "orientador_id": "advisor2",
+        "programa_id": "prog",
+        "situacao_registrada": "concluido",
+    }
+
+    result = await TransferService().direct_transfer(
+        DirectTransferRequest(student_id="student1", orientador_destino_id="advisor2"),
+        _coord(),
+    )
+
+    assert result["orientador_destino_id"] == "advisor2"
+    assert _FakeStudentRepository.store["student1"]["orientador_id"] == "advisor2"
+
+
 async def test_direct_transfer_bloqueia_status_terminal() -> None:
     _FakeStudentRepository.store["student1"]["situacao_registrada"] = "concluido"
 
@@ -247,6 +269,28 @@ async def test_direct_transfer_cancela_pendente_do_aluno() -> None:
     assert result["pending_solicitante_id"] == "uid-student"
     assert _FakeTransferRepository.store["transfer_old"]["status"] == "cancelada"
     assert _FakeTransferRepository.store["transfer_old"]["cancelled_by"] == "coord1"
+
+
+async def test_direct_transfer_invalida_nao_cancela_pendente() -> None:
+    _FakeAdvisorRepository.store["advisor2"]["programa_id"] = "outro"
+    _FakeTransferRepository.store = {
+        "transfer_old": {
+            "student_id": "student1",
+            "status": "pendente",
+            "tipo": "solicitada_orientador",
+            "solicitante_id": "uid-origin",
+            "programa_id": "prog",
+        },
+    }
+
+    with pytest.raises(HTTPException) as exc_info:
+        await TransferService().direct_transfer(
+            DirectTransferRequest(student_id="student1", orientador_destino_id="advisor2"),
+            _coord(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert _FakeTransferRepository.store["transfer_old"]["status"] == "pendente"
 
 
 async def test_direct_transfer_bloqueia_programa_diferente() -> None:

@@ -168,6 +168,28 @@ def test_orientador_cria_solicitacao(client: TestClient) -> None:
     assert _FakeTransferService.calls == [("student1", "advisor2", "uid-orientador")]
 
 
+@pytest.mark.parametrize("role", ["coordenacao", "orientador"])
+def test_lista_transferencias_permite_coordenacao_e_orientador(
+    client: TestClient,
+    role: str,
+) -> None:
+    _override_user(role)
+
+    response = client.get("/api/v1/transfers")
+
+    assert response.status_code == 200
+    assert _FakeTransferService.calls == [("list", role, f"uid-{role}")]
+
+
+def test_lista_transferencias_bloqueia_aluno(client: TestClient) -> None:
+    _override_user("aluno")
+
+    response = client.get("/api/v1/transfers")
+
+    assert response.status_code == 403
+    assert _FakeTransferService.calls == []
+
+
 def test_aluno_nao_cria_solicitacao(client: TestClient) -> None:
     _override_user("aluno")
 
