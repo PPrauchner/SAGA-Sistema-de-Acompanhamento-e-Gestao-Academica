@@ -44,7 +44,7 @@ async def list_advisors(
         get_current_user,
     ),
 ) -> list[dict]:
-    return await service.list_advisors()
+    return await service.list_advisors(user)
 
 
 @router.get("/advisors/{advisor_id}")
