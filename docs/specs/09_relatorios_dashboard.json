@@ -130,6 +130,7 @@
         "atividades_aguardando_validacao": "int",
         "prorrogacoes_pendentes": "int",
         "producoes_ultimo_mes": "int",
+        "total_concluidos": "int (adicionado pós-MVP)",
         "tempo_medio_integralizacao_meses": "float | null",
         "auditoria_recente": [
           {"operacao": "string", "usuario": "string", "timestamp": "string"}
