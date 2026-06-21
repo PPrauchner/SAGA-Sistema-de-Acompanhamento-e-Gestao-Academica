@@ -19,7 +19,11 @@ from typing import List, Optional, Union
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
-from backend.app.core.auth import get_current_user
+from backend.app.aspects.alerts import trigger_alerts
+from backend.app.aspects.audit import audit_operation
+from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.deadlines import check_deadlines
+from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
     ActivityCreateRequest,
     ActivityCreateResponse,
@@ -38,10 +42,30 @@ _activity_service = ActivityService()
 _comprovante_service = ComprovanteService()
 
 
+def _build_notificacao_submissao(result, args, kwargs):
+    """Notifica o orientador após submissão de atividade pelo aluno."""
+    if not isinstance(result, dict):
+        return None
+    orientador_uid = result.get("orientador_uid")
+    if not orientador_uid:
+        return None
+    activity_id = result.get("id", "")
+    aluno_nome = result.get("aluno_nome", "")
+    return {
+        "tipo": "atividade_submetida",
+        "titulo": "Nova atividade para revisão",
+        "mensagem": f"O aluno {aluno_nome} submeteu uma nova atividade (ID: {activity_id}).",
+        "destinatario_id": orientador_uid,
+        "entidade_tipo": "activities",
+        "entidade_id": activity_id,
+    }
+
+
 # ---------------------------------------------------------------------------
 # GET /activities
 # ---------------------------------------------------------------------------
 
+@requires_role("aluno", "orientador", "coordenacao")
 @router.get(
     "/activities",
     response_model=List[ActivityResponse],
@@ -50,7 +74,7 @@ async def list_activities(
     student_id: Optional[str] = None,
     status: Optional[str] = None,
     categoria: Optional[str] = None,
-    current_user: dict = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> List[ActivityResponse]:
     """
     Lista atividades visíveis para o usuário autenticado.
@@ -60,7 +84,7 @@ async def list_activities(
     Suporta filtros opcionais de student_id, status e categoria.
     """
     rows = await _activity_service.list_activities(
-        user=current_user,
+        user=user,
         student_id=student_id,
         status_filter=status,
         categoria=categoria,
@@ -72,6 +96,10 @@ async def list_activities(
 # POST /activities
 # ---------------------------------------------------------------------------
 
+@requires_role("aluno")
+@audit_operation
+@check_deadlines
+@trigger_alerts(_build_notificacao_submissao)
 @router.post(
     "/activities",
     response_model=ActivityCreateResponse,
@@ -79,14 +107,14 @@ async def list_activities(
 )
 async def submit_activity(
     payload: ActivityCreateRequest,
-    current_user: dict = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> ActivityCreateResponse:
     """
     Registra nova atividade creditável para o aluno autenticado.
     O motor RL04 verifica elegibilidade preliminar imediatamente após a criação.
     Notifica o orientador caso o status inicial seja 'enviado'.
     """
-    result = await _activity_service.submit_activity(data=payload, user=current_user)
+    result = await _activity_service.submit_activity(data=payload, user=user)
     return ActivityCreateResponse(
         id=result["id"],
         elegibilidade_preliminar=result["elegibilidade_preliminar"],
@@ -98,6 +126,8 @@ async def submit_activity(
 # POST /activities/{activity_id}/comprovante
 # ---------------------------------------------------------------------------
 
+@requires_role("aluno")
+@audit_operation
 @router.post(
     "/activities/{activity_id}/comprovante",
     response_model=ComprovanteUploadResponse,
@@ -105,7 +135,7 @@ async def submit_activity(
 async def upload_comprovante(
     activity_id: str,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> ComprovanteUploadResponse:
     """
     Faz upload do comprovante (PDF/JPEG/PNG) para o Firebase Storage.
@@ -115,7 +145,7 @@ async def upload_comprovante(
     result = await _comprovante_service.upload(
         activity_id=activity_id,
         arquivo=file,
-        user=current_user,
+        user=user,
     )
     return ComprovanteUploadResponse(
         comprovante_url=result["comprovante_url"],
@@ -127,6 +157,8 @@ async def upload_comprovante(
 # PATCH /activities/{activity_id}/validate
 # ---------------------------------------------------------------------------
 
+@requires_role("orientador", "coordenacao")
+@audit_operation
 @router.patch(
     "/activities/{activity_id}/validate",
     response_model=Union[ActivityResponse, ValidateActivityResponse],
@@ -134,7 +166,7 @@ async def upload_comprovante(
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
-    current_user: dict = Depends(get_current_user),
+    user: CurrentUser = Depends(get_current_user),
 ) -> Union[ActivityResponse, ValidateActivityResponse]:
     """
     Valida uma atividade submetida.
@@ -153,10 +185,10 @@ async def validate_activity(
         return await activity_service.emitir_parecer_orientador(
             activity_id=activity_id,
             payload=payload,
-            current_user=current_user,
+            current_user=user,
         )
     return await activity_service.validate_activity(
         activity_id=activity_id,
         payload=payload,
-        current_user=current_user,
+        current_user=user,
     )
