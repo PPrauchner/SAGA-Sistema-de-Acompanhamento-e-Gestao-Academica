@@ -7,6 +7,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
 
+STATUS_CONCLUIDO = "concluido"
+STATUS_ATRASADO = "atrasado"
+STAGE_KIND_DEFESA = "defesa"
+
 StageStatus = Literal["pendente", "em_andamento", "concluido", "atrasado"]
 TaskStatus = Literal["pendente", "em_andamento", "concluido", "atrasado"]
 TaskPriority = Literal["baixa", "media", "alta"]
@@ -117,6 +121,11 @@ class TaskResponse(BaseModel):
     progresso_percentual: float = 0
     ultima_atualizacao: LatestProgressUpdate | None = None
 
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_response_status(cls, value: str | None) -> str | None:
+        return _normalize_status(value)
+
 
 class StageResponse(BaseModel):
     stage_id: str
@@ -127,6 +136,11 @@ class StageResponse(BaseModel):
     status: StageStatus = "pendente"
     progresso_percentual: float = 0
     tasks: list[TaskResponse] = []
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def _normalize_response_status(cls, value: str | None) -> str | None:
+        return _normalize_status(value)
 
 
 class WorkPlanFull(BaseModel):
@@ -141,6 +155,11 @@ class WorkPlanFull(BaseModel):
     plano_concluido: bool = False
     fato_plano_concluido: str | None = None
     stages: list[StageResponse] = []
+
+    @field_validator("status_geral", mode="before")
+    @classmethod
+    def _normalize_response_status(cls, value: str | None) -> str | None:
+        return _normalize_status(value)
 
 
 class MutationMessage(BaseModel):

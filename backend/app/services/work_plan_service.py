@@ -16,6 +16,9 @@ from backend.app.models.work_plan import (
     ProgressUpdateResponse,
     StageCreate,
     StageResponse,
+    STAGE_KIND_DEFESA,
+    STATUS_ATRASADO,
+    STATUS_CONCLUIDO,
     StageUpdate,
     TaskCreate,
     TaskResponse,
@@ -27,10 +30,6 @@ from backend.app.models.work_plan import (
     WorkPlanUpdate,
 )
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
-
-STATUS_CONCLUIDO = "concluido"
-STATUS_ATRASADO = "atrasado"
-STAGE_KIND_DEFESA = "defesa"
 
 
 class WorkPlanNotFoundError(Exception):
@@ -246,4 +245,4 @@ class WorkPlanService:
 
 
 def _is_defense_stage(stage: dict[str, Any]) -> bool:
-    return stage.get("tipo") == STAGE_KIND_DEFESA or str(stage.get("nome", "")).casefold() == STAGE_KIND_DEFESA
+    return stage.get("tipo") == STAGE_KIND_DEFESA

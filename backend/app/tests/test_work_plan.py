@@ -9,20 +9,20 @@ from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.services.inference_service import InferenceService
 
 
-def _app() -> FastAPI:
+def _app(role: str = "orientador", uid: str | None = None) -> FastAPI:
     app = FastAPI()
     app.include_router(work_plan.router, prefix="/api/v1")
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        uid="orientador",
-        role="orientador",
+        uid=uid or role,
+        role=role,
         programa_id="prog_default",
-        email="orientador@example.com",
+        email=f"{role}@example.com",
     )
     return app
 
 
-def _client() -> TestClient:
-    app = _app()
+def _client(role: str = "orientador") -> TestClient:
+    app = _app(role)
     return TestClient(app)
 
 
@@ -38,7 +38,7 @@ def test_get_work_plan_returns_real_stages_and_tasks() -> None:
 
 
 def test_progress_update_recalculates_progress_and_notifies() -> None:
-    response = _client().post(
+    response = _client("aluno").post(
         "/api/v1/tasks/task_dev_2/updates",
         json={"conteudo": "Experimentos finalizados", "percentual": 100},
         headers={"X-User-Id": "aluno_regular", "X-User-Name": "Rita Regular", "X-User-Role": "aluno"},
@@ -59,7 +59,7 @@ def test_progress_update_uses_deadline_and_alert_aspects() -> None:
 
 
 async def test_progress_update_creates_standard_notification_document() -> None:
-    app = _app()
+    app = _app("aluno", uid="aluno_regular")
     with TestClient(app) as client:
         response = client.post(
             "/api/v1/tasks/task_dev_3/updates",
@@ -87,6 +87,16 @@ async def test_progress_update_creates_standard_notification_document() -> None:
     assert notification["lida"] is False
 
 
+def test_progress_update_requires_aluno_role() -> None:
+    response = _client("orientador").post(
+        "/api/v1/tasks/task_dev_2/updates",
+        json={"conteudo": "Tentativa pelo orientador", "percentual": 75},
+        headers={"X-User-Id": "orientador", "X-User-Name": "Orientador", "X-User-Role": "orientador"},
+    )
+
+    assert response.status_code == 403
+
+
 def test_work_plan_mutations_require_orientador_role() -> None:
     app = _app()
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
@@ -105,6 +115,20 @@ def test_work_plan_mutations_require_orientador_role() -> None:
     )
 
     assert response.status_code == 403
+
+
+def test_work_plan_mutations_allow_coordenacao_role() -> None:
+    response = _client("coordenacao").post(
+        "/api/v1/work-plan/aluno_coord",
+        json={
+            "titulo": "Plano da coordenacao",
+            "data_inicio": "2026-01-01T00:00:00Z",
+            "data_fim_prevista": "2026-12-01T00:00:00Z",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["plan_id"].startswith("plan_")
 
 
 def test_plan_concluded_fact_available_when_non_defense_tasks_done() -> None:

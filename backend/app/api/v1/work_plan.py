@@ -66,7 +66,7 @@ async def get_work_plan(
 
 
 @router.post("/work-plan/{student_id}", response_model=CreatePlanResponse, status_code=status.HTTP_201_CREATED)
-@requires_role("orientador")
+@requires_role("orientador", "coordenacao")
 @audit_operation
 async def create_work_plan(
     student_id: str,
@@ -78,7 +78,7 @@ async def create_work_plan(
 
 
 @router.put("/work-plan/{plan_id}", response_model=dict)
-@requires_role("orientador")
+@requires_role("orientador", "coordenacao")
 @audit_operation
 async def update_work_plan(
     plan_id: str,
@@ -93,7 +93,7 @@ async def update_work_plan(
 
 
 @router.post("/work-plan/{plan_id}/stages", response_model=CreateStageResponse, status_code=status.HTTP_201_CREATED)
-@requires_role("orientador")
+@requires_role("orientador", "coordenacao")
 @audit_operation
 async def create_stage(
     plan_id: str,
@@ -108,7 +108,7 @@ async def create_stage(
 
 
 @router.patch("/stages/{stage_id}", response_model=MutationMessage)
-@requires_role("orientador")
+@requires_role("orientador", "coordenacao")
 @audit_operation
 async def update_stage(
     stage_id: str,
@@ -124,7 +124,7 @@ async def update_stage(
 
 
 @router.post("/stages/{stage_id}/tasks", response_model=CreateTaskResponse, status_code=status.HTTP_201_CREATED)
-@requires_role("orientador")
+@requires_role("orientador", "coordenacao")
 @audit_operation
 async def create_task(
     stage_id: str,
@@ -139,7 +139,7 @@ async def create_task(
 
 
 @router.patch("/tasks/{task_id}", response_model=MutationMessage)
-@requires_role("orientador")
+@requires_role("orientador", "coordenacao")
 @audit_operation
 async def update_task(
     task_id: str,
@@ -155,7 +155,7 @@ async def update_task(
 
 
 @router.patch("/tasks/{task_id}/status", response_model=TaskStatusResponse)
-@requires_role("orientador")
+@requires_role("orientador", "coordenacao")
 @audit_operation
 async def update_task_status(
     task_id: str,
@@ -170,7 +170,7 @@ async def update_task_status(
 
 
 @router.post("/tasks/{task_id}/updates", response_model=ProgressUpdateCreated, status_code=status.HTTP_201_CREATED)
-@requires_role("orientador")
+@requires_role("aluno")
 @audit_operation
 @check_deadlines
 @trigger_alerts(_build_progress_update_alert)

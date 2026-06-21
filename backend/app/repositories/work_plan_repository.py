@@ -1,4 +1,8 @@
-"""Repositorio em memoria para plano de trabalho do MVP."""
+"""Repositorio em memoria para plano de trabalho.
+
+Stub do MVP: o estado e isolado por instancia de WorkPlanStore para evitar acoplamento
+entre testes e apps, mas ainda nao persiste no Firestore.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +10,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
+
+from backend.app.models.work_plan import STATUS_ATRASADO, STATUS_CONCLUIDO, STAGE_KIND_DEFESA
 
 
 def _dt(value: str) -> datetime:
@@ -42,10 +48,10 @@ def _seed() -> dict[str, dict[str, Any]]:
             "ordem": 1,
             "data_inicio": _dt("2025-01-01T00:00:00"),
             "data_fim": _dt("2025-04-30T00:00:00"),
-            "status": "concluida",
+            "status": STATUS_CONCLUIDO,
             "tasks": [
-                _task("task_revisao_1", "stage_revisao", "Levantamento bibliografico", "2025-02-28T00:00:00", "concluida", "alta", 100),
-                _task("task_revisao_2", "stage_revisao", "Sintese da literatura", "2025-04-15T00:00:00", "concluida", "media", 100),
+                _task("task_revisao_1", "stage_revisao", "Levantamento bibliografico", "2025-02-28T00:00:00", STATUS_CONCLUIDO, "alta", 100),
+                _task("task_revisao_2", "stage_revisao", "Sintese da literatura", "2025-04-15T00:00:00", STATUS_CONCLUIDO, "media", 100),
             ],
         },
         {
@@ -56,7 +62,7 @@ def _seed() -> dict[str, dict[str, Any]]:
             "data_fim": _dt("2026-08-30T00:00:00"),
             "status": "em_andamento",
             "tasks": [
-                _task("task_dev_1", "stage_desenvolvimento", "Prototipo inicial", "2026-03-30T00:00:00", "concluida", "alta", 100),
+                _task("task_dev_1", "stage_desenvolvimento", "Prototipo inicial", "2026-03-30T00:00:00", STATUS_CONCLUIDO, "alta", 100),
                 _task("task_dev_2", "stage_desenvolvimento", "Experimentos principais", "2026-08-30T00:00:00", "em_andamento", "alta", 55),
                 _task("task_dev_3", "stage_desenvolvimento", "Analise dos resultados", "2026-09-30T00:00:00", "pendente", "media", 0),
             ],
@@ -98,7 +104,7 @@ def _seed() -> dict[str, dict[str, Any]]:
             "data_fim_prevista": _dt("2026-12-15T00:00:00"),
             "descricao": "Todas as etapas nao-defesa concluidas.",
             "progresso_percentual": 100.0,
-            "status_geral": "concluida",
+            "status_geral": STATUS_CONCLUIDO,
             "stages": [
                 {
                     "stage_id": "stage_apto",
@@ -106,11 +112,11 @@ def _seed() -> dict[str, dict[str, Any]]:
                     "ordem": 1,
                     "data_inicio": _dt("2024-01-01T00:00:00"),
                     "data_fim": _dt("2026-05-30T00:00:00"),
-                    "status": "concluida",
+                    "status": STATUS_CONCLUIDO,
                     "tasks": [
-                        _task("task_apto_1", "stage_apto", "Dissertacao final", "2026-05-30T00:00:00", "concluida", "alta", 100),
-                        _task("task_apto_2", "stage_apto", "Revisao final", "2026-06-15T00:00:00", "concluida", "alta", 100),
-                        _task("task_apto_3", "stage_apto", "Deposito preliminar", "2026-07-01T00:00:00", "concluida", "media", 100),
+                        _task("task_apto_1", "stage_apto", "Dissertacao final", "2026-05-30T00:00:00", STATUS_CONCLUIDO, "alta", 100),
+                        _task("task_apto_2", "stage_apto", "Revisao final", "2026-06-15T00:00:00", STATUS_CONCLUIDO, "alta", 100),
+                        _task("task_apto_3", "stage_apto", "Deposito preliminar", "2026-07-01T00:00:00", STATUS_CONCLUIDO, "media", 100),
                     ],
                 }
             ],
@@ -126,7 +132,7 @@ def _seed() -> dict[str, dict[str, Any]]:
             "data_fim_prevista": _dt("2024-03-01T00:00:00"),
             "descricao": "Plano com tarefas atrasadas.",
             "progresso_percentual": 0.0,
-            "status_geral": "atrasada",
+            "status_geral": STATUS_ATRASADO,
             "stages": [
                 {
                     "stage_id": "stage_risco",
@@ -134,9 +140,9 @@ def _seed() -> dict[str, dict[str, Any]]:
                     "ordem": 1,
                     "data_inicio": _dt("2023-01-01T00:00:00"),
                     "data_fim": _dt("2024-03-01T00:00:00"),
-                    "status": "atrasada",
+                    "status": STATUS_ATRASADO,
                     "tasks": [
-                        _task("task_risco_1", "stage_risco", "Regularizar entregas", "2024-01-31T00:00:00", "atrasada", "alta", 0),
+                        _task("task_risco_1", "stage_risco", "Regularizar entregas", "2024-01-31T00:00:00", STATUS_ATRASADO, "alta", 0),
                         _task("task_risco_2", "stage_risco", "Atualizar cronograma", "2024-02-10T00:00:00", "pendente", "alta", 0),
                         _task("task_risco_3", "stage_risco", "Enviar relatorio", "2024-02-20T00:00:00", "pendente", "media", 0),
                     ],
@@ -150,7 +156,7 @@ def _seed() -> dict[str, dict[str, Any]]:
 
 
 def _is_defense_stage(stage: dict[str, Any]) -> bool:
-    return stage.get("tipo") == "defesa" or str(stage.get("nome", "")).casefold() == "defesa"
+    return stage.get("tipo") == STAGE_KIND_DEFESA
 
 
 class WorkPlanStore:
@@ -190,7 +196,7 @@ class WorkPlanRepository:
                     {
                         "id": task["task_id"],
                         "is_defesa": is_defesa,
-                        "concluida": task.get("status") == "concluida",
+                        "concluida": task.get("status") == STATUS_CONCLUIDO,
                     }
                 )
         return tasks
@@ -222,8 +228,8 @@ class WorkPlanRepository:
         plan = self._find_plan(plan_id)
         stage_id = f"stage_{uuid4().hex}"
 
-        if str(data.get("nome", "")).casefold() == "defesa":
-            data["tipo"] = "defesa"
+        if str(data.get("nome", "")).casefold() == STAGE_KIND_DEFESA:
+            data["tipo"] = STAGE_KIND_DEFESA
 
         plan["stages"].append({"stage_id": stage_id, "status": "pendente", "tasks": [], **data})
         return stage_id
@@ -258,7 +264,7 @@ class WorkPlanRepository:
         task["progresso_percentual"] = float(data["percentual"])
 
         if task["progresso_percentual"] >= 100:
-            task["status"] = "concluida"
+            task["status"] = STATUS_CONCLUIDO
         elif task["status"] == "pendente":
             task["status"] = "em_andamento"
 
