@@ -259,14 +259,23 @@ function ExportBar({ section }: { section: string }) {
   );
 }
 
-function SectionHeader({ title, sub, section, onReport }: {
-  title: string; sub?: string; section: string; onReport?: () => void;
+function SectionHeader({ title, sub, section, onReport, isMock }: {
+  title: string; sub?: string; section: string; onReport?: () => void; isMock?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2 mb-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)", wordBreak: "break-word" }}>{title}</h3>
-        {sub && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{sub}</p>}
+      <div className="min-w-0 flex items-center gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)", wordBreak: "break-word" }}>{title}</h3>
+            {isMock && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>
+                Amostra
+              </span>
+            )}
+          </div>
+          {sub && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{sub}</p>}
+        </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
         <ExportBar section={section} />
@@ -511,7 +520,7 @@ function StatusDistribChart({ onReport, statusData }: { onReport: () => void; st
 function OrientadorPerfChart({ onReport }: { onReport: () => void }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Desempenho dos Orientadores" sub="Orientandos, produções e defesas" section="Orientadores" onReport={onReport} />
+      <SectionHeader title="Desempenho dos Orientadores" sub="Orientandos, produções e defesas" section="Orientadores" onReport={onReport} isMock />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 320 }}>
       <ResponsiveContainer width="100%" height={200}>
@@ -536,7 +545,7 @@ function OrientadorPerfChart({ onReport }: { onReport: () => void }) {
 function ProducaoChart({ onReport }: { onReport: () => void }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Produção Científica" sub="Qualis A1, A2 e conferências — 2026" section="Produção Científica" onReport={onReport} />
+      <SectionHeader title="Produção Científica" sub="Qualis A1, A2 e conferências — 2026" section="Produção Científica" onReport={onReport} isMock />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 300 }}>
       <ResponsiveContainer width="100%" height={190}>
@@ -570,7 +579,7 @@ function ProducaoChart({ onReport }: { onReport: () => void }) {
 function IntegralizacaoChart({ onReport }: { onReport: () => void }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Integralização por Ano" sub="Tempo médio em meses vs. meta do programa" section="Integralização" onReport={onReport} />
+      <SectionHeader title="Integralização por Ano" sub="Tempo médio em meses vs. meta do programa" section="Integralização" onReport={onReport} isMock />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 280 }}>
       <ResponsiveContainer width="100%" height={190}>
@@ -607,7 +616,10 @@ function ValidationQueue() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{VALIDATIONS.length} itens aguardando aprovação</p>
         </div>
         <ExportBar section="Fila de Validação" />
@@ -698,7 +710,10 @@ function ExtensionRequestsSection() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{EXTENSIONS.filter(e => e.status === "pendente" || e.status === "em-analise").length} pendentes de decisão</p>
         </div>
         <ExportBar section="Prorrogações" />
@@ -766,7 +781,10 @@ function PendingActivitiesSection() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Atividades Pendentes</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Atividades Pendentes</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{PENDING_ACTIVITIES.filter(a => a.prioridade === "urgente").length} urgentes · {PENDING_ACTIVITIES.length} total</p>
         </div>
         <ExportBar section="Atividades Pendentes" />
@@ -813,7 +831,10 @@ function AlertsCenter() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Central de Alertas</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Central de Alertas</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
             <span style={{ color: "var(--tint-danger-text)", fontWeight: 700 }}>{ALERTS.filter(a => a.nivel === "critico").length} críticos</span>
             {" · "}{ALERTS.filter(a => a.nivel === "atencao").length} atenção · {ALERTS.filter(a => a.nivel === "info").length} informativos
