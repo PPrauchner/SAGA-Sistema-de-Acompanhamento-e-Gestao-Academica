@@ -213,15 +213,47 @@ class ActivityService:
 # ---------------------------------------------------------------------------------------
 
 _repo = ActivityRepository()
+_advisor_repo = AdvisorRepository()
+_student_repo = StudentRepository()
 
 
 def _get_advisor_uid_for_activity(kwargs: dict) -> str | None:
+    """Resolve o uid do orientador do aluno dono da atividade.
+
+    Caminho correto: activity → student_id → students.orientador_id → advisors.uid.
+    O campo students.orientador_uid não existe no data-model.
+    """
+    import asyncio
+
     activity_id: str = kwargs.get("activity_id", "")
     activity = _repo.get_by_id(activity_id)
     if not activity:
         return None
     student_id = activity.get("student_id", "")
-    return _repo.get_advisor_uid_by_student(student_id)
+    if not student_id:
+        return None
+
+    async def _resolve() -> str | None:
+        student = await _student_repo.get(student_id)
+        if not student:
+            return None
+        orientador_id = student.get("orientador_id")
+        if not orientador_id:
+            return None
+        advisor = await _advisor_repo.get(orientador_id)
+        return advisor.get("uid") if advisor else None
+
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor() as pool:
+                future = pool.submit(asyncio.run, _resolve())
+                return future.result()
+        return loop.run_until_complete(_resolve())
+    except Exception as exc:
+        logger.error("[M3] Falha ao resolver uid do orientador: %s", exc)
+        return None
 
 
 def _get_aluno_uid_para_notificacao(kwargs: dict) -> str | None:
@@ -339,20 +371,29 @@ async def validate_activity(
         update_data["creditos_gerados"] = creditos_contabilizados
 
         student_id: str = activity.get("student_id", "")
-        categoria: str = activity.get("categoria", "")
 
-        if categoria == "producao_bibliografica" and student_id:
-            aprovadas_anteriores = _repo.count_approved_productions(student_id)
-            total_aprovadas = aprovadas_anteriores + 1
-            if total_aprovadas >= 1:
-                fato_gerado = f"producao_bibliografica_validada({student_id})"
+        # M2 — o vínculo com produção bibliográfica é via producao_id (FK para productions),
+        # não via categoria (que só existe em activity_types: basico|especifico|tecnologico).
+        producao_id = activity.get("producao_id")
+        if producao_id and student_id:
+            fato_gerado = f"producao_bibliografica_validada({student_id})"
+            logger.info("[S6b] Fato gerado para motor: %s", fato_gerado)
+
+        # M1 — executar o motor de inferência após aprovação para derivar situacao_inferida.
+        if student_id:
+            try:
+                _inference_svc = InferenceService(InferenceRepository())
+                student_data = await _student_repo.get(student_id)
+                programa_id = student_data.get("programa_id", "") if student_data else ""
+                await _inference_svc.run_inference(student_id, programa_id)
                 motor_executado = True
                 logger.info(
-                    "[S6b] Fato gerado para motor: %s — re-inferência será executada "
-                    "na próxima consulta de /inference/%s",
-                    fato_gerado,
+                    "[S6b] Motor executado para aluno %s após aprovação de atividade %s",
                     student_id,
+                    activity_id,
                 )
+            except Exception as exc:
+                logger.error("[S6b] Falha ao executar motor de inferência: %s", exc)
     else:
         update_data["creditos_gerados"] = 0.0
 
