@@ -26,15 +26,15 @@ async def _apply_deadline_advice(
     kwargs: dict[str, Any],
     result: Any,
 ) -> None:
-    self = args[0] if args else None
-    task_id = args[1] if len(args) > 1 else kwargs.get("task_id")
+    self = next((value for value in (*kwargs.values(), *args) if hasattr(value, "_repo")), None)
+    task_id = kwargs.get("task_id") or next((value for value in args if isinstance(value, str)), None)
     if self is None or task_id is None or not hasattr(self, "_repo"):
         return
 
     plan, _, task = await self._repo.get_task_context(task_id)
     alerta_prazo = _deadline_alert(task)
-    if _is_overdue(task) and task.get("status") != "concluida":
-        await self._repo.update_task(task_id, {"status": "atrasada"})
+    if _is_overdue(task) and task.get("status") != "concluido":
+        await self._repo.update_task(task_id, {"status": "atrasado"})
         await self._repo.save_fact(
             plan["student_id"],
             f"prazo_estourado_task({task_id}, {plan['student_id']})",
@@ -45,10 +45,10 @@ async def _apply_deadline_advice(
 
 
 def check_deadlines(func: F) -> F:
-    """Before advice para operações que dependem de prazo de task.
+    """After advice para operações que dependem de prazo de task.
 
     O join point usado pela issue #44 é `WorkPlanService.add_progress_update`.
-    Antes de persistir o progresso, o aspecto verifica o prazo da task; se ele
+    Depois de persistir o progresso, o aspecto verifica o prazo da task; se ele
     já venceu, marca a task como atrasada e registra o fato
     `prazo_estourado_task(task_id, student_id)`.
     """
