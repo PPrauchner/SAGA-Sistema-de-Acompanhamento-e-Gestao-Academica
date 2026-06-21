@@ -2,8 +2,13 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 
+from backend.app.aspects.alerts import trigger_alerts
+from backend.app.aspects.audit import audit_operation
+from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.deadline_validation import check_deadlines
+from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.work_plan import (
     ActorContext,
     CreatePlanResponse,
@@ -24,14 +29,16 @@ from backend.app.models.work_plan import (
     WorkPlanFull,
     WorkPlanUpdate,
 )
-from backend.app.repositories.work_plan_repository import WorkPlanRepository
-from backend.app.services.work_plan_service import WorkPlanNotFoundError, WorkPlanService
+from backend.app.repositories.work_plan_repository import WorkPlanRepository, WorkPlanStore
+from backend.app.services.work_plan_service import WorkPlanNotFoundError, WorkPlanService, _build_progress_update_alert
 
 router = APIRouter()
 
 
-def _get_service() -> WorkPlanService:
-    return WorkPlanService(WorkPlanRepository())
+def _get_service(request: Request) -> WorkPlanService:
+    if not hasattr(request.app.state, "work_plan_store"):
+        request.app.state.work_plan_store = WorkPlanStore()
+    return WorkPlanService(WorkPlanRepository(request.app.state.work_plan_store))
 
 
 def _actor(
@@ -59,18 +66,24 @@ async def get_work_plan(
 
 
 @router.post("/work-plan/{student_id}", response_model=CreatePlanResponse, status_code=status.HTTP_201_CREATED)
+@requires_role("orientador")
+@audit_operation
 async def create_work_plan(
     student_id: str,
     payload: WorkPlanCreate,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> CreatePlanResponse:
     return await service.create_plan(student_id, payload)
 
 
 @router.put("/work-plan/{plan_id}", response_model=dict)
+@requires_role("orientador")
+@audit_operation
 async def update_work_plan(
     plan_id: str,
     payload: WorkPlanUpdate,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> dict:
     try:
@@ -80,9 +93,12 @@ async def update_work_plan(
 
 
 @router.post("/work-plan/{plan_id}/stages", response_model=CreateStageResponse, status_code=status.HTTP_201_CREATED)
+@requires_role("orientador")
+@audit_operation
 async def create_stage(
     plan_id: str,
     payload: StageCreate,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> CreateStageResponse:
     try:
@@ -92,9 +108,12 @@ async def create_stage(
 
 
 @router.patch("/stages/{stage_id}", response_model=MutationMessage)
+@requires_role("orientador")
+@audit_operation
 async def update_stage(
     stage_id: str,
     payload: StageUpdate,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> MutationMessage:
     try:
@@ -105,9 +124,12 @@ async def update_stage(
 
 
 @router.post("/stages/{stage_id}/tasks", response_model=CreateTaskResponse, status_code=status.HTTP_201_CREATED)
+@requires_role("orientador")
+@audit_operation
 async def create_task(
     stage_id: str,
     payload: TaskCreate,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> CreateTaskResponse:
     try:
@@ -117,9 +139,12 @@ async def create_task(
 
 
 @router.patch("/tasks/{task_id}", response_model=MutationMessage)
+@requires_role("orientador")
+@audit_operation
 async def update_task(
     task_id: str,
     payload: TaskUpdate,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> MutationMessage:
     try:
@@ -130,9 +155,12 @@ async def update_task(
 
 
 @router.patch("/tasks/{task_id}/status", response_model=TaskStatusResponse)
+@requires_role("orientador")
+@audit_operation
 async def update_task_status(
     task_id: str,
     payload: TaskStatusPatch,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> TaskStatusResponse:
     try:
@@ -142,10 +170,15 @@ async def update_task_status(
 
 
 @router.post("/tasks/{task_id}/updates", response_model=ProgressUpdateCreated, status_code=status.HTTP_201_CREATED)
+@requires_role("orientador")
+@audit_operation
+@check_deadlines
+@trigger_alerts(_build_progress_update_alert)
 async def add_progress_update(
     task_id: str,
     payload: ProgressUpdateCreate,
     actor: ActorContext = Depends(_actor),
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> ProgressUpdateCreated:
     try:
