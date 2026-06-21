@@ -1,6 +1,5 @@
 """
 Router FastAPI para os endpoints de atividades creditáveis.
-
 Responsabilidades:
 - GET /api/v1/activities: lista atividades com filtros de student_id, status e categoria.
   Aluno vê as próprias; orientador vê dos orientandos; coordenação vê todas.
@@ -16,21 +15,117 @@ Responsabilidades:
   e @trigger_alerts (notifica aluno após decisão da coordenação). Motor verifica
   elegibilidade (RL04) e gera fato producao_bibliografica_validada quando aplicável.
 """
+from typing import List, Optional, Union
 
-from typing import Union
-
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
 
 from backend.app.core.auth import get_current_user
 from backend.app.models.activity import (
+    ActivityCreateRequest,
+    ActivityCreateResponse,
     ActivityResponse,
+    ComprovanteUploadResponse,
     ValidateActivityRequest,
     ValidateActivityResponse,
 )
 from backend.app.services import activity_service
+from backend.app.services.activity_service import ActivityService
+from backend.app.services.comprovante_service import ComprovanteService
 
 router = APIRouter()
 
+_activity_service = ActivityService()
+_comprovante_service = ComprovanteService()
+
+
+# ---------------------------------------------------------------------------
+# GET /activities
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/activities",
+    response_model=List[ActivityResponse],
+)
+async def list_activities(
+    student_id: Optional[str] = None,
+    status: Optional[str] = None,
+    categoria: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+) -> List[ActivityResponse]:
+    """
+    Lista atividades visíveis para o usuário autenticado.
+    - Aluno: vê apenas as próprias atividades.
+    - Orientador: vê atividades dos seus orientandos.
+    - Coordenação: vê todas.
+    Suporta filtros opcionais de student_id, status e categoria.
+    """
+    rows = await _activity_service.list_activities(
+        user=current_user,
+        student_id=student_id,
+        status_filter=status,
+        categoria=categoria,
+    )
+    return [ActivityResponse(**row) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# POST /activities
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/activities",
+    response_model=ActivityCreateResponse,
+    status_code=201,
+)
+async def submit_activity(
+    payload: ActivityCreateRequest,
+    current_user: dict = Depends(get_current_user),
+) -> ActivityCreateResponse:
+    """
+    Registra nova atividade creditável para o aluno autenticado.
+    O motor RL04 verifica elegibilidade preliminar imediatamente após a criação.
+    Notifica o orientador caso o status inicial seja 'enviado'.
+    """
+    result = await _activity_service.submit_activity(data=payload, user=current_user)
+    return ActivityCreateResponse(
+        id=result["id"],
+        elegibilidade_preliminar=result["elegibilidade_preliminar"],
+        notificacao_enviada=result["notificacao_enviada"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /activities/{activity_id}/comprovante
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/activities/{activity_id}/comprovante",
+    response_model=ComprovanteUploadResponse,
+)
+async def upload_comprovante(
+    activity_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+) -> ComprovanteUploadResponse:
+    """
+    Faz upload do comprovante (PDF/JPEG/PNG) para o Firebase Storage.
+    Persiste a URL tokenizada de download na atividade correspondente.
+    Restrito ao aluno dono da atividade.
+    """
+    result = await _comprovante_service.upload(
+        activity_id=activity_id,
+        file=file,
+        current_user=current_user,
+    )
+    return ComprovanteUploadResponse(
+        comprovante_url=result["comprovante_url"],
+        path_bucket=result["path_bucket"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# PATCH /activities/{activity_id}/validate
+# ---------------------------------------------------------------------------
 
 @router.patch(
     "/activities/{activity_id}/validate",
@@ -43,12 +138,10 @@ async def validate_activity(
 ) -> Union[ActivityResponse, ValidateActivityResponse]:
     """
     Valida uma atividade submetida.
-
     Ação `parecer_orientador`:
     - Apenas o orientador do próprio aluno pode emitir (A01 por propriedade)
     - Operação auditada (A02)
     - Retorna ActivityResponse com status atualizado para 'parecer_emitido'
-
     Ação `aprovar` | `rejeitar` (coordenação):
     - Apenas coordenação (A01)
     - Operação mais crítica — auditada com detalhes (A02)
@@ -62,7 +155,6 @@ async def validate_activity(
             payload=payload,
             current_user=current_user,
         )
-
     return await activity_service.validate_activity(
         activity_id=activity_id,
         payload=payload,
