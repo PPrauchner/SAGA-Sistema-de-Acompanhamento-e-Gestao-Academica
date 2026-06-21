@@ -35,21 +35,23 @@ sys.modules["backend.app.core.firebase"] = MagicMock()
 
 from fastapi import HTTPException
 
+from backend.app.core.auth import CurrentUser
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def user_coordenacao():
-    return {"uid": "coord-uid-001", "email": "coord@saga.com", "role": "coordenacao"}
+    return CurrentUser(uid="coord-uid-001", email="coord@saga.com", role="coordenacao", programa_id="prog-001")
 
 @pytest.fixture
 def user_orientador():
-    return {"uid": "orient-uid-002", "email": "orient@saga.com", "role": "orientador"}
+    return CurrentUser(uid="orient-uid-002", email="orient@saga.com", role="orientador", programa_id="prog-001")
 
 @pytest.fixture
 def user_aluno():
-    return {"uid": "aluno-uid-003", "email": "aluno@saga.com", "role": "aluno"}
+    return CurrentUser(uid="aluno-uid-003", email="aluno@saga.com", role="aluno", programa_id="prog-001")
 
 def make_db_mock():
     db = MagicMock()
@@ -79,7 +81,7 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao", "orientador")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             assert await handler(current_user=user_coordenacao) == "ok"
@@ -90,7 +92,7 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             with pytest.raises(HTTPException) as exc:
@@ -116,7 +118,7 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "bypassed"
 
             assert await handler(current_user=user_aluno) == "bypassed"
@@ -127,8 +129,8 @@ class TestRequiresRole:
             from backend.app.aspects.authorization import requires_role
 
             @requires_role("coordenacao", "orientador", "aluno")
-            async def handler(current_user):
-                return current_user["role"]
+            async def handler(current_user: CurrentUser):
+                return current_user.role
 
             assert await handler(current_user=user_orientador) == "orientador"
 
@@ -144,7 +146,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "orient-uid-002")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "ok"
 
             assert await handler(activity_id="act-1", current_user=user_orientador) == "ok"
@@ -155,7 +157,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "outro-uid")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "ok"
 
             with pytest.raises(HTTPException) as exc:
@@ -168,7 +170,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "qualquer-outro-uid")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "coord-ok"
 
             assert await handler(activity_id="act-1", current_user=user_coordenacao) == "coord-ok"
@@ -179,7 +181,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: None)
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "ok"
 
             with pytest.raises(HTTPException) as exc:
@@ -192,7 +194,7 @@ class TestRequiresOwnership:
             from backend.app.aspects.authorization import requires_ownership
 
             @requires_ownership(lambda kw: "outro-uid")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return "bypassed"
 
             assert await handler(activity_id="act-1", current_user=user_aluno) == "bypassed"
@@ -211,7 +213,7 @@ class TestAuditOperation:
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation(operacao="aprovar_atividade", entidade="activities")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return {"status": "aprovada"}
 
             result = await handler(activity_id="act-123", current_user=user_coordenacao)
@@ -231,7 +233,7 @@ class TestAuditOperation:
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation(operacao="op_falha", entidade="activities")
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 raise ValueError("erro simulado")
 
             with pytest.raises(ValueError, match="erro simulado"):
@@ -249,7 +251,7 @@ class TestAuditOperation:
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation(operacao="op_off", entidade="activities")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             result = await handler(current_user=user_coordenacao)
@@ -264,7 +266,7 @@ class TestAuditOperation:
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation(operacao="op_resiliente", entidade="activities")
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             assert await handler(current_user=user_coordenacao) == "ok"
@@ -306,7 +308,7 @@ class TestTriggerAlerts:
                     "destinatario_id": "aluno-uid-003",
                 }
             )
-            async def handler(activity_id, current_user):
+            async def handler(activity_id, current_user: CurrentUser):
                 return {"novo_status": "aprovada"}
 
             result = await handler(activity_id="act-789", current_user=user_coordenacao)
@@ -336,7 +338,7 @@ class TestTriggerAlerts:
                     "destinatario_id": "aluno-uid-003",
                 }
             )
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 ordem.append("funcao")
                 return "ok"
 
@@ -357,7 +359,7 @@ class TestTriggerAlerts:
                 "mensagem": "msg",
                 "destinatario_id": "aluno-uid-003",
             })
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             result = await handler(current_user=user_coordenacao)
@@ -373,7 +375,7 @@ class TestTriggerAlerts:
             from backend.app.aspects.alerts import trigger_alerts
 
             @trigger_alerts(lambda result, args, kwargs: None)
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             await handler(current_user=user_coordenacao)
@@ -392,7 +394,7 @@ class TestTriggerAlerts:
                 "mensagem": "msg",
                 "destinatario_id": "aluno-uid-003",
             })
-            async def handler(current_user):
+            async def handler(current_user: CurrentUser):
                 return "ok"
 
             assert await handler(current_user=user_coordenacao) == "ok"
@@ -490,7 +492,7 @@ class TestDecoratorStack:
                     "destinatario_id": "aluno-uid-003",
                 }
             )
-            async def validate_activity(activity_id, current_user):
+            async def validate_activity(activity_id, current_user: CurrentUser):
                 return {"novo_status": "aprovada", "creditos": 10}
 
             result = await validate_activity(activity_id="act-stack-001", current_user=user_coordenacao)
@@ -522,7 +524,7 @@ class TestDecoratorStack:
                 "mensagem": "msg",
                 "destinatario_id": "aluno-uid-003",
             })
-            async def validate_activity(activity_id, current_user):
+            async def validate_activity(activity_id, current_user: CurrentUser):
                 return "nunca executa"
 
             with pytest.raises(HTTPException) as exc:
@@ -558,7 +560,7 @@ class TestDecoratorStack:
                 "mensagem": "msg",
                 "destinatario_id": "aluno-uid-003",
             })
-            async def validate_activity(activity_id, current_user):
+            async def validate_activity(activity_id, current_user: CurrentUser):
                 raise ValueError("erro de negócio")
 
             with pytest.raises(ValueError):
