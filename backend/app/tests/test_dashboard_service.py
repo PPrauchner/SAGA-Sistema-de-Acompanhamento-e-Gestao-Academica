@@ -64,10 +64,14 @@ async def test_aluno_dashboard_returns_basic_student_data():
         patch(
             "backend.app.services.dashboard_service.ActivityRepository"
         ) as MockActivityRepo,
+        patch(
+            "backend.app.services.dashboard_service.ActivityTypeRepository"
+        ) as MockActivityTypeRepo,
     ):
         MockStudentRepo.return_value.get = AsyncMock(return_value=student)
         MockStudentRepo.return_value.list_all = AsyncMock(return_value=[student])
         MockActivityRepo.return_value.list_by_student = AsyncMock(return_value=[])
+        MockActivityTypeRepo.return_value.list_all = AsyncMock(return_value=[])
 
         service = DashboardService()
         result = await service.get_aluno_dashboard("stu_001")
@@ -78,6 +82,10 @@ async def test_aluno_dashboard_returns_basic_student_data():
     assert result.situacao_registrada == "regular"
     assert result.situacao_inferida == "regular"
     assert result.conflito_situacao is False
+
+    MockStudentRepo.return_value.get.assert_called_once_with("stu_001")
+    MockActivityRepo.return_value.list_by_student.assert_called_once_with("stu_001")
+    MockActivityTypeRepo.return_value.list_all.assert_called_once()
 
 
 # ─── Cycle 2: conflito de situação ──────────────────────────────────────────
@@ -95,9 +103,11 @@ async def test_aluno_dashboard_detects_conflito_situacao():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
         MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockATR.return_value.list_all = AsyncMock(return_value=[])
 
         service = DashboardService()
         result = await service.get_aluno_dashboard("stu_001")
@@ -105,6 +115,8 @@ async def test_aluno_dashboard_detects_conflito_situacao():
     assert result.conflito_situacao is True
     assert result.situacao_registrada == "regular"
     assert result.situacao_inferida == "em_risco"
+
+    MockSR.return_value.get.assert_called_once_with("stu_001")
 
 
 # ─── Cycle 3: créditos por grupo ────────────────────────────────────────────
@@ -117,21 +129,27 @@ async def test_aluno_dashboard_aggregates_credits_by_group():
     student = _make_student()
     activities = [
         {"id": "a1", "status": "aprovado", "creditos_concedidos": 4.0,
-         "categoria": "basico", "producao_id": None},
+         "tipo_id": "t_basico", "producao_id": None},
         {"id": "a2", "status": "aprovado", "creditos_concedidos": 3.0,
-         "categoria": "especifico", "producao_id": None},
+         "tipo_id": "t_especifico", "producao_id": None},
         {"id": "a3", "status": "aprovado", "creditos_concedidos": 2.0,
-         "categoria": "tecnologico", "producao_id": None},
+         "tipo_id": "t_tecnologico", "producao_id": None},
         {"id": "a4", "status": "enviado", "creditos_concedidos": 4.0,
-         "categoria": "basico", "producao_id": None},  # não-aprovado, ignorar
+         "tipo_id": "t_basico", "producao_id": None},  # não-aprovado, ignorar
     ]
 
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
         MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
+        MockATR.return_value.list_all = AsyncMock(return_value=[
+            {"id": "t_basico", "categoria": "basico"},
+            {"id": "t_especifico", "categoria": "especifico"},
+            {"id": "t_tecnologico", "categoria": "tecnologico"},
+        ])
 
         service = DashboardService()
         result = await service.get_aluno_dashboard("stu_001")
@@ -140,6 +158,10 @@ async def test_aluno_dashboard_aggregates_credits_by_group():
     assert result.creditos.especifico == 3.0
     assert result.creditos.tecnologico == 2.0
     assert result.creditos.total == 9.0
+
+    MockSR.return_value.get.assert_called_once_with("stu_001")
+    MockAR.return_value.list_by_student.assert_called_once_with("stu_001")
+    MockATR.return_value.list_all.assert_called_once()
 
 
 # ─── Cycle 4: produções aprovadas e atividades pendentes ────────────────────
@@ -166,15 +188,20 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
         MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
+        MockATR.return_value.list_all = AsyncMock(return_value=[])
 
         service = DashboardService()
         result = await service.get_aluno_dashboard("stu_001")
 
     assert result.producoes_aprovadas == 2  # a1, a2 (aprovado + producao_id)
     assert result.atividades_pendentes_validacao == 2  # a3, a4 (enviado)
+
+    MockSR.return_value.get.assert_called_once_with("stu_001")
+    MockAR.return_value.list_by_student.assert_called_once_with("stu_001")
 
 
 # ─── Cycle 5: aluno não encontrado ──────────────────────────────────────────
@@ -187,6 +214,7 @@ async def test_aluno_dashboard_raises_404_if_student_not_found():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=None)
 
@@ -235,6 +263,7 @@ async def test_orientador_dashboard_returns_basic_data():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
@@ -248,6 +277,10 @@ async def test_orientador_dashboard_returns_basic_data():
     assert result.advisor_id == "adv_001"
     assert result.nome == "Prof. Carlos Lima"
     assert result.total_orientandos == 2
+
+    MockAdvR.return_value.get.assert_called_once_with("adv_001")
+    MockSR.return_value.list_all.assert_called_once()
+    assert MockAR.return_value.list_by_student.call_count == 2
 
 
 # ─── Cycle 7: contagem por status ───────────────────────────────────────────
@@ -272,6 +305,7 @@ async def test_orientador_dashboard_counts_by_status():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
@@ -285,6 +319,9 @@ async def test_orientador_dashboard_counts_by_status():
     assert result.orientandos_por_status.em_risco == 1
     assert result.orientandos_por_status.fase_defesa == 1
     assert result.total_orientandos == 4
+
+    MockAdvR.return_value.get.assert_called_once_with("adv_001")
+    MockSR.return_value.list_all.assert_called_once()
 
 
 # ─── Cycle 8: atividades aguardando parecer ─────────────────────────────────
@@ -307,6 +344,7 @@ async def test_orientador_dashboard_counts_pending_activities():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
@@ -317,6 +355,8 @@ async def test_orientador_dashboard_counts_pending_activities():
         result = await service.get_orientador_dashboard("adv_001")
 
     assert result.atividades_aguardando_parecer == 2
+    MockAdvR.return_value.get.assert_called_once_with("adv_001")
+    MockAR.return_value.list_by_student.assert_called_once_with("s1")
 
 
 # ─── Cycle 9: orientador não encontrado ─────────────────────────────────────
@@ -329,6 +369,7 @@ async def test_orientador_dashboard_raises_404_if_not_found():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=None)
@@ -361,6 +402,7 @@ async def test_coord_dashboard_returns_basic_totals():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
@@ -377,6 +419,9 @@ async def test_coord_dashboard_returns_basic_totals():
     assert result.alunos_por_status.regular == 2
     assert result.alunos_por_status.em_risco == 1
 
+    MockSR.return_value.list_all.assert_called_once()
+    assert MockAR.return_value.list_by_student.call_count == 3
+
 
 # ─── Cycle 11: sem alunos concluídos → tempo_medio = None ──────────────────
 
@@ -392,6 +437,7 @@ async def test_coord_dashboard_tempo_medio_none_when_no_completed():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
@@ -429,6 +475,7 @@ async def test_coord_dashboard_counts_global_pending_activities():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
@@ -459,6 +506,7 @@ async def test_coord_dashboard_includes_recent_audit():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
@@ -490,6 +538,7 @@ async def test_coord_dashboard_counts_total_concluidos():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
@@ -514,6 +563,7 @@ async def test_coord_dashboard_counts_total_concluidos_zero():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
@@ -543,6 +593,7 @@ async def test_coord_dashboard_counts_total_alunos_vs_ativos():
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):

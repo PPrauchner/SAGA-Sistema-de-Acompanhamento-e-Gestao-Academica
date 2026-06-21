@@ -14,14 +14,14 @@ Responsabilidades:
   médio de integralização e auditoria recente. Exclusivo de @requires_role('coordenacao').
 
 Nota de segurança:
-- Verificação de ownership (aluno só vê próprio dashboard, orientador só vê dashboards
-  dos seus orientandos) é feita no DashboardService, não neste router.
+- Verificação de ownership é delegada ao aspecto AOP `check_dashboard_ownership`.
 - Dashboard endpoints NÃO levam @audit_operation (somente @requires_role).
 """
 
 from fastapi import APIRouter, Depends
 
 from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.ownership import check_dashboard_ownership
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.dashboard import (
     AlunoDashboardResponse,
@@ -32,21 +32,24 @@ from backend.app.services.dashboard_service import DashboardService
 
 router = APIRouter()
 
-_service = DashboardService()
+def get_dashboard_service() -> DashboardService:
+    return DashboardService()
 
 
 @router.get("/dashboard/aluno/{student_id}", response_model=AlunoDashboardResponse)
 @requires_role("aluno", "orientador", "coordenacao")
+@check_dashboard_ownership()
 async def get_aluno_dashboard(
     student_id: str,
     user: CurrentUser = Depends(get_current_user),
+    service: DashboardService = Depends(get_dashboard_service),
 ) -> AlunoDashboardResponse:
     """Dashboard do aluno: situação, créditos, produções, tarefas pendentes.
 
     A verificação de ownership (aluno só vê o próprio, orientador só vê
-    orientandos) é feita internamente pelo DashboardService.
+    orientandos) é feita via aspecto AOP `check_dashboard_ownership`.
     """
-    return await _service.get_aluno_dashboard(student_id)
+    return await service.get_aluno_dashboard(student_id)
 
 
 @router.get(
@@ -54,18 +57,21 @@ async def get_aluno_dashboard(
     response_model=OrientadorDashboardResponse,
 )
 @requires_role("orientador", "coordenacao")
+@check_dashboard_ownership()
 async def get_orientador_dashboard(
     advisor_id: str,
     user: CurrentUser = Depends(get_current_user),
+    service: DashboardService = Depends(get_dashboard_service),
 ) -> OrientadorDashboardResponse:
     """Dashboard do orientador: orientandos, status, atividades aguardando parecer."""
-    return await _service.get_orientador_dashboard(advisor_id)
+    return await service.get_orientador_dashboard(advisor_id)
 
 
 @router.get("/dashboard/coordenacao", response_model=CoordDashboardResponse)
 @requires_role("coordenacao")
 async def get_coordenacao_dashboard(
     user: CurrentUser = Depends(get_current_user),
+    service: DashboardService = Depends(get_dashboard_service),
 ) -> CoordDashboardResponse:
     """Dashboard da coordenação: visão macro do programa."""
-    return await _service.get_coordenacao_dashboard()
+    return await service.get_coordenacao_dashboard()
