@@ -201,6 +201,37 @@ class WorkPlanRepository:
                 )
         return tasks
 
+    async def get_all_tasks_for_student(self, student_id: str) -> list[dict[str, Any]]:
+        """Lista achatada das tasks do plano do aluno, para os dashboards.
+
+        Diferente de `get_plan_tasks` (projeção booleana usada pela inferência),
+        expõe os campos consumidos pelo DashboardService: id, status, titulo e
+        prazo (ISO date). Lista vazia se o aluno não tem plano.
+
+        Args:
+            student_id: Identificador do aluno dono do plano.
+
+        Returns:
+            Lista de dicts com chaves id, status, titulo e prazo.
+        """
+        plan = self._store.plans.get(student_id)
+        if plan is None:
+            return []
+
+        tasks: list[dict[str, Any]] = []
+        for stage in plan["stages"]:
+            for task in stage["tasks"]:
+                prazo = task.get("prazo")
+                tasks.append(
+                    {
+                        "id": task["task_id"],
+                        "status": task.get("status"),
+                        "titulo": task.get("titulo", ""),
+                        "prazo": prazo.date().isoformat() if isinstance(prazo, datetime) else prazo,
+                    }
+                )
+        return tasks
+
     async def create_plan(self, student_id: str, data: dict[str, Any]) -> str:
         plan_id = f"plan_{uuid4().hex}"
         self._store.plans[student_id] = {
