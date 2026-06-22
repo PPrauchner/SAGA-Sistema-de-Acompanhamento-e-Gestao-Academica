@@ -21,13 +21,12 @@ from backend.app.services.production_service import ProductionService
 
 router = APIRouter()
 
-service = ProductionService()
-
 
 @router.get("/productions")
 @requires_role("coordenacao", "orientador", "aluno")
 async def list_productions(
     user: CurrentUser = Depends(get_current_user),
+    service: ProductionService = Depends(ProductionService),
 ) -> list[dict]:
     return await service.list_productions(user)
 
@@ -41,5 +40,6 @@ async def list_productions(
 async def create_production(
     body: ProductionCreate,
     user: CurrentUser = Depends(get_current_user),
+    service: ProductionService = Depends(ProductionService),
 ) -> dict:
     return await service.create_production(body, user)

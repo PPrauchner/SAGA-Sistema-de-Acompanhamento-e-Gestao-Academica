@@ -23,13 +23,12 @@ from backend.app.services.vehicle_service import VehicleService
 
 router = APIRouter()
 
-service = VehicleService()
-
 
 @router.get("/vehicles")
 @requires_role("coordenacao", "orientador", "aluno")
 async def list_vehicles(
     user: CurrentUser = Depends(get_current_user),
+    service: VehicleService = Depends(VehicleService),
 ) -> list[dict]:
     return await service.list_vehicles(user)
 
@@ -43,6 +42,7 @@ async def list_vehicles(
 async def create_vehicle(
     body: VehicleCreate,
     user: CurrentUser = Depends(get_current_user),
+    service: VehicleService = Depends(VehicleService),
 ) -> dict:
     return await service.create_vehicle(body, user)
 
@@ -54,6 +54,7 @@ async def update_vehicle_level(
     vehicle_id: str,
     body: VehicleLevelUpdate,
     user: CurrentUser = Depends(get_current_user),
+    service: VehicleService = Depends(VehicleService),
 ) -> dict:
     return await service.update_vehicle_level(vehicle_id, body, user)
 
@@ -64,5 +65,6 @@ async def update_vehicle_level(
 async def delete_vehicle(
     vehicle_id: str,
     user: CurrentUser = Depends(get_current_user),
+    service: VehicleService = Depends(VehicleService),
 ) -> dict:
     return await service.delete_vehicle(vehicle_id, user)
