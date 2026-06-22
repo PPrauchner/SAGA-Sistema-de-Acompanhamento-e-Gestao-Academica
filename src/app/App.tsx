@@ -7,6 +7,7 @@ import { LoginPage } from "./components/auth/LoginPage";
 import { RegisterPage } from "./components/auth/RegisterPage";
 import { PasswordRecoveryPage } from "./components/auth/PasswordRecoveryPage";
 import { FirstAccessPage } from "./components/auth/FirstAccessPage";
+import { ProfileUnavailablePage } from "./components/auth/ProfileUnavailablePage";
 
 // Páginas autenticadas carregadas sob demanda: cada uma vira um chunk próprio,
 // mantendo o recharts (puxado pelo Dashboard) e o restante fora do bundle
@@ -114,7 +115,14 @@ function FullPageLoading() {
 }
 
 function AppContent() {
-  const { currentPage } = useApp();
+  const { currentPage, profileUnavailable } = useApp();
+
+  // Sessão válida, mas perfil indisponível (GET /auth/me falhou): estado degradado
+  // com retry. Precede a checagem de página de auth para não cair no login mesmo que
+  // currentPage ainda seja "login". O PrivateRoute suprime o redirect neste estado.
+  if (profileUnavailable) {
+    return <ProfileUnavailablePage />;
+  }
 
   if (isAuthPage(currentPage)) {
     switch (currentPage) {

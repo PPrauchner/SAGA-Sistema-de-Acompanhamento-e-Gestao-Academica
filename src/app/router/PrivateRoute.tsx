@@ -34,14 +34,20 @@ interface RouteGuardState {
   currentPage: PageId;
   loading: boolean;
   role: UserRole | null;
+  profileUnavailable?: boolean;
 }
 
 export function getPrivateRouteRedirect({
   currentPage,
   loading,
   role,
+  profileUnavailable = false,
 }: RouteGuardState): PageId | null {
   if (loading) return null;
+
+  // Sessão Firebase válida, mas perfil indisponível (GET /auth/me falhou): não é
+  // logout. Suprime o redirect para que AppContent renderize o estado degradado.
+  if (profileUnavailable) return null;
 
   const onAuthPage = isAuthPage(currentPage);
 
@@ -62,11 +68,12 @@ interface PrivateRouteProps {
 }
 
 export function PrivateRoute({ children, loadingFallback = null }: PrivateRouteProps) {
-  const { currentPage, currentUser, loading, setCurrentPage } = useApp();
+  const { currentPage, currentUser, loading, profileUnavailable, setCurrentPage } = useApp();
   const redirectPage = getPrivateRouteRedirect({
     currentPage,
     loading,
     role: currentUser?.role ?? null,
+    profileUnavailable,
   });
 
   useEffect(() => {
