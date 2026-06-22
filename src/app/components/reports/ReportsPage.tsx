@@ -481,7 +481,7 @@ function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
 
   if (data.por_aluno.length === 0) return <EmptyState message="Nenhuma produção aprovada registrada." />;
 
-  const chartData = filtered.slice(0, 8).map(s => ({ nome: s.student_nome.split(" ")[0], A1: s.por_nivel.A1, A2: s.por_nivel.A2, B: s.por_nivel.B, C: s.por_nivel.C }));
+  const chartData = filtered.slice(0, 8).map(s => ({ nome: s.student_nome.split(" ")[0], A1: s.por_nivel.A1, A2: s.por_nivel.A2, A3: s.por_nivel.A3, A4: s.por_nivel.A4, B1: s.por_nivel.B1, B2: s.por_nivel.B2, SC: s.por_nivel.SC }));
 
   return (
     <div className="space-y-5">
@@ -499,9 +499,12 @@ function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
             <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="A1" fill="#123C7A" stackId="a" />
-            <Bar dataKey="A2" fill="#1F8A70" stackId="a" />
-            <Bar dataKey="B" fill="#D4A017" stackId="a" />
-            <Bar dataKey="C" fill="#94a3b8" stackId="a" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="A2" fill="#1F6FB5" stackId="a" />
+            <Bar dataKey="A3" fill="#1F8A70" stackId="a" />
+            <Bar dataKey="A4" fill="#3DA68C" stackId="a" />
+            <Bar dataKey="B1" fill="#D4A017" stackId="a" />
+            <Bar dataKey="B2" fill="#E0BC5C" stackId="a" />
+            <Bar dataKey="SC" fill="#94a3b8" stackId="a" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -510,7 +513,7 @@ function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
           <thead>
             <tr style={{ background: "var(--muted)" }}>
               <th className="px-3 py-2.5 text-left" style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)" }}>Aluno</th>
-              {["A1", "A2", "B", "C"].map(h => <th key={h} className="px-3 py-2.5 text-center" style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)" }}>{h}</th>)}
+              {["A1", "A2", "A3", "A4", "B1", "B2", "SC"].map(h => <th key={h} className="px-3 py-2.5 text-center" style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)" }}>{h}</th>)}
               <SortTh sKey="total" active={sortK} dir={sortD} onSort={onSort}>Total</SortTh>
               <SortTh sKey="pontuacao_total" active={sortK} dir={sortD} onSort={onSort}>Pontuação</SortTh>
             </tr>
@@ -519,7 +522,7 @@ function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
             {filtered.map(s => (
               <tr key={s.student_id} style={{ borderBottom: "1px solid var(--border)" }}>
                 <td className="px-3 py-2.5" style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>{s.student_nome}</td>
-                {[s.por_nivel.A1, s.por_nivel.A2, s.por_nivel.B, s.por_nivel.C].map((v, i) => (
+                {[s.por_nivel.A1, s.por_nivel.A2, s.por_nivel.A3, s.por_nivel.A4, s.por_nivel.B1, s.por_nivel.B2, s.por_nivel.SC].map((v, i) => (
                   <td key={i} className="px-3 py-2.5 text-center"><span style={{ fontSize: 13, fontWeight: 700, color: v > 0 ? "var(--foreground)" : "var(--muted-foreground)" }}>{v}</span></td>
                 ))}
                 <td className="px-3 py-2.5 text-center"><span style={{ fontSize: 15, fontWeight: 900, color: "#123C7A" }}>{s.total}</span></td>
