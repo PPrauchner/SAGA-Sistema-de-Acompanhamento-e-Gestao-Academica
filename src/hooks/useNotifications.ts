@@ -97,13 +97,16 @@ export function useNotifications(): UseNotificationsResult {
   const markAsRead = useCallback(
     async (id: string): Promise<void> => {
       if (!token) return;
-      await fetch(`${API_URL}/api/v1/notifications/${id}/read`, {
+      const response = await fetch(`${API_URL}/api/v1/notifications/${id}/read`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
       });
+      if (!response.ok) {
+        throw new Error(`markAsRead falhou: ${response.status}`);
+      }
     },
     [token],
   );
