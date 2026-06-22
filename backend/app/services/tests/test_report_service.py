@@ -241,7 +241,7 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
         advisors=[{"id": "a1", "nome": "Prof. X"}, {"id": "a2", "nome": "Profa. Y"}],
         productions=[
             {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0},
-            {"id": "p2", "nivel": "B", "pontuacao_calculada": 1.0},
+            {"id": "p2", "nivel": "B1", "pontuacao_calculada": 1.0},
         ],
         activities={
             "s1": [
@@ -260,7 +260,7 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
     assert por_aluno["Ana"].total == 1
     assert por_aluno["Ana"].pontuacao_total == 4.0
     assert por_aluno["Ana"].por_nivel.A1 == 1
-    assert por_aluno["Caio"].por_nivel.B == 1
+    assert por_aluno["Caio"].por_nivel.B1 == 1
 
     por_orientador = {item.advisor_id: item for item in result.por_orientador}
     # Prof. X tem 2 orientandos (Ana=4.0, Bruno=0.0) → média 2.0; 1 produção.
@@ -299,13 +299,13 @@ async def test_productions_soma_multiplas_producoes_do_mesmo_aluno() -> None:
     assert result.por_orientador[0].pontuacao_media_orientandos == 9.5
 
 
-async def test_productions_nivel_ausente_cai_para_C_e_ignora_nivel_desconhecido() -> None:
+async def test_productions_nivel_ausente_cai_para_SC_e_classifica_a3() -> None:
     service = _build_service(
         students=[{"id": "s1", "nome": "Ana", "orientador_id": "a1"}],
         advisors=[{"id": "a1", "nome": "Prof. X"}],
         productions=[
-            {"id": "p1", "pontuacao_calculada": 0.5},  # sem nivel → padrão "C"
-            {"id": "p2", "nivel": "A3", "pontuacao_calculada": 2.0},  # fora de A1/A2/B/C
+            {"id": "p1", "pontuacao_calculada": 0.2},  # sem nivel → padrão "SC"
+            {"id": "p2", "nivel": "A3", "pontuacao_calculada": 2.0},  # nível Qualis válido
         ],
         activities={
             "s1": [
@@ -319,11 +319,11 @@ async def test_productions_nivel_ausente_cai_para_C_e_ignora_nivel_desconhecido(
 
     item = result.por_aluno[0]
     assert item.total == 2  # ambas creditadas
-    assert item.pontuacao_total == 2.5  # soma inclui o nível desconhecido
-    assert item.por_nivel.C == 1  # nivel ausente cai para C
+    assert item.pontuacao_total == 2.2
+    assert item.por_nivel.SC == 1  # nivel ausente cai para SC
+    assert item.por_nivel.A3 == 1  # "A3" agora tem bucket próprio
     assert item.por_nivel.A1 == 0
     assert item.por_nivel.A2 == 0
-    assert item.por_nivel.B == 0  # "A3" não entra em nenhum bucket
 
 
 async def test_productions_ignora_producao_id_inexistente() -> None:
