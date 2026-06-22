@@ -30,8 +30,10 @@ build-backend = "hatchling.build"
 testpaths = [
     "backend/inference_engine/tests",
     "backend/app/tests",
+    "backend/app/api/v1/tests/test_coordination_transfers.py",
     "backend/app/api/v1/tests/test_transfers.py",
     "backend/app/aspects/tests/test_audit_history.py",
+    "backend/app/services/tests/test_coordination_transfer_service.py",
     "backend/app/services/tests/test_student_advisor_services.py",
     "backend/app/services/tests/test_transfer_service.py",
 ]
