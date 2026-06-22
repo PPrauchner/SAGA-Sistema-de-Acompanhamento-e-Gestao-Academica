@@ -306,7 +306,7 @@
       "documento_firestore": {
         "colecao": "notifications",
         "campos": {
-          "tipo": "string (ex: 'progresso_task', 'atividade_validada', 'prazo_critico', 'transferencia_orientador')",
+          "tipo": "string (ex: 'progresso_task', 'atividade_validada', 'prazo_critico', 'transferencia_orientador', 'transferencia_coordenacao')",
           "titulo": "string",
           "mensagem": "string",
           "destinatario_id": "string (uid Firebase Auth)",

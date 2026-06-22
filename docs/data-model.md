@@ -615,7 +615,7 @@ Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genéri
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador` |
+| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador`\|`transferencia_coordenacao` |
 | `titulo` / `mensagem` | string | |
 | `destinatario_id` | string | →`users.uid` (soft) |
 | `entidade_tipo` / `entidade_id` | string | ref soft polimórfica — **sem aresta** |

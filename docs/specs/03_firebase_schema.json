@@ -345,7 +345,7 @@
       "descricao": "Alertas gerados pelo aspecto A05. Frontend assina via onSnapshot.",
       "documento_id": "auto-id Firestore",
       "campos": {
-        "tipo": "string ('progresso_task'|'atividade_validada'|'prorrogacao_aprovada'|'prazo_critico'|'atividade_submetida'|'transferencia_orientador')",
+        "tipo": "string ('progresso_task'|'atividade_validada'|'prorrogacao_aprovada'|'prazo_critico'|'atividade_submetida'|'transferencia_orientador'|'transferencia_coordenacao')",
         "titulo": "string",
         "mensagem": "string",
         "destinatario_id": "string (uid Firebase Auth)",
