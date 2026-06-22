@@ -34,6 +34,10 @@ type ModalData =
 const DEFAULT_TOTAL_MONTHS = 24;
 const DEFAULT_COURSE_TOTAL = 48;
 
+// Cronograma (Gantt/fases) ainda usa dados mock — ver PHASES abaixo
+const TOTAL_MONTHS = DEFAULT_TOTAL_MONTHS;
+const CURRENT_MONTH = 18;
+
 const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: string; border: string; desc: string; emoji: string }> = {
   regular: { label: "Regular", color: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)", border: "var(--tint-teal-border)", desc: "Todos os requisitos em dia. Continue assim!", emoji: "✓" },
   "em-risco": { label: "Em Risco", color: "var(--tint-gold-text)", bg: "var(--tint-gold-bg)", border: "var(--tint-gold-border)", desc: "Atenção: produções científicas abaixo do esperado para este período.", emoji: "⚠" },
@@ -783,7 +787,7 @@ function ProgressGraph() {
           <YAxis domain={[0, 65]} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} width={28} />
           <Tooltip
             contentStyle={{ borderRadius: 10, fontSize: 12, border: "1px solid var(--border)", background: "var(--card)" }}
-            formatter={(val: number | null, name: string) => val !== null ? [`${val} cr`, name === "atual" ? "Obtidos" : "Meta"] : ["—", name]}
+            formatter={(val, name) => val != null ? [`${val} cr`, name === "atual" ? "Obtidos" : "Meta"] : ["—", String(name)]}
           />
           <ReferenceLine y={60} stroke="#dc2626" strokeDasharray="4 4" key="aluno-ref-60" />
           <Area type="monotone" dataKey="esperado" stroke="#123C7A" fill="url(#gradEsp)" strokeWidth={2} strokeDasharray="5 5" dot={false} connectNulls isAnimationActive={false} />

@@ -27,6 +27,7 @@ from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
+from backend.app.models.work_plan import STATUS_CONCLUIDO
 
 
 
@@ -182,10 +183,10 @@ class DashboardService:
         
         tasks = await self._work_plan.get_all_tasks_for_student(student_id)
         total_tasks = len(tasks)
-        concluidas = sum(1 for t in tasks if t.get("status") == "concluida")
+        concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
         progresso = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
-        
-        pendentes = [t for t in tasks if t.get("status") != "concluida"]
+
+        pendentes = [t for t in tasks if t.get("status") != STATUS_CONCLUIDO]
         try:
             pendentes.sort(key=lambda x: str(x.get("prazo") or "9999-12-31"))
         except Exception:
@@ -262,7 +263,7 @@ class DashboardService:
             
             tasks = await self._work_plan.get_all_tasks_for_student(student_id)
             total_tasks = len(tasks)
-            concluidas = sum(1 for t in tasks if t.get("status") == "concluida")
+            concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
             resumo.progresso_plano = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
             
             orientandos_resumo.append(resumo)
