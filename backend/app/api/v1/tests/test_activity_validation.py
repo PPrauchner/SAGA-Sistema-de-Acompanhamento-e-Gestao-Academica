@@ -1,5 +1,4 @@
 import pytest
-from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 from fastapi import HTTPException, status
 from backend.app.models.activity import ActivityStatus, ValidateAction, ValidateActivityRequest
@@ -12,9 +11,10 @@ async def test_emitir_parecer_sucesso(mock_repo):
     mock_repo.get_by_id.return_value = {"status": ActivityStatus.enviado, "id": "act_123"}
     mock_repo.update_by_id.return_value = {"id": "act_123", "status": ActivityStatus.enviado}
     
+    # Passando estrutura de dicionário aceita pelo validador do Pydantic
     payload = ValidateActivityRequest(
         acao=ValidateAction.parecer_orientador,
-        parecer_orientador="Parecer favorável do orientador."
+        parecer_orientador={"texto": "Parecer favorável do orientador."}
     )
 
     # Act
@@ -45,7 +45,6 @@ async def test_validate_activity_rejeitada_status_invalido(mock_repo):
 @patch("backend.app.services.activity_service.InferenceService")
 async def test_validate_activity_aprovar_com_teto_rl04(mock_inference, mock_student_repo, mock_type_repo, mock_repo):
     # Arrange
-    # Simula atividade que gera 10 créditos, mas o teto da categoria é 12 e o aluno já tem 5 aprovados (Estoura o teto!)
     mock_repo.get_by_id.return_value = {
         "id": "act_123",
         "status": ActivityStatus.enviado,
@@ -59,7 +58,7 @@ async def test_validate_activity_aprovar_com_teto_rl04(mock_inference, mock_stud
         "limite_maximo_creditos": 12.0
     }
     
-    # Mock para a função interna de créditos aprovados da classe ActivityService
+    # Patcheia o método de helper herdado para simular que o aluno já tem 5 créditos
     with patch("backend.app.services.activity_service.ActivityService._approved_credits_in_category", return_value=5.0):
         payload = ValidateActivityRequest(acao=ValidateAction.aprovar, observacao="Ok")
         
@@ -67,6 +66,6 @@ async def test_validate_activity_aprovar_com_teto_rl04(mock_inference, mock_stud
         response = await validate_activity("act_123", payload, "coord_uid_1")
         
         # Assert
-        # Teto (12) - Já Aprovados (5) = Concedidos deve ser exatamente 7.0 (Regra RL04 aplicada!)
+        # Teto (12) - Já acumulado (5) = Concedido final deve travar no limite de 7.0 (Regra RL04)
         assert response.creditos_contabilizados == 7.0
         mock_repo.update_by_id.assert_called_once()
