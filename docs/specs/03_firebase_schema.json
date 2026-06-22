@@ -236,6 +236,39 @@
       }
     },
 
+    "transfer_requests": {
+      "descricao": "Solicitacoes e efetivacoes de transferencia same-program de orientando entre orientadores.",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "student_id": "string (referencia a students/)",
+        "orientador_origem_id": "string (referencia a advisors/)",
+        "orientador_destino_id": "string (referencia a advisors/)",
+        "solicitante_id": "string (uid Firebase Auth)",
+        "programa_id": "string",
+        "status": "string ('pendente'|'aprovada'|'rejeitada'|'cancelada')",
+        "tipo": "string ('direta_coordenacao'|'solicitada_orientador')",
+        "motivo": "string | null",
+        "observacao": "string | null",
+        "created_at": "Timestamp",
+        "updated_at": "Timestamp",
+        "approved_at": "Timestamp | null",
+        "approved_by": "string (uid) | null",
+        "rejected_at": "Timestamp | null",
+        "rejected_by": "string (uid) | null",
+        "cancelled_at": "Timestamp | null",
+        "cancelled_by": "string (uid) | null",
+        "cancel_reason": "string | null",
+        "cancelled_request_id": "string | null (referencia a transfer_requests/)"
+      },
+      "invariantes_service": [
+        "Uma unica solicitacao pendente por aluno",
+        "Origem, destino e aluno pertencem ao mesmo programa",
+        "Destino respeita limite_orientandos via check_advisor_capacity",
+        "Aluno em status terminal (concluido/desligado) nao pode ser transferido",
+        "Destino igual ao coorientador atual transfere e limpa coorientador_id"
+      ]
+    },
+
     "activity_types": {
       "descricao": "Tipos de atividade creditável configurados pela coordenação",
       "documento_id": "auto-id Firestore",
@@ -312,7 +345,7 @@
       "descricao": "Alertas gerados pelo aspecto A05. Frontend assina via onSnapshot.",
       "documento_id": "auto-id Firestore",
       "campos": {
-        "tipo": "string ('progresso_task'|'atividade_validada'|'prorrogacao_aprovada'|'prazo_critico'|'atividade_submetida')",
+        "tipo": "string ('progresso_task'|'atividade_validada'|'prorrogacao_aprovada'|'prazo_critico'|'atividade_submetida'|'transferencia_orientador'|'transferencia_coordenacao')",
         "titulo": "string",
         "mensagem": "string",
         "destinatario_id": "string (uid Firebase Auth)",
@@ -392,6 +425,17 @@
     "ExtensionsPage": {
       "colecoes_lidas": ["students/{id}/extensions"],
       "operacoes": ["GET /api/v1/extensions", "POST /api/v1/extensions", "PATCH /api/v1/extensions/{id}/approve"]
+    },
+    "TransferenciasPage": {
+      "colecoes_lidas": ["students", "advisors", "transfer_requests", "notifications"],
+      "operacoes": [
+        "GET /api/v1/transfers",
+        "POST /api/v1/transfers/direct",
+        "POST /api/v1/transfers",
+        "POST /api/v1/transfers/{id}/approve",
+        "POST /api/v1/transfers/{id}/reject",
+        "POST /api/v1/transfers/{id}/cancel"
+      ]
     },
     "ReportsPage": {
       "colecoes_lidas": ["students", "students/*/activities", "productions"],

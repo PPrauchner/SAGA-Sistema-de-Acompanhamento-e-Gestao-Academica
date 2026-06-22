@@ -45,6 +45,12 @@
       "tipo_advice": "Before",
 
       "join_points": [
+        "POST   /api/v1/transfers/direct            - apenas coordenacao",
+        "POST   /api/v1/transfers                   - apenas orientador",
+        "GET    /api/v1/transfers                   - orientador (suas solicitacoes) ou coordenacao (fila do programa)",
+        "POST   /api/v1/transfers/{id}/approve      - apenas coordenacao",
+        "POST   /api/v1/transfers/{id}/reject       - apenas coordenacao",
+        "POST   /api/v1/transfers/{id}/cancel       - apenas solicitante orientador",
         "POST   /api/v1/students                    — apenas coordenacao",
         "PUT    /api/v1/students/{id}               — apenas coordenacao",
         "DELETE /api/v1/students/{id}               — apenas coordenacao",
@@ -89,6 +95,7 @@
       "tipo_advice": "Around (captura entrada antes + resultado depois)",
 
       "join_points": [
+        "POST            /api/v1/transfers/*",
         "POST/PUT/DELETE /api/v1/students/*",
         "POST/PUT/DELETE /api/v1/advisors/*",
         "POST/PUT/DELETE /api/v1/work-plan/*",
@@ -153,6 +160,8 @@
       ],
 
       "join_points": [
+        "TransferService.direct_transfer(student_id, orientador_destino_id)",
+        "TransferService.approve_request(transfer_id)",
         "StudentService.update_situacao_registrada(student_id, nova_situacao)",
         "WorkPlanService.update_plan(plan_id, data)",
         "ActivityTypeService.update_type(type_id, data)",
@@ -232,6 +241,31 @@
 
       "join_points_e_alertas": [
         {
+          "join_point": "POST /api/v1/transfers/direct (coordenacao move orientando same-program)",
+          "destinatario": "orientador origem + orientador destino + aluno",
+          "mensagem": "Transferencia de orientador efetivada"
+        },
+        {
+          "join_point": "POST /api/v1/transfers (orientador solicita transferencia)",
+          "destinatario": "coordenacao",
+          "mensagem": "Nova solicitacao de transferencia pendente"
+        },
+        {
+          "join_point": "POST /api/v1/transfers/{id}/approve",
+          "destinatario": "orientador origem + orientador destino + aluno",
+          "mensagem": "Transferencia de orientador aprovada"
+        },
+        {
+          "join_point": "POST /api/v1/transfers/{id}/reject",
+          "destinatario": "orientador origem",
+          "mensagem": "Transferencia de orientador rejeitada com motivo"
+        },
+        {
+          "join_point": "POST /api/v1/transfers/{id}/cancel",
+          "destinatario": "coordenacao",
+          "mensagem": "Solicitacao de transferencia cancelada"
+        },
+        {
           "join_point": "POST /api/v1/tasks/{id}/updates (aluno registra progresso)",
           "destinatario": "orientador do aluno",
           "mensagem": "Aluno {nome} registrou progresso na task '{task_titulo}'"
@@ -272,7 +306,7 @@
       "documento_firestore": {
         "colecao": "notifications",
         "campos": {
-          "tipo": "string (ex: 'progresso_task', 'atividade_validada', 'prazo_critico')",
+          "tipo": "string (ex: 'progresso_task', 'atividade_validada', 'prazo_critico', 'transferencia_orientador', 'transferencia_coordenacao')",
           "titulo": "string",
           "mensagem": "string",
           "destinatario_id": "string (uid Firebase Auth)",
