@@ -45,8 +45,8 @@ from backend.app.repositories.student_repository import StudentRepository
 # Dias médios por mês (365.25 / 12) para converter duração em meses de integralização.
 _DIAS_POR_MES = 30.44
 
-# Níveis de relevância contabilizados no relatório de produção (por_nivel).
-_NIVEIS_RELEVANCIA = ("A1", "A2", "B", "C")
+# Níveis Qualis Único contabilizados no relatório de produção (por_nivel).
+_NIVEIS_RELEVANCIA = ("A1", "A2", "A3", "A4", "B1", "B2", "SC")
 
 
 def _to_date(value: Any) -> date | None:
@@ -234,7 +234,7 @@ class ReportService:
             for producao_id in credit_ids:
                 producao = producao_por_id[producao_id]
                 producoes_creditadas.add(producao_id)
-                nivel = producao.get("nivel", "C")
+                nivel = producao.get("nivel", "SC")
                 if nivel in niveis:
                     niveis[nivel] += 1
                 pontuacao_total += producao.get("pontuacao_calculada", 0.0)
