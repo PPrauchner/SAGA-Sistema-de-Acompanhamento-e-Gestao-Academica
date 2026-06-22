@@ -22,27 +22,56 @@ class _FakeRepository:
         type(self).store[(self.collection, doc_id)] = dict(data)
 
 
+class _FakeWorkPlan:
+    """WorkPlanRepository fake em memória para o seed (1 plano por aluno)."""
+
+    plans: dict[str, dict[str, Any]] = {}
+    _counter: int = 0
+
+    async def get_plan(self, student_id: str) -> dict[str, Any] | None:
+        return type(self).plans.get(student_id)
+
+    async def create_plan(self, student_id: str, data: dict[str, Any]) -> str:
+        type(self).plans[student_id] = {"student_id": student_id}
+        return f"plan_{student_id}"
+
+    async def create_stage(self, plan_id: str, data: dict[str, Any]) -> str:
+        return f"stage_{plan_id}"
+
+    async def create_task(self, stage_id: str, data: dict[str, Any]) -> str:
+        type(self)._counter += 1
+        return f"task_{type(self)._counter}"
+
+    async def update_task(self, task_id: str, data: dict[str, Any]) -> None:
+        return None
+
+
 @pytest.fixture(autouse=True)
 def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeRepository.store = {}
+    _FakeWorkPlan.plans = {}
+    _FakeWorkPlan._counter = 0
     monkeypatch.setattr(seed_module, "FirebaseRepository", _FakeRepository)
+    monkeypatch.setattr(seed_module, "WorkPlanRepository", _FakeWorkPlan)
 
 
 async def test_seed_cria_todos_os_documentos() -> None:
     created = await seed_module.seed_firestore()
 
-    assert created == {"programs": 1, "vehicle_levels": 7, "activity_types": 6}
+    assert created == {"programs": 1, "vehicle_levels": 7, "activity_types": 6, "work_plans": 1}
     # programs com id explícito (não auto-id)
     assert ("programs", "prog_default") in _FakeRepository.store
     # vehicle_levels gravados como subcoleção via path
     assert ("programs/prog_default/vehicle_levels", "v_placeholder_a1") in _FakeRepository.store
+    # aluno real de exemplo criado para acompanhar o plano
+    assert ("students", seed_module.SEED_STUDENT_ID) in _FakeRepository.store
 
 
 async def test_seed_e_idempotente() -> None:
     await seed_module.seed_firestore()
     again = await seed_module.seed_firestore()
 
-    assert again == {"programs": 0, "vehicle_levels": 0, "activity_types": 0}
+    assert again == {"programs": 0, "vehicle_levels": 0, "activity_types": 0, "work_plans": 0}
 
 
 async def test_seed_activity_types_gravam_metadados() -> None:
