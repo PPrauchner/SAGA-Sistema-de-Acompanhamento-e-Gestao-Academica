@@ -18,15 +18,11 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from backend.app.models.vehicle import PESO_POR_NIVEL
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 
-_DEFAULT_RELEVANCIA_PESOS: dict[str, float] = {
-    "A1": 2.0,
-    "A2": 1.5,
-    "B": 1.0,
-    "C": 0.5,
-}
+_DEFAULT_RELEVANCIA_PESOS: dict[str, float] = dict(PESO_POR_NIVEL)
 
 
 def _to_date_str(value: Any) -> str | None:

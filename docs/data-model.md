@@ -480,13 +480,14 @@ Config de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode e
 |-------|------|-------|
 | `veiculo_id` | string (PK = id do veículo) | |
 | `nivel` | string | `A1`\|`A2`\|`A3`\|`A4`\|`B1`\|`B2`\|`SC` (Qualis Único; `SC` = Sem Classificação) |
-| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.7, B1=0.5, B2=0.5, SC=0.2 |
+| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.55, B1=0.4, B2=0.3, SC=0.2 (escala monotônica) |
 | `atualizado_em` / `atualizado_por` | timestamp / uid | |
 
 > **Sem nível configurado:** RL05 usa **peso default `SC` = 0.2** (fallback). Reclassificar recalcula o score.
 >
-> ⚠️ **A confirmar:** os pesos `A3=A4=0.7` e `B1=B2=0.5` foram herdados do código (PR #111); avaliar
-> se devem ser monotônicos (ex.: Qualis normalizado `A4=0.55`, `B1=0.4`, `B2=0.3`).
+> **Escala monotônica (decisão R4, issue #133):** estritamente decrescente — um nível superior
+> sempre pondera mais que um inferior. Substitui os pesos não-monotônicos herdados do PR #111
+> (`A4=0.7`, `B1=B2=0.5`). Fonte de verdade no código: `backend/app/models/vehicle.py`.
 
 ---
 
