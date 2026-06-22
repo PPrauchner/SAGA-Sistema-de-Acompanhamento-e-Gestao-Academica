@@ -3,7 +3,7 @@ Serviço de negócio para atividades creditáveis.
 
 - ActivityService (classe): submit_activity / list_activities — registro e listagem
   (restaurado da development, removido indevidamente na pr-68).
-- emitir_parecer_orientador / validate_activity (funções de módulo, decoradas):
+- emitir_parecer_orientador / validate_activity (funções de módulo):
   validação pela coordenação/orientador — issue #49, implementada nesta PR (#68).
 """
 
@@ -15,9 +15,6 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from backend.app.aspects.alerts import trigger_alerts
-from backend.app.aspects.audit import audit_operation
-from backend.app.aspects.authorization import requires_ownership, requires_role
 from backend.app.core.auth import CurrentUser
 from backend.app.models.activity import (
     ActivityCreateRequest,
@@ -209,87 +206,17 @@ class ActivityService:
 
 
 # ---------------------------------------------------------------------------------------
-# Validação (issue #49 / PATCH /activities/{id}/validate) — funções de módulo, decoradas
+# Validação (issue #49 / PATCH /activities/{id}/validate) — funções de módulo puras
 # ---------------------------------------------------------------------------------------
 
 _repo = ActivityRepository()
-_advisor_repo = AdvisorRepository()
 _student_repo = StudentRepository()
 
 
-def _get_advisor_uid_for_activity(kwargs: dict) -> str | None:
-    """Resolve o uid do orientador do aluno dono da atividade.
-
-    Caminho correto: activity → student_id → students.orientador_id → advisors.uid.
-    O campo students.orientador_uid não existe no data-model.
-    """
-    import asyncio
-
-    activity_id: str = kwargs.get("activity_id", "")
-    activity = _repo.get_by_id(activity_id)
-    if not activity:
-        return None
-    student_id = activity.get("student_id", "")
-    if not student_id:
-        return None
-
-    async def _resolve() -> str | None:
-        student = await _student_repo.get(student_id)
-        if not student:
-            return None
-        orientador_id = student.get("orientador_id")
-        if not orientador_id:
-            return None
-        advisor = await _advisor_repo.get(orientador_id)
-        return advisor.get("uid") if advisor else None
-
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-            with concurrent.futures.ThreadPoolExecutor() as pool:
-                future = pool.submit(asyncio.run, _resolve())
-                return future.result()
-        return loop.run_until_complete(_resolve())
-    except Exception as exc:
-        logger.error("[M3] Falha ao resolver uid do orientador: %s", exc)
-        return None
-
-
-def _get_aluno_uid_para_notificacao(kwargs: dict) -> str | None:
-    activity_id: str = kwargs.get("activity_id", "")
-    activity = _repo.get_by_id(activity_id)
-    return activity.get("student_id") if activity else None
-
-
-def _build_notificacao_validacao(result, args, kwargs):
-    activity_id = kwargs.get("activity_id", "")
-    destinatario_id = _get_aluno_uid_para_notificacao(kwargs)
-    if not destinatario_id:
-        return None
-    acao_label = "aprovada" if result.novo_status == ActivityStatus.aprovado else "rejeitada"
-    payload = kwargs.get("payload")
-    observacao = payload.observacao if payload and payload.observacao else ""
-    mensagem = f"Sua atividade (ID: {activity_id}) foi {acao_label}."
-    if observacao:
-        mensagem += f" Observacao: {observacao}"
-    return {
-        "tipo": "atividade_validada",
-        "titulo": "Resultado da validacao de atividade",
-        "mensagem": mensagem,
-        "destinatario_id": destinatario_id,
-        "entidade_tipo": "activities",
-        "entidade_id": activity_id,
-    }
-
-
-@requires_role("orientador", "coordenacao")
-@requires_ownership(_get_advisor_uid_for_activity)
-@audit_operation
 async def emitir_parecer_orientador(
     activity_id: str,
     payload: ValidateActivityRequest,
-    current_user: CurrentUser,
+    user_uid: str,
 ) -> ActivityResponse:
     if payload.acao != ValidateAction.parecer_orientador:
         raise HTTPException(
@@ -315,19 +242,16 @@ async def emitir_parecer_orientador(
     update_data = {
         "parecer_orientador": payload.parecer_orientador.model_dump(),
         "parecer_orientador_em": datetime.now(timezone.utc),
-        "parecer_orientador_por": current_user.uid,
+        "parecer_orientador_por": user_uid,
     }
     updated = _repo.update_by_id(activity_id, update_data)
     return ActivityResponse(**updated)
 
 
-@requires_role("coordenacao")
-@audit_operation
-@trigger_alerts(_build_notificacao_validacao)
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
-    current_user: CurrentUser,
+    user_uid: str,
 ) -> ValidateActivityResponse:
     if payload.acao not in (ValidateAction.aprovar, ValidateAction.rejeitar):
         raise HTTPException(
@@ -355,7 +279,7 @@ async def validate_activity(
     update_data: dict = {
         "status": novo_status,
         "observacao_coordenacao": payload.observacao,
-        "aprovado_por": current_user.uid,
+        "aprovado_por": user_uid,
         "aprovado_em": datetime.now(timezone.utc),
     }
 
@@ -372,14 +296,11 @@ async def validate_activity(
 
         student_id: str = activity.get("student_id", "")
 
-        # M2 — o vínculo com produção bibliográfica é via producao_id (FK para productions),
-        # não via categoria (que só existe em activity_types: basico|especifico|tecnologico).
         producao_id = activity.get("producao_id")
         if producao_id and student_id:
             fato_gerado = f"producao_bibliografica_validada({student_id})"
             logger.info("[S6b] Fato gerado para motor: %s", fato_gerado)
 
-        # M1 — executar o motor de inferência após aprovação para derivar situacao_inferida.
         if student_id:
             try:
                 _inference_svc = InferenceService(InferenceRepository())
@@ -402,7 +323,7 @@ async def validate_activity(
     acao_label = "aprovada" if aprovando else "rejeitada"
     logger.info(
         "[S6b] Atividade %s %s pela coordenação (uid=%s). Créditos: %s. Fato: %s",
-        activity_id, acao_label, current_user.uid, creditos_contabilizados, fato_gerado,
+        activity_id, acao_label, user_uid, creditos_contabilizados, fato_gerado,
     )
 
     return ValidateActivityResponse(
