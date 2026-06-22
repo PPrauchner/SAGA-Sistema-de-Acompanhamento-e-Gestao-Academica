@@ -11,10 +11,17 @@
     "backend/app/models/student.py",
     "backend/app/models/advisor.py",
     "backend/app/repositories/student_repository.py",
-    "backend/app/repositories/advisor_repository.py"
+    "backend/app/repositories/advisor_repository.py",
+    "backend/app/api/v1/transfers.py",
+    "backend/app/services/transfer_service.py",
+    "backend/app/models/transfer.py",
+    "backend/app/repositories/transfer_repository.py"
   ],
 
   "requisitos_fundo": [
+    "Coordenacao pode mover orientando diretamente para outro orientador do mesmo programa",
+    "Orientador pode solicitar transferencia de orientando proprio para destino do mesmo programa, com aprovacao/rejeicao/cancelamento",
+    "Transferencias usam transfer_requests, bloqueiam aluno terminal, respeitam limite_orientandos e registram A02/A03/A05",
     "Coordenação cria e mantém alunos e orientadores — papel obrigatório para mutations",
     "Associação orientador-aluno registrada no documento do aluno (orientador_id)",
     "Qualificação e proficiência são fatos booleanos registrados manualmente pela coordenação",
@@ -41,6 +48,11 @@
     },
     "aop_aspectos": {
       "join_points": [
+        "TransferService.direct_transfer()                 - @requires_role('coordenacao'), @audit_operation, @track_history, @trigger_alerts",
+        "TransferService.create_request()                  - @requires_role('orientador'), @audit_operation, @trigger_alerts",
+        "TransferService.approve_request()                 - @requires_role('coordenacao'), @audit_operation, @track_history, @trigger_alerts",
+        "TransferService.reject_request()                  - @requires_role('coordenacao'), @audit_operation, @trigger_alerts",
+        "TransferService.cancel_request()                  - @requires_role('orientador'), @audit_operation, @trigger_alerts",
         "StudentService.create_student()                   — @requires_role('coordenacao'), @audit_operation",
         "StudentService.update_student()                   — @requires_role('coordenacao'), @audit_operation",
         "StudentService.delete_student()                   — @requires_role('coordenacao'), @audit_operation",
@@ -206,6 +218,65 @@
         "id": "string",
         "invite_token": "string"
       }
+    },
+    {
+      "path": "/api/v1/transfers/direct",
+      "method": "POST",
+      "descricao": "Coordenacao move diretamente um aluno para outro orientador do mesmo programa. Efetiva na hora, cancela pendente do aluno se houver e notifica origem, destino e aluno.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history", "@trigger_alerts"],
+      "request_body": {
+        "student_id": "string",
+        "orientador_destino_id": "string",
+        "motivo": "string | null"
+      },
+      "response_200": {"status": "aprovada", "tipo": "direta_coordenacao"}
+    },
+    {
+      "path": "/api/v1/transfers",
+      "method": "POST",
+      "descricao": "Orientador solicita transferencia de orientando proprio para outro orientador do mesmo programa. Segunda pendente para o mesmo aluno retorna 409.",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation", "@trigger_alerts"],
+      "request_body": {
+        "student_id": "string",
+        "orientador_destino_id": "string",
+        "motivo": "string | null"
+      },
+      "response_201": {"status": "pendente", "tipo": "solicitada_orientador"}
+    },
+    {
+      "path": "/api/v1/transfers",
+      "method": "GET",
+      "descricao": "Lista solicitacoes. Orientador ve suas solicitacoes; coordenacao ve a fila do programa.",
+      "papeis_autorizados": ["orientador", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('orientador','coordenacao')"],
+      "response_200": {"items": ["TransferRequestResponse"]}
+    },
+    {
+      "path": "/api/v1/transfers/{transfer_id}/approve",
+      "method": "POST",
+      "descricao": "Coordenacao aprova solicitacao pendente e reaproveita a efetivacao do mover-direto.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history", "@trigger_alerts"],
+      "response_200": {"status": "aprovada"}
+    },
+    {
+      "path": "/api/v1/transfers/{transfer_id}/reject",
+      "method": "POST",
+      "descricao": "Coordenacao rejeita solicitacao pendente com motivo e notifica a origem.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@trigger_alerts"],
+      "request_body": {"motivo": "string"},
+      "response_200": {"status": "rejeitada"}
+    },
+    {
+      "path": "/api/v1/transfers/{transfer_id}/cancel",
+      "method": "POST",
+      "descricao": "Solicitante cancela solicitacao enquanto pendente.",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation", "@trigger_alerts"],
+      "response_200": {"status": "cancelada"}
     }
   ]
 }

@@ -26,24 +26,19 @@ from typing import Any
 from backend.app.models.vehicle import PESO_POR_NIVEL
 
 _TODAY = date.today()
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
 
 
 def _iso(days_from_today: int) -> str:
-    """Data ISO (YYYY-MM-DD) deslocada de hoje.
-
-    Mantém os cenários temporais (recém-ingresso, metade do prazo, ~75% decorrido)
-    determinísticos em qualquer data de execução — sem isso a suíte só passaria na
-    data do commit.
-    """
-    return (_TODAY + timedelta(days=days_from_today)).isoformat()
+    return (date.today() + timedelta(days=days_from_today)).isoformat()
 
 
 _PROGRAM: dict[str, Any] = {
     "id": "prog_default",
-    "min_creditos_basico": 12,
-    "min_creditos_especifico": 8,
-    "max_creditos_tecnologico": 4,
-    "min_creditos_total": 24,
+    "creditos_grupo_basico_min": 12,
+    "creditos_grupo_especifico_min": 8,
+    "creditos_grupo_tecnologico_max": 4,
+    "creditos_total_min": 24,
     "max_prorrogacoes": 2,
     "relevancia_pesos": dict(PESO_POR_NIVEL),
 }
@@ -261,6 +256,9 @@ class FixtureRepository:
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as tasks do plano de trabalho do aluno."""
+        work_plan_tasks = await WorkPlanRepository().get_plan_tasks(student_id)
+        if work_plan_tasks:
+            return work_plan_tasks
         return [dict(t) for t in _TASKS.get(student_id, [])]
 
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:

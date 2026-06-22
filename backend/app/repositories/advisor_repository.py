@@ -68,7 +68,10 @@ class AdvisorRepository(FirebaseRepository):
         students = await StudentRepository().list_all()
 
         current = sum(
-            1 for student in students if student.get("orientador_id") == advisor_id
+            1
+            for student in students
+            if student.get("orientador_id") == advisor_id
+            and student.get("situacao_registrada") not in _TERMINAL_STUDENT_STATUSES
         )
 
         return current < advisor.get(

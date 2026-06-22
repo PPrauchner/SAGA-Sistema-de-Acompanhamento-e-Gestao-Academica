@@ -34,8 +34,17 @@ class AdvisorService:
         self._advisors = AdvisorRepository()
         self._auth = auth_service
 
-    async def list_advisors(self) -> list[dict]:
-        return await self._advisors.get_advisors_with_student_count()
+    async def list_advisors(self, user: CurrentUser | None = None) -> list[dict]:
+        advisors = await self._advisors.get_advisors_with_student_count()
+
+        if user and user.role == "orientador" and user.programa_id:
+            return [
+                advisor
+                for advisor in advisors
+                if advisor.get("programa_id") == user.programa_id
+            ]
+
+        return advisors
 
     async def get_advisor(
         self,
