@@ -27,7 +27,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
-testpaths = ["backend/inference_engine/tests", "backend/app/tests"]
+testpaths = [
+    "backend/inference_engine/tests",
+    "backend/app/tests",
+    "backend/app/api/v1/tests/test_transfers.py",
+    "backend/app/aspects/tests/test_audit_history.py",
+    "backend/app/services/tests/test_student_advisor_services.py",
+    "backend/app/services/tests/test_transfer_service.py",
+]
 asyncio_mode = "auto"
 pythonpath = ["backend"]
 

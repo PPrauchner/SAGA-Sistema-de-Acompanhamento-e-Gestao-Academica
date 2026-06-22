@@ -14,6 +14,7 @@ export type PageId =
   | "producoes"
   | "checklist"
   | "prorrogacoes"
+  | "transferencias"
   | "relatorios"
   | "inferencia"
   | "auditoria"
@@ -27,6 +28,8 @@ export interface User {
   role: UserRole;
   avatar?: string;
   student_id?: string;
+  advisor_id?: string;
+  programa_id?: string;
   matricula?: string;
   programa?: string;
   orientador?: string;
@@ -42,6 +45,7 @@ interface AppContextType {
   notificationCount: number;
   mobileMenuOpen: boolean;
   loading: boolean;
+  token: string | null;
   login: (email: string, senha: string) => Promise<void>;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
@@ -54,7 +58,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { profile, login, logout: signOut, loading } = useAuth();
+  const { profile, token, login, logout: signOut, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -71,7 +75,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         email: profile.email,
         role: profile.role,
         programa: profile.programaId,
+        programa_id: profile.programaId,
         student_id: profile.studentId ?? undefined,
+        advisor_id: profile.advisorId ?? undefined,
       }
     : null;
 
@@ -100,6 +106,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         notificationCount,
         mobileMenuOpen,
         loading,
+        token,
         login,
         setCurrentPage,
         setSelectedStudentId,

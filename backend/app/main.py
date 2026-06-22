@@ -33,6 +33,7 @@ from backend.app.api.v1 import (
     programs,
     reports,
     students,
+    transfers,
     vehicles,
     work_plan,
 )
@@ -87,3 +88,4 @@ app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
 app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
 app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
 app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
+app.include_router(transfers.router, prefix=_PREFIX, tags=["transfers"])

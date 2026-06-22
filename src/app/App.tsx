@@ -20,6 +20,7 @@ const ActivitiesPage = lazy(() => import("./components/activities/ActivitiesPage
 const ProductionsPage = lazy(() => import("./components/productions/ProductionsPage").then((m) => ({ default: m.ProductionsPage })));
 const ChecklistPage = lazy(() => import("./components/checklist/ChecklistPage").then((m) => ({ default: m.ChecklistPage })));
 const ExtensionsPage = lazy(() => import("./components/extensions/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
+const TransfersPage = lazy(() => import("./components/transfers/TransfersPage").then((m) => ({ default: m.TransfersPage })));
 const ReportsPage = lazy(() => import("./components/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const InferencePage = lazy(() => import("./components/inference/InferencePage").then((m) => ({ default: m.InferencePage })));
 const AuditPage = lazy(() => import("./components/audit/AuditPage").then((m) => ({ default: m.AuditPage })));
@@ -27,16 +28,27 @@ const NotificationsPage = lazy(() => import("./components/notifications/Notifica
 const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
 function StudentDetailPage() {
-  const { setCurrentPage, selectedStudentId } = useApp();
+  const { currentUser, setCurrentPage, selectedStudentId } = useApp();
   return (
     <div>
-      <button
-        onClick={() => setCurrentPage("alunos")}
-        className="flex items-center gap-2 mb-6 px-4 py-2 rounded-xl"
-        style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "13px", fontWeight: 600 }}
-      >
-        ← Voltar para Alunos
-      </button>
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <button
+          onClick={() => setCurrentPage("alunos")}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl"
+          style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "13px", fontWeight: 600 }}
+        >
+          ← Voltar para Alunos
+        </button>
+        {currentUser?.role === "coordenacao" && (
+          <button
+            onClick={() => setCurrentPage("transferencias")}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl"
+            style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
+          >
+            Transferir orientador
+          </button>
+        )}
+      </div>
       <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <h1 style={{ color: "var(--foreground)", marginBottom: "8px" }}>Detalhes do Aluno</h1>
         <p style={{ color: "var(--muted-foreground)" }}>ID: {selectedStudentId}</p>
@@ -70,6 +82,7 @@ function PageRouter() {
     case "producoes": return <ProductionsPage />;
     case "checklist": return <ChecklistPage />;
     case "prorrogacoes": return <ExtensionsPage />;
+    case "transferencias": return <TransfersPage />;
     case "relatorios": return <ReportsPage />;
     case "inferencia": return <InferencePage />;
     case "auditoria": return <AuditPage />;
