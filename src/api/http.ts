@@ -5,8 +5,9 @@
  * - API_ROOT: fonte única da base da API, derivada de VITE_API_URL (host raiz, SEM o
  *   prefixo de versão /api/v1 — o código é dono do prefixo). Fallback: http://localhost:8000.
  *   Normaliza o valor para tolerar barra final e um /api/v1 acidental.
- * - apiGet(path, token?): faz GET com header Authorization: Bearer <token> quando um token é
- *   fornecido (forward-compatible com a autenticação das issues #04/#10), contra API_ROOT/api/v1.
+ * - apiGet/apiPost/apiPatch/apiPut(path, token?): incluem header Authorization: Bearer <token>
+ *   quando um token é fornecido (forward-compatible com a autenticação das issues #04/#10),
+ *   contra API_ROOT/api/v1.
  * - Lançar erro com o status HTTP em respostas não-ok, para tratamento nas páginas.
  */
 
@@ -40,4 +41,31 @@ export async function apiGet<T>(path: string, token?: string): Promise<T> {
     throw new ApiError(response.status, `Falha na requisição (${response.status})`);
   }
   return (await response.json()) as T;
+}
+
+async function apiJson<T>(method: "POST" | "PATCH" | "PUT", path: string, body: unknown, token?: string): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, `Falha na requisição (${response.status})`);
+  }
+  return (await response.json()) as T;
+}
+
+export function apiPost<T>(path: string, body: unknown, token?: string): Promise<T> {
+  return apiJson<T>("POST", path, body, token);
+}
+
+export function apiPatch<T>(path: string, body: unknown, token?: string): Promise<T> {
+  return apiJson<T>("PATCH", path, body, token);
+}
+
+export function apiPut<T>(path: string, body: unknown, token?: string): Promise<T> {
+  return apiJson<T>("PUT", path, body, token);
 }

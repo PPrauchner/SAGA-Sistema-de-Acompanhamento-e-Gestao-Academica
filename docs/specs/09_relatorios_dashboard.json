@@ -119,6 +119,7 @@
       "aspectos_aplicados": ["@requires_role('coordenacao')"],
       "response_200": {
         "programa_id": "string",
+        "total_alunos": "int (adicionado pós-MVP)",
         "total_alunos_ativos": "int",
         "alunos_por_status": {
           "regular": "int",
@@ -130,6 +131,7 @@
         "atividades_aguardando_validacao": "int",
         "prorrogacoes_pendentes": "int",
         "producoes_ultimo_mes": "int",
+        "total_concluidos": "int (adicionado pós-MVP)",
         "tempo_medio_integralizacao_meses": "float | null",
         "auditoria_recente": [
           {"operacao": "string", "usuario": "string", "timestamp": "string"}
@@ -220,7 +222,7 @@
             "student_nome": "string",
             "total": "int",
             "pontuacao_total": "float",
-            "por_nivel": {"A1": "int", "A2": "int", "B": "int", "C": "int"}
+            "por_nivel": {"A1": "int", "A2": "int", "A3": "int", "A4": "int", "B1": "int", "B2": "int", "SC": "int"}
           }
         ],
         "por_orientador": [

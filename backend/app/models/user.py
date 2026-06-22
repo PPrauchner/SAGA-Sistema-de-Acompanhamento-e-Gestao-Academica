@@ -100,8 +100,9 @@ class InviteResponse(BaseModel):
     """Resposta 201 de POST /api/v1/auth/invite."""
 
     message: str
-    # UUID do convite — retornado apenas para testes; em produção só por e-mail.
-    token: str
+    # UUID do convite — retornado apenas como fallback de dev/testes
+    # (EXPOSE_INVITE_TOKEN). Em produção fica None e o token vai só por e-mail.
+    token: str | None = None
     expira_em: str  # ISO8601
 
 

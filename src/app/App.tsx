@@ -1,35 +1,55 @@
+import { lazy, Suspense } from "react";
+
 import { AppProvider, useApp } from "./context/AppContext";
+import { PrivateRoute, isAuthPage } from "./router/PrivateRoute";
 import { AppLayout } from "./components/layout/AppLayout";
 import { LoginPage } from "./components/auth/LoginPage";
 import { RegisterPage } from "./components/auth/RegisterPage";
 import { PasswordRecoveryPage } from "./components/auth/PasswordRecoveryPage";
 import { FirstAccessPage } from "./components/auth/FirstAccessPage";
 import { ProfileUnavailablePage } from "./components/auth/ProfileUnavailablePage";
-import { Dashboard } from "./components/dashboard/Dashboard";
-import { StudentsPage } from "./components/students/StudentsPage";
-import { AdvisorsPage } from "./components/advisors/AdvisorsPage";
-import { WorkPlanPage } from "./components/workplan/WorkPlanPage";
-import { ActivitiesPage } from "./components/activities/ActivitiesPage";
-import { ProductionsPage } from "./components/productions/ProductionsPage";
-import { ChecklistPage } from "./components/checklist/ChecklistPage";
-import { ExtensionsPage } from "./components/extensions/ExtensionsPage";
-import { ReportsPage } from "./components/reports/ReportsPage";
-import { InferencePage } from "./components/inference/InferencePage";
-import { AuditPage } from "./components/audit/AuditPage";
-import { NotificationsPage } from "./components/notifications/NotificationsPage";
-import { SettingsPage } from "./components/settings/SettingsPage";
+
+// Páginas autenticadas carregadas sob demanda: cada uma vira um chunk próprio,
+// mantendo o recharts (puxado pelo Dashboard) e o restante fora do bundle
+// inicial de login. As páginas usam named exports, daí o .then(...) mapeando
+// para o `default` que o React.lazy espera.
+const Dashboard = lazy(() => import("./components/dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
+const StudentsPage = lazy(() => import("./components/students/StudentsPage").then((m) => ({ default: m.StudentsPage })));
+const AdvisorsPage = lazy(() => import("./components/advisors/AdvisorsPage").then((m) => ({ default: m.AdvisorsPage })));
+const WorkPlanPage = lazy(() => import("./components/workplan/WorkPlanPage").then((m) => ({ default: m.WorkPlanPage })));
+const ActivitiesPage = lazy(() => import("./components/activities/ActivitiesPage").then((m) => ({ default: m.ActivitiesPage })));
+const ProductionsPage = lazy(() => import("./components/productions/ProductionsPage").then((m) => ({ default: m.ProductionsPage })));
+const ChecklistPage = lazy(() => import("./components/checklist/ChecklistPage").then((m) => ({ default: m.ChecklistPage })));
+const ExtensionsPage = lazy(() => import("./components/extensions/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
+const TransfersPage = lazy(() => import("./components/transfers/TransfersPage").then((m) => ({ default: m.TransfersPage })));
+const ReportsPage = lazy(() => import("./components/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
+const InferencePage = lazy(() => import("./components/inference/InferencePage").then((m) => ({ default: m.InferencePage })));
+const AuditPage = lazy(() => import("./components/audit/AuditPage").then((m) => ({ default: m.AuditPage })));
+const NotificationsPage = lazy(() => import("./components/notifications/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
+const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
 function StudentDetailPage() {
-  const { setCurrentPage, selectedStudentId } = useApp();
+  const { currentUser, setCurrentPage, selectedStudentId } = useApp();
   return (
     <div>
-      <button
-        onClick={() => setCurrentPage("alunos")}
-        className="flex items-center gap-2 mb-6 px-4 py-2 rounded-xl"
-        style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "13px", fontWeight: 600 }}
-      >
-        ← Voltar para Alunos
-      </button>
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <button
+          onClick={() => setCurrentPage("alunos")}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl"
+          style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "13px", fontWeight: 600 }}
+        >
+          ← Voltar para Alunos
+        </button>
+        {currentUser?.role === "coordenacao" && (
+          <button
+            onClick={() => setCurrentPage("transferencias")}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl"
+            style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
+          >
+            Transferir orientador
+          </button>
+        )}
+      </div>
       <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <h1 style={{ color: "var(--foreground)", marginBottom: "8px" }}>Detalhes do Aluno</h1>
         <p style={{ color: "var(--muted-foreground)" }}>ID: {selectedStudentId}</p>
@@ -63,6 +83,7 @@ function PageRouter() {
     case "producoes": return <ProductionsPage />;
     case "checklist": return <ChecklistPage />;
     case "prorrogacoes": return <ExtensionsPage />;
+    case "transferencias": return <TransfersPage />;
     case "relatorios": return <ReportsPage />;
     case "inferencia": return <InferencePage />;
     case "auditoria": return <AuditPage />;
@@ -72,30 +93,38 @@ function PageRouter() {
   }
 }
 
-function AppContent() {
-  const { currentPage, loading, profileUnavailable } = useApp();
+// Fallback exibido enquanto o chunk da página sob demanda é baixado.
+function PageLoading() {
+  return (
+    <div
+      className="flex items-center justify-center py-24"
+      style={{ color: "var(--muted-foreground)", fontSize: "14px" }}
+    >
+      Carregando…
+    </div>
+  );
+}
 
-  // Enquanto o estado de autenticação inicial não resolve, evita o flash da
-  // tela de login para usuários já autenticados.
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen"
-        style={{ background: "var(--background)", color: "var(--muted-foreground)", fontSize: "14px" }}>
-        Carregando…
-      </div>
-    );
-  }
+function FullPageLoading() {
+  return (
+    <div className="flex items-center justify-center min-h-screen"
+      style={{ background: "var(--background)", color: "var(--muted-foreground)", fontSize: "14px" }}>
+      Carregando…
+    </div>
+  );
+}
+
+function AppContent() {
+  const { currentPage, profileUnavailable } = useApp();
 
   // Sessão válida, mas perfil indisponível (GET /auth/me falhou): estado degradado
   // com retry. Precede a checagem de página de auth para não cair no login mesmo que
-  // currentPage ainda seja "login".
+  // currentPage ainda seja "login". O PrivateRoute suprime o redirect neste estado.
   if (profileUnavailable) {
     return <ProfileUnavailablePage />;
   }
 
-  const isAuthPage = ["login", "register", "password-recovery", "first-access"].includes(currentPage);
-
-  if (isAuthPage) {
+  if (isAuthPage(currentPage)) {
     switch (currentPage) {
       case "login": return <LoginPage />;
       case "register": return <RegisterPage />;
@@ -107,7 +136,9 @@ function AppContent() {
 
   return (
     <AppLayout>
-      <PageRouter />
+      <Suspense fallback={<PageLoading />}>
+        <PageRouter />
+      </Suspense>
     </AppLayout>
   );
 }
@@ -115,7 +146,9 @@ function AppContent() {
 export default function App() {
   return (
     <AppProvider>
-      <AppContent />
+      <PrivateRoute loadingFallback={<FullPageLoading />}>
+        <AppContent />
+      </PrivateRoute>
     </AppProvider>
   );
 }

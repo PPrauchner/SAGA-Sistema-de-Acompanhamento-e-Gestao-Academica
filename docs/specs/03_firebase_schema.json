@@ -16,7 +16,7 @@
     "descricao": "Upload real de comprovantes de atividades e produções. Faz parte do MVP (desvio consciente vs. specs originais, que tratavam o comprovante como URL string e o Storage como opcional).",
     "bucket": "{FIREBASE_PROJECT_ID}.appspot.com",
     "estrutura_paths": "comprovantes/{programa_id}/{student_id}/{activity_id}/{filename}",
-    "campo_url_gerado": "comprovante_url em students/{id}/activities e students/{id}/productions recebe a URL de download retornada pelo upload",
+    "campo_url_gerado": "comprovante_url em students/{id}/activities recebe a URL de download retornada pelo upload",
     "regras_acesso": [
       "Upload exclusivamente via backend (Admin SDK) — o frontend nunca escreve direto no bucket",
       "Leitura via URL de download tokenizada, restrita ao próprio aluno, ao seu orientador e à coordenação",
@@ -48,8 +48,8 @@
           "documento_id": "veiculo_id",
           "campos": {
             "veiculo_id": "string",
-            "nivel": "string ('A1'|'A2'|'B'|'C')",
-            "peso": "float (A1=2.0, A2=1.5, B=1.0, C=0.5)",
+            "nivel": "string ('A1'|'A2'|'A3'|'A4'|'B1'|'B2'|'SC') — Qualis Único; SC = Sem Classificação",
+            "peso": "float (A1=1.0, A2=0.85, A3=0.7, A4=0.7, B1=0.5, B2=0.5, SC=0.2)",
             "atualizado_em": "Timestamp",
             "atualizado_por": "string (uid)"
           }
@@ -159,7 +159,8 @@
           "descricao": "Atividades creditáveis registradas pelo aluno",
           "documento_id": "auto-id",
           "campos": {
-            "tipo_id": "string (referência a activity_types/)",
+            "tipo_id": "string (referência a activity_types/) | null (null em atividades bibliográficas)",
+            "producao_id": "string | null (referência a productions/ raiz — só em atividades bibliográficas)",
             "aluno_id": "string",
             "descricao": "string",
             "data_realizacao": "Timestamp",
@@ -174,23 +175,6 @@
             "atualizado_em": "Timestamp"
           },
           "usado_pelo_motor": "Fatos: dentro_periodo_curso, tem_comprovante, tipo_ativo, nao_excede_limite_categoria, producao_bibliografica_validada"
-        },
-        "productions": {
-          "descricao": "Subtipo de atividade creditável — produções bibliográficas",
-          "documento_id": "auto-id",
-          "campos": {
-            "activity_id": "string (referência a activities/ — produção é também uma atividade)",
-            "titulo": "string",
-            "doi": "string | null",
-            "veiculo_id": "string (referência a vehicles/)",
-            "tipo_producao": "string ('artigo_publicado'|'artigo_submetido'|'livro'|'capitulo')",
-            "status_publicacao": "string ('publicado'|'submetido'|'aceito')",
-            "observacao": "string | null (campo livre para impactos específicos)",
-            "autores": ["array de strings (uids)"],
-            "pontuacao_calculada": "float (calculada pelo motor RL05)",
-            "criado_em": "Timestamp"
-          },
-          "usado_pelo_motor": "Fatos: producao_veiculo(prod_id, veiculo_id), pontuacao_base(prod_id, valor)"
         },
         "extensions": {
           "descricao": "Solicitações de prorrogação de prazo",
@@ -252,6 +236,39 @@
       }
     },
 
+    "transfer_requests": {
+      "descricao": "Solicitacoes e efetivacoes de transferencia same-program de orientando entre orientadores.",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "student_id": "string (referencia a students/)",
+        "orientador_origem_id": "string (referencia a advisors/)",
+        "orientador_destino_id": "string (referencia a advisors/)",
+        "solicitante_id": "string (uid Firebase Auth)",
+        "programa_id": "string",
+        "status": "string ('pendente'|'aprovada'|'rejeitada'|'cancelada')",
+        "tipo": "string ('direta_coordenacao'|'solicitada_orientador')",
+        "motivo": "string | null",
+        "observacao": "string | null",
+        "created_at": "Timestamp",
+        "updated_at": "Timestamp",
+        "approved_at": "Timestamp | null",
+        "approved_by": "string (uid) | null",
+        "rejected_at": "Timestamp | null",
+        "rejected_by": "string (uid) | null",
+        "cancelled_at": "Timestamp | null",
+        "cancelled_by": "string (uid) | null",
+        "cancel_reason": "string | null",
+        "cancelled_request_id": "string | null (referencia a transfer_requests/)"
+      },
+      "invariantes_service": [
+        "Uma unica solicitacao pendente por aluno",
+        "Origem, destino e aluno pertencem ao mesmo programa",
+        "Destino respeita limite_orientandos via check_advisor_capacity",
+        "Aluno em status terminal (concluido/desligado) nao pode ser transferido",
+        "Destino igual ao coorientador atual transfere e limpa coorientador_id"
+      ]
+    },
+
     "activity_types": {
       "descricao": "Tipos de atividade creditável configurados pela coordenação",
       "documento_id": "auto-id Firestore",
@@ -288,6 +305,24 @@
       "nota": "Nível de relevância configurável fica em programs/{id}/vehicle_levels/{veiculo_id}"
     },
 
+    "productions": {
+      "descricao": "Produções bibliográficas — COLEÇÃO RAIZ (decisão Q8/opção C). Um artigo existe uma única vez e é creditado a N alunos via activities.producao_id. Não tem status próprio — a validação vive nas activities que a referenciam.",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "titulo": "string",
+        "doi": "string | null (chave natural de deduplicação quando presente)",
+        "veiculo_id": "string (referência a vehicles/)",
+        "tipo_producao": "string ('artigo'|'livro'|'capitulo') — natureza; situação em status_publicacao",
+        "status_publicacao": "string ('publicado'|'submetido'|'aceito')",
+        "observacao": "string | null (campo livre para impactos específicos)",
+        "autores": ["array de strings (uid de aluno cadastrado OU string livre p/ autor externo)"],
+        "pontuacao_calculada": "float (calculada uma vez pelo motor RL05)",
+        "programa_id": "string",
+        "criado_em": "Timestamp"
+      },
+      "usado_pelo_motor": "Fatos: producao_veiculo(producao_id, veiculo_id), pontuacao_base(producao_id, valor)"
+    },
+
     "audit_logs": {
       "descricao": "Logs imutáveis de auditoria gerados pelo aspecto A02. Nunca são deletados.",
       "documento_id": "auto-id Firestore",
@@ -310,7 +345,7 @@
       "descricao": "Alertas gerados pelo aspecto A05. Frontend assina via onSnapshot.",
       "documento_id": "auto-id Firestore",
       "campos": {
-        "tipo": "string ('progresso_task'|'atividade_validada'|'prorrogacao_aprovada'|'prazo_critico'|'atividade_submetida')",
+        "tipo": "string ('progresso_task'|'atividade_validada'|'prorrogacao_aprovada'|'prazo_critico'|'atividade_submetida'|'transferencia_orientador'|'transferencia_coordenacao')",
         "titulo": "string",
         "mensagem": "string",
         "destinatario_id": "string (uid Firebase Auth)",
@@ -376,7 +411,7 @@
       "operacoes": ["GET /api/v1/activities", "POST /api/v1/activities", "PATCH /api/v1/activities/{id}/validate"]
     },
     "ProductionsPage": {
-      "colecoes_lidas": ["students/{id}/productions", "vehicles", "programs/prog_default/vehicle_levels"],
+      "colecoes_lidas": ["productions", "students/{id}/activities", "vehicles", "programs/prog_default/vehicle_levels"],
       "operacoes": ["GET /api/v1/productions", "POST /api/v1/productions", "GET /api/v1/vehicles"]
     },
     "ChecklistPage": {
@@ -391,8 +426,19 @@
       "colecoes_lidas": ["students/{id}/extensions"],
       "operacoes": ["GET /api/v1/extensions", "POST /api/v1/extensions", "PATCH /api/v1/extensions/{id}/approve"]
     },
+    "TransferenciasPage": {
+      "colecoes_lidas": ["students", "advisors", "transfer_requests", "notifications"],
+      "operacoes": [
+        "GET /api/v1/transfers",
+        "POST /api/v1/transfers/direct",
+        "POST /api/v1/transfers",
+        "POST /api/v1/transfers/{id}/approve",
+        "POST /api/v1/transfers/{id}/reject",
+        "POST /api/v1/transfers/{id}/cancel"
+      ]
+    },
     "ReportsPage": {
-      "colecoes_lidas": ["students", "students/*/activities", "students/*/productions"],
+      "colecoes_lidas": ["students", "students/*/activities", "productions"],
       "operacoes": ["GET /api/v1/reports/students-at-risk", "GET /api/v1/reports/students-by-status", "GET /api/v1/reports/productions"]
     },
     "AuditPage": {
@@ -423,10 +469,13 @@
       "meses_ate_qualificacao": 12
     },
     "vehicle_levels_default": [
-      {"veiculo_id": "v_placeholder_a1", "nivel": "A1", "peso": 2.0},
-      {"veiculo_id": "v_placeholder_a2", "nivel": "A2", "peso": 1.5},
-      {"veiculo_id": "v_placeholder_b",  "nivel": "B",  "peso": 1.0},
-      {"veiculo_id": "v_placeholder_c",  "nivel": "C",  "peso": 0.5}
+      {"veiculo_id": "v_placeholder_a1", "nivel": "A1", "peso": 1.0},
+      {"veiculo_id": "v_placeholder_a2", "nivel": "A2", "peso": 0.85},
+      {"veiculo_id": "v_placeholder_a3", "nivel": "A3", "peso": 0.7},
+      {"veiculo_id": "v_placeholder_a4", "nivel": "A4", "peso": 0.7},
+      {"veiculo_id": "v_placeholder_b1", "nivel": "B1", "peso": 0.5},
+      {"veiculo_id": "v_placeholder_b2", "nivel": "B2", "peso": 0.5},
+      {"veiculo_id": "v_placeholder_sc", "nivel": "SC", "peso": 0.2}
     ],
     "activity_types_default": [
       {"nome": "Artigo Publicado",    "categoria": "especifico",   "pontuacao_base": 10, "ativo": true},

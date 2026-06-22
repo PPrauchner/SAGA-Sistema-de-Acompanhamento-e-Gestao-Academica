@@ -1,5 +1,5 @@
 """
-Dependência FastAPI para autenticação e extração de identidade via Firebase Auth.
+FastAPI dependency for authentication and identity extraction via Firebase Auth.
 
 Responsabilidades:
 - Definir o modelo CurrentUser com os campos uid, role, programa_id e email.

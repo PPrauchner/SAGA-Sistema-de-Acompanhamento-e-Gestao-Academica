@@ -75,12 +75,18 @@ def trigger_alerts(build: AlertBuilder):
             if isinstance(specs, dict):
                 specs = [specs]
 
-            repo = FirebaseRepository("notifications")
+            service = next((value for value in (*kwargs.values(), *args) if hasattr(value, "_repo")), None)
+            repo = service._repo if service is not None and hasattr(service._repo, "create_notification") else FirebaseRepository("notifications")
             for spec in specs:
-                await repo.create(_normalize(spec))
+                notification = _normalize(spec)
+                if hasattr(repo, "create_notification"):
+                    await repo.create_notification(notification)
+                else:
+                    await repo.create(notification)
 
             return result
 
         return wrapper
 
     return decorator
+
