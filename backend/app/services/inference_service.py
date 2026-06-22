@@ -165,7 +165,8 @@ class InferenceService:
         for activity in activities:
             grupo = activity.get("grupo")
             if grupo in totals:
-                totals[grupo] += int(activity.get("creditos", 0))
+                # Trata creditos de forma resiliente tanto se vier float ou int
+                totals[grupo] += int(float(activity.get("creditos", 0)))
         total = totals["basico"] + totals["especifico"] + totals["tecnologico"]
         totals["total"] = total
         facts.append(Compound("creditos_grupo_basico", [sid, Atom(totals["basico"])]))
@@ -173,10 +174,12 @@ class InferenceService:
         facts.append(Compound("creditos_grupo_tecnologico", [sid, Atom(totals["tecnologico"])]))
         facts.append(Compound("total_creditos", [sid, Atom(total)]))
 
-        min_basico = int(program.get("min_creditos_basico", 12))
-        min_especifico = int(program.get("min_creditos_especifico", 8))
-        max_tecnologico = int(program.get("max_creditos_tecnologico", 4))
-        min_total = int(program.get("min_creditos_total", 24))
+        # M2 Correção: Alinhamento exato de chaves com o data-model gerado pelas seeds do banco
+        min_basico = int(program.get("creditos_grupo_basico_min", 12))
+        min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
+        max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
+        min_total = int(program.get("creditos_total_min", 24))
+        
         facts.append(Compound("min_creditos_basico", [prog, Atom(min_basico)]))
         facts.append(Compound("min_creditos_especifico", [prog, Atom(min_especifico)]))
         facts.append(Compound("max_creditos_tecnologico", [prog, Atom(max_tecnologico)]))
@@ -234,7 +237,7 @@ class InferenceService:
             if activity.get("tipo_ativo"):
                 facts.append(Compound("tipo_ativo", [atv]))
             grupo = activity.get("grupo")
-            creditos = int(activity.get("creditos", 0))
+            creditos = int(float(activity.get("creditos", 0)))
             running = (category_running.get(grupo, 0) if grupo is not None else 0) + creditos
             limite = max_tecnologico if grupo == "tecnologico" else None
             if limite is None or running <= limite:
@@ -280,27 +283,7 @@ class InferenceService:
         pontuacao_base: float,
         limite_categoria: float | None,
     ) -> bool:
-        """Avalia RL04 (atividade_elegivel) para uma única atividade recém-registrada.
-
-        Monta apenas os 4 fatos da RL04 para a atividade e consulta o motor — sem rodar a
-        inferência completa do aluno nem persistir snapshot. Os booleanos das condições são
-        derivados dos dados crus aqui (não nos services de negócio), mantendo a regra
-        declarativa (a conjunção) isolada em rules/activity_eligibility.py.
-
-        Args:
-            activity_id: ID da atividade recém-criada.
-            student_id: ID do aluno dono da atividade.
-            data_ingresso: Data de ingresso do aluno (ISO 'YYYY-MM-DD') — dentro_periodo_curso.
-            data_realizacao: Data de realização da atividade (ISO 'YYYY-MM-DD').
-            tem_comprovante: Se a atividade tem comprovante_url.
-            tipo_ativo: Se o tipo de atividade está ativo.
-            categoria_creditos_aprovados: Soma de créditos já aprovados da mesma categoria.
-            pontuacao_base: Crédito gerado pela atividade (base do tipo).
-            limite_categoria: Teto de créditos da categoria, ou None se ilimitado.
-
-        Returns:
-            True se a atividade satisfaz as 4 condições da RL04, False caso contrário.
-        """
+        """Avalia RL04 (atividade_elegivel) para uma única atividade recém-registrada."""
         sid = Atom(student_id)
         atv = Atom(activity_id)
         facts: list[Compound] = []
@@ -351,7 +334,7 @@ class InferenceService:
                     producao_id=production["id"],
                     score=score,
                     nivel_veiculo=production.get("nivel", ""),
-                    peso_aplicado=round(score / base, 4),
+                    peso_applied=round(score / base, 4),
                 )
             )
         return scores
@@ -374,10 +357,11 @@ class InferenceService:
         tasks: list[dict[str, Any]],
         risk_flags: dict[str, bool],
     ) -> InferenceChecklist:
-        min_basico = int(program.get("min_creditos_basico", 12))
-        min_especifico = int(program.get("min_creditos_especifico", 8))
-        max_tecnologico = int(program.get("max_creditos_tecnologico", 4))
-        min_total = int(program.get("min_creditos_total", 24))
+        # M2 Correção: Sincronização de chaves no checklist de saída
+        min_basico = int(program.get("creditos_grupo_basico_min", 12))
+        min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
+        max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
+        min_total = int(program.get("creditos_total_min", 24))
 
         risco_creditos = risk_flags["creditos_insuficientes"]
         risco_qualificacao = risk_flags["qualificacao_prazo_proximo"]
@@ -443,6 +427,7 @@ class InferenceService:
         if risk_flags["prazo_estourado"]:
             messages.append(f"Prazo final expirado em {student.get('prazo_final')}")
         if risk_flags["creditos_insuficientes"]:
+            # M2 Correção: Chave de exibição da mensagem de log sincronizada
             messages.append(
                 f"Créditos insuficientes ({totals['total']}/{program.get('creditos_total_min', 24)})"
             )
