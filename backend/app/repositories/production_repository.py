@@ -3,15 +3,18 @@ Repositório concreto para a coleção raiz productions/ no Firestore.
 
 Responsabilidades:
 - Herdar FirebaseRepository e especializar a leitura da coleção raiz productions/.
+- create(data) / get(production_id): herdados — escrita e leitura por id (com id injetado),
+  consumidos pelo ProductionService.
 - list_all(): herdado — produções cruas com id injetado.
 - list_productions(): produções com campos normalizados para os relatórios gerenciais
   (titulo, veiculo_id, tipo_producao, autores, pontuacao_calculada, nivel, programa_id). O
   nivel é resolvido por junção com programs/{programa_id}/vehicle_levels/ via veiculo_id —
   productions/ não persiste nivel (data-model §3); veículos sem classificação caem no padrão SC.
 
-Restrição: sem lógica de negócio — apenas leitura e mapeamento de campos. A junção com
+Restrição: sem lógica de negócio — apenas leitura/escrita e mapeamento de campos. A junção com
 activities/ (quem reivindica crédito por produção) e a agregação por aluno/orientador são
-responsabilidade do ReportService.
+responsabilidade do ReportService; a pontuação RL05 é resolvida pelo ProductionService e pelo
+InferenceRepository.
 """
 
 from __future__ import annotations

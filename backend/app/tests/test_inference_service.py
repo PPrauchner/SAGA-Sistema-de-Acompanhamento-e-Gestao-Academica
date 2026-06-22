@@ -28,11 +28,11 @@ async def test_aluno_apto_em_fase_de_defesa(service: InferenceService):
     assert result.snapshot_id != ""
     # Todas as 3 atividades são elegíveis (comprovante + tipo ativo + dentro do período).
     assert set(result.atividades_elegiveis) == {"atv_apto_b", "atv_apto_e", "atv_apto_t"}
-    # Produção A1 com base 10 → score 20.0, peso 2.0.
+    # Produção A1 com base 10 → score 10.0, peso 1.0 (escala Qualis monotônica).
     assert len(result.pontuacoes_producoes) == 1
     pontuacao = result.pontuacoes_producoes[0]
-    assert pontuacao.score == 20.0
-    assert pontuacao.peso_aplicado == 2.0
+    assert pontuacao.score == 10.0
+    assert pontuacao.peso_aplicado == 1.0
     assert pontuacao.nivel_veiculo == "A1"
 
 

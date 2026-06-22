@@ -51,6 +51,11 @@
         "POST   /api/v1/transfers/{id}/approve      - apenas coordenacao",
         "POST   /api/v1/transfers/{id}/reject       - apenas coordenacao",
         "POST   /api/v1/transfers/{id}/cancel       - apenas solicitante orientador",
+        "POST   /api/v1/coordination-transfers      - apenas coordenacao",
+        "GET    /api/v1/coordination-transfers      - coordenacao ou orientador sucessor",
+        "POST   /api/v1/coordination-transfers/{id}/accept - apenas orientador sucessor",
+        "POST   /api/v1/coordination-transfers/{id}/reject - apenas orientador sucessor",
+        "POST   /api/v1/coordination-transfers/{id}/cancel - apenas coordenacao iniciadora",
         "POST   /api/v1/students                    — apenas coordenacao",
         "PUT    /api/v1/students/{id}               — apenas coordenacao",
         "DELETE /api/v1/students/{id}               — apenas coordenacao",
@@ -95,6 +100,7 @@
       "tipo_advice": "Around (captura entrada antes + resultado depois)",
 
       "join_points": [
+        "POST            /api/v1/coordination-transfers/*",
         "POST            /api/v1/transfers/*",
         "POST/PUT/DELETE /api/v1/students/*",
         "POST/PUT/DELETE /api/v1/advisors/*",
@@ -240,6 +246,26 @@
       "tipo_advice": "After",
 
       "join_points_e_alertas": [
+        {
+          "join_point": "POST /api/v1/coordination-transfers",
+          "destinatario": "orientador sucessor",
+          "mensagem": "Convite para assumir a coordenacao do programa"
+        },
+        {
+          "join_point": "POST /api/v1/coordination-transfers/{id}/accept",
+          "destinatario": "ex-coordenador iniciador",
+          "mensagem": "Transferencia de coordenacao aceita"
+        },
+        {
+          "join_point": "POST /api/v1/coordination-transfers/{id}/reject",
+          "destinatario": "coordenador iniciador",
+          "mensagem": "Transferencia de coordenacao rejeitada"
+        },
+        {
+          "join_point": "POST /api/v1/coordination-transfers/{id}/cancel",
+          "destinatario": "orientador sucessor",
+          "mensagem": "Transferencia de coordenacao cancelada"
+        },
         {
           "join_point": "POST /api/v1/transfers/direct (coordenacao move orientando same-program)",
           "destinatario": "orientador origem + orientador destino + aluno",
