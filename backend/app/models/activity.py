@@ -42,7 +42,9 @@ class ActivityCreateResponse(BaseModel):
 class ActivityResponse(BaseModel):
     id: str
 
-    tipo_id: str
+    # None para atividades lastreadas em produção bibliográfica (ver producao_id);
+    # obrigatório apenas na criação de atividades regulares (ActivityCreateRequest).
+    tipo_id: str | None = None
     tipo_nome: str | None = None
     categoria: str | None = None
 
