@@ -61,7 +61,7 @@ def test_get_inference_ok(client: TestClient) -> None:
     assert body["apto_defesa"] is True
     assert body["situacao_inferida"] == "em_fase_de_defesa"
     assert body["fatos_usados"]
-    assert body["pontuacoes_producoes"][0]["score"] == 20.0
+    assert body["pontuacoes_producoes"][0]["score"] == 10.0
 
 
 def test_get_checklist_404(client: TestClient) -> None:

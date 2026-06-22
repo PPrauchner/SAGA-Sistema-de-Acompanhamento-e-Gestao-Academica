@@ -74,6 +74,7 @@ erDiagram
     students ||--o{ extensions : solicita
     students ||--o{ transfer_requests : transfere
     students ||--o{ inferred_status : historiza
+    programs ||--o{ coordination_transfers : transfere_coordenacao
     activity_types ||--o{ activities : tipifica
     productions ||--o{ activities : "creditada por"
     vehicles ||--o{ productions : publica
@@ -238,6 +239,31 @@ o mover-direto da coordenacao e a solicitacao do orientador com aprovacao da coo
 > Invariante: so pode existir uma solicitacao `pendente` por aluno. A efetivacao atualiza
 > `students.orientador_id`, limpa `coorientador_id` quando o destino era coorientador atual,
 > registra A02/A03 e dispara A05 para origem, destino e aluno.
+
+### `coordination_transfers` - colecao raiz - chave: `auto-id`
+
+Registra a transferencia do papel de coordenacao para um orientador sucessor do mesmo programa,
+com aceite obrigatorio do sucessor. Nao gera A03 porque nao altera historico de aluno.
+
+| Campo | Tipo | Ref | Notas |
+|-------|------|-----|-------|
+| `programa_id` | string | ->`programs` (soft) | programa da coordenacao transferida |
+| `initiator_uid` | string | ->`users.uid` | coordenacao atual que iniciou o convite |
+| `successor_uid` | string | ->`users.uid` | orientador convidado para assumir coordenacao |
+| `status` | string | | `pendente`\|`aceita`\|`rejeitada`\|`cancelada` |
+| `created_at` / `updated_at` | timestamp | | |
+| `decided_at` | timestamp\|null | | preenchido em aceite/rejeicao |
+| `accepted_at` | timestamp\|null | | preenchido no aceite |
+| `rejected_at` / `rejected_by` | timestamp / uid | | preenchido na rejeicao |
+| `cancelled_at` / `cancelled_by` | timestamp / uid | | preenchido no cancelamento |
+
+> Swap no aceite: valida pendencia e vinculo ao mesmo programa; troca `set_custom_user_claims`
+> do sucessor e do iniciador; atualiza `users/{uid}.role` dos dois; cria `advisors/` para o
+> ex-coordenador com `limite_orientandos=5` se ainda nao existir; revoga refresh tokens dos dois;
+> marca a transferencia como `aceita`. Se houver falha parcial, repetir o aceite e seguro desde
+> que a transferencia continue `pendente`: claims e roles sao regravados com os mesmos valores,
+> o documento `advisors/` e reutilizado/criado com id estavel, e tokens podem ser revogados
+> novamente sem alterar o resultado final.
 
 ### `programs` 🔲 — chave: `prog_default` (singleton de configuração)
 
@@ -653,6 +679,8 @@ O Firestore não impõe integridade referencial. Estas regras são responsabilid
 5. **Transferencia same-program**: origem e destino pertencem ao mesmo `programa_id`, destino
    respeita `limite_orientandos`, aluno terminal (`concluido`/`desligado`) nao transfere e
    solicitacao duplicada pendente retorna conflito.
+6. **Transferencia de coordenacao**: apenas uma `coordination_transfers` pendente por programa;
+   sucessor deve ser orientador do mesmo programa; aceite mantem exatamente uma coordenacao ativa.
 
 ## Campos calculados (não-entrada do usuário)
 
