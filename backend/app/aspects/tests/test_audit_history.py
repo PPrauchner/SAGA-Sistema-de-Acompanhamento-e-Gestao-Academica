@@ -338,6 +338,49 @@ async def test_track_history_resolve_activity_type_por_type_id(
     assert snapshot["valor_novo"]["pontuacao_base"] == 6.0
 
 
+async def test_audit_redige_campo_senha_em_valor_entrada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _AuditRepo.store = {}
+    _AuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _AuditRepo)
+
+    @audit_operation
+    async def trocar_senha(
+        user_id: str,
+        senha: str,
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        return {"ok": "sim"}
+
+    await trocar_senha("u1", "s3cr3t!", _user())
+
+    log = next(iter(_AuditRepo.store.values()))
+    assert log["valor_entrada"]["user_id"] == "u1"
+    assert log["valor_entrada"]["senha"] == "***"
+
+
+async def test_audit_redige_campo_token_em_payload_aninhado(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _AuditRepo.store = {}
+    _AuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _AuditRepo)
+
+    @audit_operation
+    async def ativar_conta(
+        payload: dict[str, Any],
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        return {"ok": "sim"}
+
+    await ativar_conta({"email": "a@b.com", "token": "abc123"}, _user())
+
+    log = next(iter(_AuditRepo.store.values()))
+    assert log["valor_entrada"]["payload"]["email"] == "a@b.com"
+    assert log["valor_entrada"]["payload"]["token"] == "***"
+
+
 async def test_track_history_respeita_flag_desativada(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
