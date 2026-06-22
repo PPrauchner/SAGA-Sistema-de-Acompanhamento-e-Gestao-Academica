@@ -7,7 +7,7 @@ Responsabilidades:
 - list_productions(): produções com campos normalizados para os relatórios gerenciais
   (titulo, veiculo_id, tipo_producao, autores, pontuacao_calculada, nivel, programa_id). O
   nivel é resolvido por junção com programs/{programa_id}/vehicle_levels/ via veiculo_id —
-  productions/ não persiste nivel (data-model §3); veículos sem classificação caem no padrão C.
+  productions/ não persiste nivel (data-model §3); veículos sem classificação caem no padrão SC.
 
 Restrição: sem lógica de negócio — apenas leitura e mapeamento de campos. A junção com
 activities/ (quem reivindica crédito por produção) e a agregação por aluno/orientador são
@@ -20,9 +20,9 @@ from typing import Any
 
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
-# Nível de relevância usado quando o veículo da produção não foi classificado em
-# programs/{id}/vehicle_levels/ — espelha o fallback C (peso 0.5) da RL05 (data-model §3).
-_NIVEL_PADRAO = "C"
+# Nível Qualis Único usado quando o veículo da produção não foi classificado em
+# programs/{id}/vehicle_levels/ — espelha o fallback SC (peso 0.2) da RL05 (data-model §3).
+_NIVEL_PADRAO = "SC"
 
 
 def _normalize_production(
@@ -36,7 +36,7 @@ def _normalize_production(
 
     Returns:
         Dict com os campos de relatório normalizados; nivel vem da classificação do veículo
-        em vehicle_levels/ e cai para o padrão C quando ele não está classificado, e
+        em vehicle_levels/ e cai para o padrão SC quando ele não está classificado, e
         pontuacao_calculada é coagida para float.
     """
     veiculo_id = production.get("veiculo_id")
@@ -80,7 +80,7 @@ class ProductionRepository(FirebaseRepository):
 
         Returns:
             Mapa do veiculo_id para o nivel classificado; veículos sem classificação
-            simplesmente não aparecem (o chamador aplica o fallback C).
+            simplesmente não aparecem (o chamador aplica o fallback SC).
         """
         niveis: dict[str, str] = {}
         for programa_id in program_ids:
