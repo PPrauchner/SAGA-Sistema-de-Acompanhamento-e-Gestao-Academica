@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useCoordDashboard } from "@/hooks/useDashboard";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
   BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
@@ -11,7 +12,6 @@ import {
   LineChart, Line, ReferenceLine,
 } from "recharts";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
 
 type ReportType = "status" | "orientador" | "producao" | "integralizacao" | null;
 type ExportFormat = "pdf" | "excel" | "csv";
@@ -58,16 +58,16 @@ interface AlertItem {
   acao?: string;
 }
 
-// ─── Data ──────────────────────────────────────────────────────────────────
 
-const STATUS_DATA = [
+const INITIAL_STATUS_DATA = [
   { name: "Regular", value: 142, color: "#1F8A70" },
   { name: "Qualificado", value: 38, color: "#123C7A" },
   { name: "Em Risco", value: 24, color: "#D4A017" },
   { name: "Prorrogação", value: 18, color: "#f97316" },
   { name: "Fase de Defesa", value: 16, color: "#8b5cf6" },
-  { name: "Crítico", value: 10, color: "#dc2626" },
 ];
+
+interface StatusDataProp { name: string; value: number; color: string; }
 
 const ORIENTADOR_DATA = [
   { name: "Carla M.", orientandos: 8, producoes: 14, defesas: 3, risco: 1 },
@@ -147,7 +147,6 @@ const PROGRAM_STATS = [
   { label: "Taxa de Evasão (12 meses)", value: "4,2%", sub: "-1,1 p.p. em relação ao ano anterior", trend: "down-good", color: "#1F8A70" },
 ];
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
 
 const URGENCIA_CFG = {
   alta: { label: "Alta", color: "#dc2626", bg: "#fef2f2" },
@@ -203,7 +202,6 @@ function handleExport(format: ExportFormat, section: string) {
   setTimeout(() => { document.body.removeChild(el); }, 2100);
 }
 
-// ─── Sub-components ────────────────────────────────────────────────────────
 
 function KpiCard({ icon, label, value, sub, color, trend }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string; color: string; trend?: "up" | "down" | "down-good" | "stable";
@@ -261,14 +259,23 @@ function ExportBar({ section }: { section: string }) {
   );
 }
 
-function SectionHeader({ title, sub, section, onReport }: {
-  title: string; sub?: string; section: string; onReport?: () => void;
+function SectionHeader({ title, sub, section, onReport, isMock }: {
+  title: string; sub?: string; section: string; onReport?: () => void; isMock?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-2 mb-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)", wordBreak: "break-word" }}>{title}</h3>
-        {sub && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{sub}</p>}
+      <div className="min-w-0 flex items-center gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)", wordBreak: "break-word" }}>{title}</h3>
+            {isMock && (
+              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>
+                Amostra
+              </span>
+            )}
+          </div>
+          {sub && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{sub}</p>}
+        </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
         <ExportBar section={section} />
@@ -286,9 +293,8 @@ function SectionHeader({ title, sub, section, onReport }: {
   );
 }
 
-// ─── Report Modal ──────────────────────────────────────────────────────────
 
-function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void }) {
+function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose: () => void; statusData: StatusDataProp[] }) {
   if (!type) return null;
 
   const configs: Record<Exclude<ReportType, null>, { title: string; sub: string; content: React.ReactNode }> = {
@@ -299,14 +305,16 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
         <div className="space-y-4">
           <div className="flex justify-center">
             <PieChart width={260} height={220}>
-              <Pie data={STATUS_DATA} cx={125} cy={105} innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value" isAnimationActive={false}>
-                {STATUS_DATA.map((d, i) => <Cell key={`modal-status-${i}`} fill={d.color} />)}
+              <Pie data={statusData} cx={125} cy={105} innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value" isAnimationActive={false}>
+                {statusData.map((d, i) => <Cell key={`modal-status-${i}`} fill={d.color} />)}
               </Pie>
               <Tooltip formatter={(v: number) => [`${v} alunos`, ""]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
             </PieChart>
           </div>
           <div className="space-y-2">
-            {STATUS_DATA.map((s) => (
+            {statusData.map((s) => {
+              const totalAlunos = Math.max(1, statusData.reduce((acc, d) => acc + d.value, 0));
+              return (
               <div key={s.name} className="flex items-center justify-between p-2.5 rounded-xl" style={{ background: `${s.color}0d` }}>
                 <div className="flex items-center gap-2">
                   <div className="rounded-full" style={{ width: 10, height: 10, background: s.color }} />
@@ -314,17 +322,17 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="rounded-full overflow-hidden" style={{ width: 80, height: 6, background: "var(--muted)" }}>
-                    <div className="h-full rounded-full" style={{ width: `${(s.value / 248) * 100}%`, background: s.color }} />
+                    <div className="h-full rounded-full" style={{ width: `${(s.value / totalAlunos) * 100}%`, background: s.color }} />
                   </div>
                   <span style={{ fontSize: "13px", fontWeight: 700, color: s.color, minWidth: 60, textAlign: "right" }}>
-                    {s.value} ({((s.value / 248) * 100).toFixed(1)}%)
+                    {s.value} ({((s.value / totalAlunos) * 100).toFixed(1)}%)
                   </span>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-            Total: 248 alunos matriculados · Programa PPGCC · 2026
+            Total: {statusData.reduce((acc, d) => acc + d.value, 0)} alunos matriculados · Programa PPGCC
           </p>
         </div>
       ),
@@ -477,24 +485,23 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
   );
 }
 
-// ─── Chart Cards ───────────────────────────────────────────────────────────
 
-function StatusDistribChart({ onReport }: { onReport: () => void }) {
-  const total = STATUS_DATA.reduce((s, d) => s + d.value, 0);
+function StatusDistribChart({ onReport, statusData }: { onReport: () => void; statusData: StatusDataProp[] }) {
+  const total = Math.max(1, statusData.reduce((s, d) => s + d.value, 0));
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Distribuição de Status" sub="Situação acadêmica — 248 alunos" section="Status" onReport={onReport} />
+      <SectionHeader title="Distribuição de Status" sub={`Situação acadêmica — ${total} alunos`} section="Status" onReport={onReport} />
       <div className="flex items-center gap-4">
         <div style={{ flexShrink: 0 }}>
           <PieChart width={160} height={160}>
-            <Pie data={STATUS_DATA} cx={75} cy={75} innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" isAnimationActive={false}>
-              {STATUS_DATA.map((d, i) => <Cell key={`status-cell-${i}`} fill={d.color} />)}
+            <Pie data={statusData} cx={75} cy={75} innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" isAnimationActive={false}>
+              {statusData.map((d, i) => <Cell key={`status-cell-${i}`} fill={d.color} />)}
             </Pie>
             <Tooltip formatter={(v: number) => [`${v} alunos`, ""]} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
           </PieChart>
         </div>
         <div className="flex-1 space-y-2">
-          {STATUS_DATA.map((s) => (
+          {statusData.map((s) => (
             <div key={s.name} className="flex items-center gap-2">
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
               <span style={{ fontSize: "12px", color: "var(--foreground)", flex: 1 }}>{s.name}</span>
@@ -513,7 +520,7 @@ function StatusDistribChart({ onReport }: { onReport: () => void }) {
 function OrientadorPerfChart({ onReport }: { onReport: () => void }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Desempenho dos Orientadores" sub="Orientandos, produções e defesas" section="Orientadores" onReport={onReport} />
+      <SectionHeader title="Desempenho dos Orientadores" sub="Orientandos, produções e defesas" section="Orientadores" onReport={onReport} isMock />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 320 }}>
       <ResponsiveContainer width="100%" height={200}>
@@ -538,7 +545,7 @@ function OrientadorPerfChart({ onReport }: { onReport: () => void }) {
 function ProducaoChart({ onReport }: { onReport: () => void }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Produção Científica" sub="Qualis A1, A2 e conferências — 2026" section="Produção Científica" onReport={onReport} />
+      <SectionHeader title="Produção Científica" sub="Qualis A1, A2 e conferências — 2026" section="Produção Científica" onReport={onReport} isMock />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 300 }}>
       <ResponsiveContainer width="100%" height={190}>
@@ -572,7 +579,7 @@ function ProducaoChart({ onReport }: { onReport: () => void }) {
 function IntegralizacaoChart({ onReport }: { onReport: () => void }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Integralização por Ano" sub="Tempo médio em meses vs. meta do programa" section="Integralização" onReport={onReport} />
+      <SectionHeader title="Integralização por Ano" sub="Tempo médio em meses vs. meta do programa" section="Integralização" onReport={onReport} isMock />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 280 }}>
       <ResponsiveContainer width="100%" height={190}>
@@ -594,7 +601,6 @@ function IntegralizacaoChart({ onReport }: { onReport: () => void }) {
   );
 }
 
-// ─── Section Components ────────────────────────────────────────────────────
 
 function ValidationQueue() {
   const [filter, setFilter] = useState<"todos" | ValidationItem["tipo"] | "alta">("todos");
@@ -610,7 +616,10 @@ function ValidationQueue() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{VALIDATIONS.length} itens aguardando aprovação</p>
         </div>
         <ExportBar section="Fila de Validação" />
@@ -701,7 +710,10 @@ function ExtensionRequestsSection() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{EXTENSIONS.filter(e => e.status === "pendente" || e.status === "em-analise").length} pendentes de decisão</p>
         </div>
         <ExportBar section="Prorrogações" />
@@ -769,7 +781,10 @@ function PendingActivitiesSection() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Atividades Pendentes</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Atividades Pendentes</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{PENDING_ACTIVITIES.filter(a => a.prioridade === "urgente").length} urgentes · {PENDING_ACTIVITIES.length} total</p>
         </div>
         <ExportBar section="Atividades Pendentes" />
@@ -816,7 +831,10 @@ function AlertsCenter() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Central de Alertas</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Central de Alertas</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
             <span style={{ color: "var(--tint-danger-text)", fontWeight: 700 }}>{ALERTS.filter(a => a.nivel === "critico").length} críticos</span>
             {" · "}{ALERTS.filter(a => a.nivel === "atencao").length} atenção · {ALERTS.filter(a => a.nivel === "info").length} informativos
@@ -924,16 +942,47 @@ function ProgramStatistics() {
   );
 }
 
-// ─── Main Export ───────────────────────────────────────────────────────────
 
 export function CoordDashboard() {
+  const { data: dashData, loading, error } = useCoordDashboard();
   const [reportModal, setReportModal] = useState<ReportType>(null);
 
-  const totalAlunos = STATUS_DATA.reduce((s, d) => s + d.value, 0);
-  const ativos = totalAlunos - 12;
-  const emRisco = STATUS_DATA.find((d) => d.name === "Em Risco")!.value + STATUS_DATA.find((d) => d.name === "Crítico")!.value;
-  const emProrrogacao = STATUS_DATA.find((d) => d.name === "Prorrogação")!.value;
-  const concluidos = 47;
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 400 }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full border-4 border-t-transparent" style={{ width: 40, height: 40, borderColor: "var(--border)", borderTopColor: "transparent" }} />
+          <p style={{ fontSize: "14px", color: "var(--muted-foreground)", marginTop: 16 }}>Carregando dashboard da coordenação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl p-6 text-center" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+        <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--tint-danger-text)" }}>Erro ao carregar dashboard</p>
+        <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{error}</p>
+      </div>
+    );
+  }
+
+  let statusData = INITIAL_STATUS_DATA;
+  if (dashData?.alunos_por_status) {
+    statusData = [
+      { name: "Regular", value: dashData.alunos_por_status.regular, color: "#1F8A70" },
+      { name: "Qualificado", value: dashData.alunos_por_status.qualificado, color: "#123C7A" },
+      { name: "Em Risco", value: dashData.alunos_por_status.em_risco, color: "#D4A017" },
+      { name: "Prorrogação", value: dashData.alunos_por_status.em_prorrogacao, color: "#f97316" },
+      { name: "Fase de Defesa", value: dashData.alunos_por_status.fase_defesa, color: "#8b5cf6" },
+    ].filter(s => s.value > 0);
+  }
+
+  const ativos = dashData?.total_alunos_ativos ?? statusData.reduce((s, d) => s + d.value, 0);
+  const totalAlunos = dashData?.total_alunos ?? ativos;
+  const emRisco = dashData?.alunos_por_status?.em_risco ?? 0;
+  const emProrrogacao = dashData?.alunos_por_status?.em_prorrogacao ?? 0;
+  const concluidos = dashData?.total_concluidos ?? 0;
 
   return (
     <div className="space-y-5">
@@ -952,9 +1001,8 @@ export function CoordDashboard() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {[
-              { v: VALIDATIONS.length, l: "Na fila", color: "#D4A017" },
-              { v: EXTENSIONS.filter(e => e.status !== "aprovada" && e.status !== "negada").length, l: "Prorrogações", color: "#f97316" },
-              { v: ALERTS.filter(a => a.nivel === "critico").length, l: "Críticos", color: "#dc2626" },
+              { v: dashData?.atividades_aguardando_validacao ?? VALIDATIONS.length, l: "Na fila", color: "#D4A017" },
+              { v: dashData?.prorrogacoes_pendentes ?? EXTENSIONS.filter(e => e.status !== "aprovada" && e.status !== "negada").length, l: "Prorrogações", color: "#f97316" },
             ].map((s) => (
               <div key={s.l} className="text-center rounded-xl px-3 py-2 sm:px-4 sm:py-2.5" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <p style={{ fontSize: "clamp(16px,4vw,22px)", fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.v}</p>
@@ -972,12 +1020,12 @@ export function CoordDashboard() {
         <KpiCard icon={<AlertTriangle size={20} />} label="Em Risco" value={emRisco} sub="Requerem ação imediata" color="#dc2626" trend="down" />
         <KpiCard icon={<Clock size={20} />} label="Em Prorrogação" value={emProrrogacao} sub="Com prazo estendido" color="#f97316" />
         <KpiCard icon={<CheckCircle2 size={20} />} label="Concluídos" value={concluidos} sub="Titulados em 2025–2026" color="#1F8A70" trend="up" />
-        <KpiCard icon={<TrendingUp size={20} />} label="Tempo Médio" value="26m" sub="Mestrado: 25m · Douto: 51m" color="#8b5cf6" />
+        <KpiCard icon={<TrendingUp size={20} />} label="Tempo Médio" value={dashData?.tempo_medio_integralizacao_meses ? `${dashData.tempo_medio_integralizacao_meses.toFixed(1)}m` : "N/D"} sub="Integralização" color="#8b5cf6" />
       </div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <StatusDistribChart onReport={() => setReportModal("status")} />
+        <StatusDistribChart onReport={() => setReportModal("status")} statusData={statusData} />
         <OrientadorPerfChart onReport={() => setReportModal("orientador")} />
       </div>
 
@@ -1003,7 +1051,7 @@ export function CoordDashboard() {
       <ProgramStatistics />
 
       {/* Report Modal */}
-      <ReportModal type={reportModal} onClose={() => setReportModal(null)} />
+      <ReportModal type={reportModal} onClose={() => setReportModal(null)} statusData={statusData} />
     </div>
   );
 }

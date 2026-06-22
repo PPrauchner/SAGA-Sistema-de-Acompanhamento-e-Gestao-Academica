@@ -38,13 +38,13 @@ service = AdvisorService()
 
 
 @router.get("/advisors")
-@requires_role("coordenacao")
+@requires_role("coordenacao", "orientador")
 async def list_advisors(
     user: CurrentUser = Depends(
         get_current_user,
     ),
 ) -> list[dict]:
-    return await service.list_advisors()
+    return await service.list_advisors(user)
 
 
 @router.get("/advisors/{advisor_id}")

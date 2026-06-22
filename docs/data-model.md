@@ -278,7 +278,7 @@ erDiagram
 | `nome` | string | `revisao_bibliografica`\|`definicao_problema`\|`desenvolvimento`\|`experimentos`\|`escrita`\|`qualificacao`\|`defesa` |
 | `ordem` | int | |
 | `data_inicio` / `data_fim` | timestamp | |
-| `status` | string | `pendente`\|`em_andamento`\|`concluida` |
+| `status` | string | `pendente`\|`em_andamento`\|`concluido`\|`atrasado` |
 | `criado_por` | string (uid orientador) | |
 
 ### `tasks` 🔲 — sub-coleção de `stages`
@@ -287,11 +287,15 @@ erDiagram
 |-------|------|-------|
 | `titulo` / `descricao` | string | |
 | `prazo` | timestamp | |
-| `status` | string | `pendente`\|`em_andamento`\|`concluida`\|`atrasada` |
+| `status` | string | `pendente`\|`em_andamento`\|`concluido`\|`atrasado` |
 | `prioridade` | string | `baixa`\|`media`\|`alta` |
 | `responsavel_id` | string | →`users.uid` (aluno) |
 | `criado_por` | string | →`users.uid` (orientador) |
 | `criado_em` / `atualizado_em` | timestamp | |
+
+> Convenção implementada: `work_plan`, `stages` e `tasks` usam os status canônicos
+> masculinos `concluido` e `atrasado`. Entradas legadas `concluida`/`atrasada` são aceitas
+> apenas como compatibilidade e normalizadas na borda.
 
 ### `updates` 🔲 — sub-coleção de `tasks`
 
