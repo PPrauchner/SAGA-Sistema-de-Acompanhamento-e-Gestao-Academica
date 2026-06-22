@@ -30,3 +30,30 @@ export async function apiGet<T>(path: string, token?: string): Promise<T> {
   }
   return (await response.json()) as T;
 }
+
+async function apiJson<T>(method: "POST" | "PATCH" | "PUT", path: string, body: unknown, token?: string): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}${path}`, {
+    method,
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, `Falha na requisição (${response.status})`);
+  }
+  return (await response.json()) as T;
+}
+
+export function apiPost<T>(path: string, body: unknown, token?: string): Promise<T> {
+  return apiJson<T>("POST", path, body, token);
+}
+
+export function apiPatch<T>(path: string, body: unknown, token?: string): Promise<T> {
+  return apiJson<T>("PATCH", path, body, token);
+}
+
+export function apiPut<T>(path: string, body: unknown, token?: string): Promise<T> {
+  return apiJson<T>("PUT", path, body, token);
+}

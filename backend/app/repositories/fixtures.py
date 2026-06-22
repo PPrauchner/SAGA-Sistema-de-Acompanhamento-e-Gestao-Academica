@@ -23,17 +23,14 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
+from backend.app.models.vehicle import PESO_POR_NIVEL
+
 _TODAY = date.today()
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
 
 
 def _iso(days_from_today: int) -> str:
-    """Data ISO (YYYY-MM-DD) deslocada de hoje.
-
-    Mantém os cenários temporais (recém-ingresso, metade do prazo, ~75% decorrido)
-    determinísticos em qualquer data de execução — sem isso a suíte só passaria na
-    data do commit.
-    """
-    return (_TODAY + timedelta(days=days_from_today)).isoformat()
+    return (date.today() + timedelta(days=days_from_today)).isoformat()
 
 
 _PROGRAM: dict[str, Any] = {
@@ -43,7 +40,7 @@ _PROGRAM: dict[str, Any] = {
     "creditos_grupo_tecnologico_max": 4,
     "creditos_total_min": 24,
     "max_prorrogacoes": 2,
-    "relevancia_pesos": {"A1": 1.0, "A2": 0.85, "A3": 0.7, "A4": 0.7, "B1": 0.5, "B2": 0.5, "SC": 0.2},
+    "relevancia_pesos": dict(PESO_POR_NIVEL),
 }
 
 # aluno_apto         — prazo no futuro, todos os requisitos cumpridos.
@@ -223,7 +220,7 @@ _PRODUCTIONS: dict[str, list[dict[str, Any]]] = {
     ],
     "aluno_risco": [],
     "aluno_regular": [
-        {"id": "p_reg1", "veiculo_id": "v_b", "nivel": "B", "pontuacao_base": 8, "bibliografica": False},
+        {"id": "p_reg1", "veiculo_id": "v_b1", "nivel": "B1", "pontuacao_base": 8, "bibliografica": False},
     ],
     "aluno_recem": [],
     "aluno_credito_risco": [],
@@ -259,6 +256,9 @@ class FixtureRepository:
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as tasks do plano de trabalho do aluno."""
+        work_plan_tasks = await WorkPlanRepository().get_plan_tasks(student_id)
+        if work_plan_tasks:
+            return work_plan_tasks
         return [dict(t) for t in _TASKS.get(student_id, [])]
 
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:

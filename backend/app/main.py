@@ -25,6 +25,7 @@ from backend.app.api.v1 import (
     audit_logs,
     auth,
     checklist,
+    coordination_transfers,
     dashboard,
     extensions,
     inference,
@@ -33,6 +34,7 @@ from backend.app.api.v1 import (
     programs,
     reports,
     students,
+    transfers,
     vehicles,
     work_plan,
 )
@@ -81,9 +83,15 @@ app.include_router(productions.router, prefix=_PREFIX, tags=["productions"])
 app.include_router(vehicles.router, prefix=_PREFIX, tags=["vehicles"])
 app.include_router(extensions.router, prefix=_PREFIX, tags=["extensions"])
 app.include_router(checklist.router, prefix=_PREFIX, tags=["checklist"])
+app.include_router(
+    coordination_transfers.router,
+    prefix=_PREFIX,
+    tags=["coordination-transfers"],
+)
 app.include_router(programs.router, prefix=_PREFIX, tags=["programs"])
 app.include_router(inference.router, prefix=_PREFIX, tags=["inference"])
 app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
 app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
 app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
 app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
+app.include_router(transfers.router, prefix=_PREFIX, tags=["transfers"])

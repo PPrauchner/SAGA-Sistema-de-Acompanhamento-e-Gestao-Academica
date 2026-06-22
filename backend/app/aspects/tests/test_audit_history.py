@@ -48,6 +48,16 @@ class _StudentRepo:
         return "hist1"
 
 
+class _TransferRepo:
+    documents: dict[str, dict[str, Any]] = {
+        "tr1": {"student_id": "s1", "status": "pendente"}
+    }
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        data = self.documents.get(doc_id)
+        return dict(data) if data else None
+
+
 def _user() -> CurrentUser:
     return CurrentUser(
         uid="coord1",
@@ -217,6 +227,67 @@ async def test_track_history_salva_observacao_no_snapshot(
 
     _, snapshot = _StudentRepo.history[0]
     assert snapshot["observacao"] == "Mudanca revisada pela coordenacao"
+
+
+async def test_track_history_resolve_student_id_no_body(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _StudentRepo.documents = {"s1": {"nome": "Aluno", "orientador_id": "advisor1"}}
+    _StudentRepo.history = []
+    monkeypatch.setattr(history_module, "StudentRepository", _StudentRepo)
+
+    payload = type(
+        "Payload",
+        (),
+        {"student_id": "s1", "observacao": "Transferencia direta"},
+    )()
+
+    @track_history
+    async def direct_transfer(
+        body,
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        await _StudentRepo().update(
+            body.student_id,
+            {"orientador_id": "advisor2"},
+        )
+        return {"message": "ok"}
+
+    await direct_transfer(payload, _user())
+
+    student_id, snapshot = _StudentRepo.history[0]
+    assert student_id == "s1"
+    assert snapshot["valor_anterior"]["orientador_id"] == "advisor1"
+    assert snapshot["valor_novo"]["orientador_id"] == "advisor2"
+    assert snapshot["observacao"] == "Transferencia direta"
+
+
+async def test_track_history_resolve_student_id_por_transfer_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _StudentRepo.documents = {"s1": {"nome": "Aluno", "orientador_id": "advisor1"}}
+    _StudentRepo.history = []
+    _TransferRepo.documents = {"tr1": {"student_id": "s1", "status": "pendente"}}
+    monkeypatch.setattr(history_module, "StudentRepository", _StudentRepo)
+    monkeypatch.setattr(history_module, "TransferRepository", _TransferRepo)
+
+    @track_history
+    async def approve_transfer(
+        transfer_id: str,
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        await _StudentRepo().update(
+            "s1",
+            {"orientador_id": "advisor2"},
+        )
+        return {"message": "ok"}
+
+    await approve_transfer("tr1", _user())
+
+    student_id, snapshot = _StudentRepo.history[0]
+    assert student_id == "s1"
+    assert snapshot["valor_anterior"]["orientador_id"] == "advisor1"
+    assert snapshot["valor_novo"]["orientador_id"] == "advisor2"
 
 
 class _ActivityTypeRepo:

@@ -62,6 +62,7 @@ erDiagram
     students ||--o{ work_plan : possui
     students ||--o{ activities : registra
     students ||--o{ extensions : solicita
+    students ||--o{ transfer_requests : transfere
     students ||--o{ inferred_status : historiza
     activity_types ||--o{ activities : tipifica
     productions ||--o{ activities : "creditada por"
@@ -202,6 +203,32 @@ a **divergência entre as duas é sinal de atenção**.
 | `criado_em` / `atualizado_em` | timestamp | | |
 | `orientandos_ativos` | int | `calc` | computado em leitura (contagem de `students` por `orientador_id`) |
 
+### `transfer_requests` - colecao raiz - chave: `auto-id`
+
+Registra transferencias same-program de orientando entre orientadores. A mesma entidade cobre
+o mover-direto da coordenacao e a solicitacao do orientador com aprovacao da coordenacao.
+
+| Campo | Tipo | Ref | Notas |
+|-------|------|-----|-------|
+| `student_id` | string | ->`students` | aluno transferido |
+| `orientador_origem_id` | string | ->`advisors` | orientador atual no momento da solicitacao |
+| `orientador_destino_id` | string | ->`advisors` | destino imutavel da solicitacao |
+| `solicitante_id` | string | ->`users.uid` | quem iniciou a solicitacao/acao |
+| `programa_id` | string | ->`programs` (soft) | origem e destino precisam pertencer ao mesmo programa |
+| `status` | string | | `pendente`\|`aprovada`\|`rejeitada`\|`cancelada` |
+| `tipo` | string | | `direta_coordenacao`\|`solicitada_orientador` |
+| `motivo` / `observacao` | string\|null | | justificativa de rejeicao/cancelamento ou observacao livre |
+| `created_at` / `updated_at` | timestamp | | |
+| `approved_at` / `approved_by` | timestamp / uid | | preenchido quando aprovada ou mover-direto efetivado |
+| `rejected_at` / `rejected_by` | timestamp / uid | | preenchido quando rejeitada |
+| `cancelled_at` / `cancelled_by` | timestamp / uid | | preenchido quando cancelada |
+| `cancel_reason` | string\|null | | motivo tecnico/usuario do cancelamento |
+| `cancelled_request_id` | string\|null | ->`transfer_requests` | mover-direto pode cancelar pendente anterior |
+
+> Invariante: so pode existir uma solicitacao `pendente` por aluno. A efetivacao atualiza
+> `students.orientador_id`, limpa `coorientador_id` quando o destino era coorientador atual,
+> registra A02/A03 e dispara A05 para origem, destino e aluno.
+
 ### `programs` 🔲 — chave: `prog_default` (singleton de configuração)
 
 Guarda os **fatos de configuração do motor**. `vehicle_levels` é sub-coleção (ver subdomínio 3).
@@ -278,7 +305,7 @@ erDiagram
 | `nome` | string | `revisao_bibliografica`\|`definicao_problema`\|`desenvolvimento`\|`experimentos`\|`escrita`\|`qualificacao`\|`defesa` |
 | `ordem` | int | |
 | `data_inicio` / `data_fim` | timestamp | |
-| `status` | string | `pendente`\|`em_andamento`\|`concluida` |
+| `status` | string | `pendente`\|`em_andamento`\|`concluido`\|`atrasado` |
 | `criado_por` | string (uid orientador) | |
 
 ### `tasks` 🔲 — sub-coleção de `stages`
@@ -287,11 +314,15 @@ erDiagram
 |-------|------|-------|
 | `titulo` / `descricao` | string | |
 | `prazo` | timestamp | |
-| `status` | string | `pendente`\|`em_andamento`\|`concluida`\|`atrasada` |
+| `status` | string | `pendente`\|`em_andamento`\|`concluido`\|`atrasado` |
 | `prioridade` | string | `baixa`\|`media`\|`alta` |
 | `responsavel_id` | string | →`users.uid` (aluno) |
 | `criado_por` | string | →`users.uid` (orientador) |
 | `criado_em` / `atualizado_em` | timestamp | |
+
+> Convenção implementada: `work_plan`, `stages` e `tasks` usam os status canônicos
+> masculinos `concluido` e `atrasado`. Entradas legadas `concluida`/`atrasada` são aceitas
+> apenas como compatibilidade e normalizadas na borda.
 
 ### `updates` 🔲 — sub-coleção de `tasks`
 
@@ -449,13 +480,14 @@ Config de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode e
 |-------|------|-------|
 | `veiculo_id` | string (PK = id do veículo) | |
 | `nivel` | string | `A1`\|`A2`\|`A3`\|`A4`\|`B1`\|`B2`\|`SC` (Qualis Único; `SC` = Sem Classificação) |
-| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.7, B1=0.5, B2=0.5, SC=0.2 |
+| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.55, B1=0.4, B2=0.3, SC=0.2 (escala monotônica) |
 | `atualizado_em` / `atualizado_por` | timestamp / uid | |
 
 > **Sem nível configurado:** RL05 usa **peso default `SC` = 0.2** (fallback). Reclassificar recalcula o score.
 >
-> ⚠️ **A confirmar:** os pesos `A3=A4=0.7` e `B1=B2=0.5` foram herdados do código (PR #111); avaliar
-> se devem ser monotônicos (ex.: Qualis normalizado `A4=0.55`, `B1=0.4`, `B2=0.3`).
+> **Escala monotônica (decisão R4, issue #133):** estritamente decrescente — um nível superior
+> sempre pondera mais que um inferior. Substitui os pesos não-monotônicos herdados do PR #111
+> (`A4=0.7`, `B1=B2=0.5`). Fonte de verdade no código: `backend/app/models/vehicle.py`.
 
 ---
 
@@ -584,7 +616,7 @@ Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genéri
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida` |
+| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador`\|`transferencia_coordenacao` |
 | `titulo` / `mensagem` | string | |
 | `destinatario_id` | string | →`users.uid` (soft) |
 | `entidade_tipo` / `entidade_id` | string | ref soft polimórfica — **sem aresta** |
@@ -608,6 +640,9 @@ O Firestore não impõe integridade referencial. Estas regras são responsabilid
    Perder a última capacidade ⇒ desativar conta (`ativo=false`), nunca `role` vazio.
 4. **`prazo_final` vigente**: atualizado no ingresso e a cada prorrogação aprovada; cada
    `extensions.prazo_novo` guarda o histórico.
+5. **Transferencia same-program**: origem e destino pertencem ao mesmo `programa_id`, destino
+   respeita `limite_orientandos`, aluno terminal (`concluido`/`desligado`) nao transfere e
+   solicitacao duplicada pendente retorna conflito.
 
 ## Campos calculados (não-entrada do usuário)
 

@@ -7,14 +7,13 @@ Responsabilidades:
   creditos_grupo_basico_min=12, creditos_grupo_especifico_min=8,
   creditos_grupo_tecnologico_max=4, creditos_total_min=24, max_prorrogacoes=1,
   duracao_prorrogacao_meses=6, meses_ate_qualificacao=12.
-- Popular programs/prog_default/vehicle_levels/ com os níveis de relevância padrão
-  (configuráveis), escala Qualis Único de 7 níveis: A1 (peso 1.0), A2 (0.85), A3 (0.7),
-  A4 (0.7), B1 (0.5), B2 (0.5), SC (0.2). Veículo sem nível configurado usa fallback SC.
-- Popular activity_types/ com os 4 tipos de atividade creditável NÃO bibliográfica:
-  Disciplina Cursada (básico, 4), Estágio Docência (básico, 2),
-  Software Registrado (tecnológico, 3, limite=4), Participação Banca (básico, 1).
-  Publicações (artigo/livro/capítulo) são produções (coleção raiz productions, RL05), não
-  activity_types — a distinção publicado/submetido vive em status_publicacao.
+- Popular programs/prog_default/vehicle_levels/ com os 7 níveis de relevância padrão
+  (escala Qualis Único monotônica): A1 (1.0), A2 (0.85), A3 (0.7), A4 (0.55), B1 (0.4),
+  B2 (0.3), SC (0.2).
+- Popular activity_types/ com os 6 tipos de atividade padrão: Artigo Publicado (específico,
+  pontuacao_base=10), Artigo Submetido (específico, 5), Disciplina Cursada (básico, 4),
+  Estágio Docência (básico, 2), Software Registrado (tecnológico, 3, limite=4),
+  Participação Banca (básico, 1).
 - Executar uma única vez no setup do ambiente de desenvolvimento ou produção.
 - Idempotente: verificar existência de documentos antes de criar para evitar duplicatas.
 """
@@ -32,6 +31,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from backend.app.core.firebase import shutdown_firebase  # noqa: E402
+from backend.app.models.vehicle import PESO_POR_NIVEL  # noqa: E402
 from backend.app.repositories.firebase_repository import (
     FirebaseRepository,
 )  # noqa: E402
@@ -53,13 +53,12 @@ PROGRAM_DEFAULT: dict[str, Any] = {
 }
 
 VEHICLE_LEVELS_DEFAULT: dict[str, dict[str, Any]] = {
-    "v_placeholder_a1": {"veiculo_id": "v_placeholder_a1", "nivel": "A1", "peso": 1.0},
-    "v_placeholder_a2": {"veiculo_id": "v_placeholder_a2", "nivel": "A2", "peso": 0.85},
-    "v_placeholder_a3": {"veiculo_id": "v_placeholder_a3", "nivel": "A3", "peso": 0.7},
-    "v_placeholder_a4": {"veiculo_id": "v_placeholder_a4", "nivel": "A4", "peso": 0.7},
-    "v_placeholder_b1": {"veiculo_id": "v_placeholder_b1", "nivel": "B1", "peso": 0.5},
-    "v_placeholder_b2": {"veiculo_id": "v_placeholder_b2", "nivel": "B2", "peso": 0.5},
-    "v_placeholder_sc": {"veiculo_id": "v_placeholder_sc", "nivel": "SC", "peso": 0.2},
+    f"v_placeholder_{nivel.lower()}": {
+        "veiculo_id": f"v_placeholder_{nivel.lower()}",
+        "nivel": nivel,
+        "peso": peso,
+    }
+    for nivel, peso in PESO_POR_NIVEL.items()
 }
 
 ACTIVITY_TYPES_DEFAULT: dict[str, dict[str, Any]] = {

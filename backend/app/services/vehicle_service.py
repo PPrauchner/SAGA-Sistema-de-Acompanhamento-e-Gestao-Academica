@@ -20,18 +20,8 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 
 from backend.app.core.auth import CurrentUser
-from backend.app.models.vehicle import VehicleCreate, VehicleLevelUpdate
+from backend.app.models.vehicle import PESO_POR_NIVEL, VehicleCreate, VehicleLevelUpdate
 from backend.app.repositories.vehicle_repository import VehicleRepository
-
-PESO_POR_NIVEL: dict[str, float] = {
-    "A1": 1.0,
-    "A2": 0.85,
-    "A3": 0.7,
-    "A4": 0.7,
-    "B1": 0.5,
-    "B2": 0.5,
-    "SC": 0.2,
-}
 
 
 class VehicleService:
