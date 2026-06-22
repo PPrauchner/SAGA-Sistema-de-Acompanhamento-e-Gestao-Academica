@@ -5,7 +5,17 @@ Documenta o **modelo completo pretendido**, marcando o que já está implementad
 
 > **Fonte canônica:** `docs/specs/03_firebase_schema.json`, refinado pelas decisões em
 > [`data-model-decisions.md`](./data-model-decisions.md) (sessão de *grill-me*).
-> Onde código e spec divergem, o **código em execução vence**.
+>
+> **Precedência código × docs.** Depende da natureza da divergência:
+> - **Divergência acidental** numa entidade já implementada (✅) — a doc apenas se
+>   desatualizou: o **código em execução vence**; corrija a doc. (Hoje só `users`/`invites`
+>   têm código real.)
+> - **Refinamento deliberado** registrado em [`data-model-decisions.md`](./data-model-decisions.md)
+>   (série **R**) ainda **não aplicado ao código**: a **decisão/doc lidera**; o código diverge
+>   de forma conhecida e **deve ser ajustado** (rastreado como bloqueador, ex.: C1, M1).
+>
+> Em suma: o código vence quando a doc só se atrasou; a doc/decisão vence quando o log
+> deliberou uma mudança que o código ainda não acompanhou.
 >
 > **Escopo:** apenas backend / Firestore. O motor de inferência (`Atom`, `Variable`,
 > `Compound`, `FactBase`) é representação lógica em memória, **não** dados persistidos, e

@@ -5,8 +5,12 @@
 > Atualizado a cada pergunta respondida.
 >
 > Fontes: `docs/specs/03_firebase_schema.json` (schema canônico), `05_discentes.json`,
-> `07_atividades_producoes.json`, `CONTEXT.md`. Onde código e spec divergem, **o código
-> em execução vence** (hoje só `users`/`invites` têm código real; o resto são stubs).
+> `07_atividades_producoes.json`, `CONTEXT.md`.
+>
+> **Precedência código × docs.** Divergência acidental numa entidade já implementada
+> (hoje só `users`/`invites`; o resto são stubs) → o **código em execução vence**; corrija a
+> doc. Refinamento deliberado da série **R** (abaixo) ainda não aplicado ao código → a
+> **decisão lidera** e o código deve ser ajustado (bloqueador, ex.: C1, M1).
 
 ---
 
