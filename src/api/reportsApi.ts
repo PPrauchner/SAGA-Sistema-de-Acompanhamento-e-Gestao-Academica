@@ -90,8 +90,11 @@ export interface CompletionTimeResponse {
 export interface ProductionLevelBreakdown {
     A1: number;
     A2: number;
-    B: number;
-    C: number;
+    A3: number;
+    A4: number;
+    B1: number;
+    B2: number;
+    SC: number;
 }
 
 export interface ProductionByStudentItem {
