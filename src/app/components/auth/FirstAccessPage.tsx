@@ -146,8 +146,8 @@ export function FirstAccessPage() {
               type="text"
               value={token}
               onChange={(e) => { setToken(e.target.value); setTokenError(""); }}
-              placeholder="Ex: PPGCC-2024-XXXXX"
-              className="w-full rounded-xl px-4 py-3 outline-none transition-all tracking-widest"
+              placeholder="Cole o token recebido por e-mail"
+              className="w-full rounded-xl px-4 py-3 outline-none transition-all"
               style={{
                 border: `2px solid ${tokenError ? "#ef4444" : "#e2e8f0"}`,
                 background: "#f8fafc",
