@@ -254,7 +254,7 @@ async def test_direct_transfer_cancela_pendente_do_aluno() -> None:
         "transfer_old": {
             "student_id": "student1",
             "status": "pendente",
-            "tipo": "solicitada_aluno",
+            "tipo": "solicitada_orientador",
             "solicitante_id": "uid-student",
             "created_at": datetime.now(timezone.utc),
         },
@@ -366,7 +366,7 @@ async def test_aprovacao_transfere_aluno_reaproveitando_efetivacao() -> None:
     assert result["status"] == "aprovada"
     assert _FakeStudentRepository.store["student1"]["orientador_id"] == "advisor2"
     assert _FakeTransferRepository.store["transfer1"]["status"] == "aprovada"
-    assert _FakeTransferRepository.store["transfer1"]["decidido_por"] == "coord1"
+    assert _FakeTransferRepository.store["transfer1"]["approved_by"] == "coord1"
 
 
 async def test_rejeicao_exige_motivo() -> None:
@@ -392,7 +392,7 @@ async def test_rejeicao_salva_motivo_e_decisor() -> None:
 
     assert result["status"] == "rejeitada"
     assert _FakeTransferRepository.store["transfer1"]["motivo"] == "Destino indisponivel"
-    assert _FakeTransferRepository.store["transfer1"]["decidido_por"] == "coord1"
+    assert _FakeTransferRepository.store["transfer1"]["rejected_by"] == "coord1"
 
 
 async def test_cancelamento_so_funciona_para_solicitante_pendente() -> None:
@@ -411,7 +411,7 @@ async def test_cancelamento_so_funciona_para_solicitante_pendente() -> None:
 
     assert result["status"] == "cancelada"
     assert _FakeTransferRepository.store["transfer1"]["status"] == "cancelada"
-    assert _FakeTransferRepository.store["transfer1"]["cancelado_por"] == "uid-origin"
+    assert _FakeTransferRepository.store["transfer1"]["cancelled_by"] == "uid-origin"
 
 
 async def test_cancelamento_bloqueia_outro_orientador() -> None:
