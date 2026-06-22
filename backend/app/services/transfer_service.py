@@ -152,10 +152,8 @@ class TransferService:
                 pending["id"],
                 {
                     "cancelled_at": now,
-                    "cancelado_em": now,
                     "updated_at": now,
                     "cancelled_by": user.uid,
-                    "cancelado_por": user.uid,
                     "cancel_reason": "Transferencia direta realizada pela coordenacao",
                 },
             )
@@ -173,8 +171,6 @@ class TransferService:
                 "updated_at": now,
                 "approved_at": now,
                 "approved_by": user.uid,
-                "decidido_em": now,
-                "decidido_por": user.uid,
                 "observacao": data.observacao,
                 "cancelled_request_id": pending["id"] if pending else None,
             },
@@ -210,6 +206,7 @@ class TransferService:
 
         destination = await self._get_required_advisor(data.orientador_destino_id, "destino")
         await self._validate_transfer_target(student, destination)
+        origin = await self._get_required_advisor(advisor_id, "origem")
 
         pending = await self._transfers.get_pending_by_student(data.student_id)
         if pending is not None:
@@ -240,7 +237,7 @@ class TransferService:
             "student_nome": student.get("nome"),
             "orientador_origem_id": advisor_id,
             "orientador_origem_uid": user.uid,
-            "orientador_origem_nome": user.email,
+            "orientador_origem_nome": origin.get("nome"),
             "orientador_destino_id": data.orientador_destino_id,
             "orientador_destino_uid": destination.get("uid"),
             "orientador_destino_nome": destination.get("nome"),
@@ -303,8 +300,6 @@ class TransferService:
                 "updated_at": now,
                 "approved_at": now,
                 "approved_by": user.uid,
-                "decidido_em": now,
-                "decidido_por": user.uid,
             },
         )
 
@@ -351,8 +346,8 @@ class TransferService:
             {
                 "motivo": motivo,
                 "updated_at": now,
-                "decidido_em": now,
-                "decidido_por": user.uid,
+                "rejected_at": now,
+                "rejected_by": user.uid,
             },
         )
 
@@ -392,9 +387,7 @@ class TransferService:
             {
                 "updated_at": now,
                 "cancelled_at": now,
-                "cancelado_em": now,
                 "cancelled_by": user.uid,
-                "cancelado_por": user.uid,
             },
         )
 
