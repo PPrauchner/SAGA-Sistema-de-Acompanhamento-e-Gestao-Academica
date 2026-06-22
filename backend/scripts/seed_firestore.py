@@ -32,12 +32,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from backend.app.core.firebase import shutdown_firebase  # noqa: E402
 from backend.app.models.vehicle import PESO_POR_NIVEL  # noqa: E402
+from backend.app.models.work_plan import STATUS_CONCLUIDO  # noqa: E402
 from backend.app.repositories.firebase_repository import (
     FirebaseRepository,
+)  # noqa: E402
+from backend.app.repositories.work_plan_repository import (
+    WorkPlanRepository,
 )  # noqa: E402
 
 PROGRAM_ID = "prog_default"
 SEED_USER_ID = "seed_firestore"
+SEED_STUDENT_ID = "seed_aluno_exemplo"
 
 PROGRAM_DEFAULT: dict[str, Any] = {
     "nome": "PPGCC — Programa de Pós-Graduação em Ciência da Computação",
@@ -96,6 +101,89 @@ ACTIVITY_TYPES_DEFAULT: dict[str, dict[str, Any]] = {
 }
 
 
+def _seed_student(now: datetime) -> dict[str, Any]:
+    """Documento minimo de um aluno real para acompanhar o plano de exemplo."""
+    return {
+        "uid": SEED_STUDENT_ID,
+        "nome": "Aluno Exemplo (seed)",
+        "email": "aluno.exemplo@example.com",
+        "matricula": "0000000",
+        "orientador_id": None,
+        "coorientador_id": None,
+        "programa_id": PROGRAM_ID,
+        "nivel": "mestrado",
+        "data_ingresso": datetime(2025, 3, 1, tzinfo=timezone.utc),
+        "prazo_final": datetime(2027, 3, 1, tzinfo=timezone.utc),
+        "situacao_registrada": "regular",
+        "situacao_inferida": "regular",
+        "proficiencia_comprovada": False,
+        "qualificacao_aprovada": False,
+        "criado_em": now,
+        "atualizado_em": now,
+        "atualizado_por": SEED_USER_ID,
+    }
+
+
+async def _seed_example_work_plan(now: datetime) -> int:
+    """Cria, de forma idempotente, um plano de exemplo para o aluno real de seed.
+
+    Cria o aluno SEED_STUDENT_ID se ausente e, se ele ainda nao tiver plano, monta um
+    plano com uma etapa e duas tasks (uma concluida, uma pendente) para que dashboards
+    e a pagina de Plano de Trabalho exibam progresso real.
+
+    Args:
+        now: Timestamp de auditoria.
+
+    Returns:
+        Numero de planos criados (0 ou 1).
+    """
+    students = FirebaseRepository("students")
+    await _create_if_missing(students, SEED_STUDENT_ID, _seed_student(now))
+
+    work_plan = WorkPlanRepository()
+    if await work_plan.get_plan(SEED_STUDENT_ID) is not None:
+        return 0
+
+    plan_id = await work_plan.create_plan(
+        SEED_STUDENT_ID,
+        {
+            "titulo": "Plano de trabalho de exemplo",
+            "data_inicio": datetime(2025, 3, 1, tzinfo=timezone.utc),
+            "data_fim_prevista": datetime(2027, 3, 1, tzinfo=timezone.utc),
+            "descricao": "Plano de exemplo gerado pelo seed.",
+        },
+    )
+    stage_id = await work_plan.create_stage(
+        plan_id,
+        {
+            "nome": "Revisao bibliografica",
+            "ordem": 1,
+            "data_inicio": datetime(2025, 3, 1, tzinfo=timezone.utc),
+            "data_fim": datetime(2025, 8, 1, tzinfo=timezone.utc),
+        },
+    )
+    concluida_id = await work_plan.create_task(
+        stage_id,
+        {
+            "titulo": "Levantamento bibliografico",
+            "descricao": "",
+            "prazo": datetime(2025, 6, 1, tzinfo=timezone.utc),
+            "prioridade": "alta",
+        },
+    )
+    await work_plan.update_task(concluida_id, {"status": STATUS_CONCLUIDO, "progresso_percentual": 100.0})
+    await work_plan.create_task(
+        stage_id,
+        {
+            "titulo": "Sintese da literatura",
+            "descricao": "",
+            "prazo": datetime(2025, 8, 1, tzinfo=timezone.utc),
+            "prioridade": "media",
+        },
+    )
+    return 1
+
+
 async def _create_if_missing(
     repository: FirebaseRepository,
     doc_id: str,
@@ -128,6 +216,7 @@ async def seed_firestore() -> dict[str, int]:
         "programs": 0,
         "vehicle_levels": 0,
         "activity_types": 0,
+        "work_plans": 0,
     }
 
     if await _create_if_missing(
@@ -155,6 +244,8 @@ async def seed_firestore() -> dict[str, int]:
         if await _create_if_missing(activity_types, doc_id, payload):
             created["activity_types"] += 1
 
+    created["work_plans"] += await _seed_example_work_plan(now)
+
     return created
 
 
@@ -168,6 +259,7 @@ def main() -> None:
     print(f"programs criados: {created['programs']}")
     print(f"vehicle_levels criados: {created['vehicle_levels']}")
     print(f"activity_types criados: {created['activity_types']}")
+    print(f"work_plans criados: {created['work_plans']}")
 
 
 if __name__ == "__main__":
