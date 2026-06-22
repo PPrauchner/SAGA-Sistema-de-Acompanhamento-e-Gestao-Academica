@@ -59,7 +59,7 @@ class VehicleService:
                     "sigla": vehicle.get("sigla"),
                     "issn": vehicle.get("issn"),
                     "nivel": nivel,
-                    "peso": level.get("peso", PESO_POR_NIVEL[nivel]),
+                    "peso": level.get("peso", PESO_POR_NIVEL.get(nivel, PESO_POR_NIVEL["SC"])),
                 }
             )
         return result
