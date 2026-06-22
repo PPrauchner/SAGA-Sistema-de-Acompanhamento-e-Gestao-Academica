@@ -94,12 +94,15 @@ class CompletionTimeResponse(BaseModel):
 
 
 class ProductionLevelBreakdown(BaseModel):
-    """Distribuição de produções por nível de relevância do veículo."""
+    """Distribuição de produções pelos sete níveis Qualis Único do veículo."""
 
     A1: int = 0
     A2: int = 0
-    B: int = 0
-    C: int = 0
+    A3: int = 0
+    A4: int = 0
+    B1: int = 0
+    B2: int = 0
+    SC: int = 0
 
 
 class ProductionByStudentItem(BaseModel):
