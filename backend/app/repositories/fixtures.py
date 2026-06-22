@@ -23,6 +23,8 @@ import uuid
 from datetime import date, timedelta
 from typing import Any
 
+from backend.app.models.vehicle import PESO_POR_NIVEL
+
 _TODAY = date.today()
 
 
@@ -43,7 +45,7 @@ _PROGRAM: dict[str, Any] = {
     "max_creditos_tecnologico": 4,
     "min_creditos_total": 24,
     "max_prorrogacoes": 2,
-    "relevancia_pesos": {"A1": 2.0, "A2": 1.5, "B": 1.0, "C": 0.5},
+    "relevancia_pesos": dict(PESO_POR_NIVEL),
 }
 
 # aluno_apto         — prazo no futuro, todos os requisitos cumpridos.
@@ -223,7 +225,7 @@ _PRODUCTIONS: dict[str, list[dict[str, Any]]] = {
     ],
     "aluno_risco": [],
     "aluno_regular": [
-        {"id": "p_reg1", "veiculo_id": "v_b", "nivel": "B", "pontuacao_base": 8, "bibliografica": False},
+        {"id": "p_reg1", "veiculo_id": "v_b1", "nivel": "B1", "pontuacao_base": 8, "bibliografica": False},
     ],
     "aluno_recem": [],
     "aluno_credito_risco": [],
