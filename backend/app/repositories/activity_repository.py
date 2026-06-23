@@ -48,49 +48,41 @@ class ActivityRepository(FirebaseRepository):
     async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
         return await self.list_subcollection(student_id, "activities")
 
-    # -- usado pelo fluxo de validação (PATCH /validate), que só tem activity_id na URL --
-    # síncronos de propósito, pra não mudar o comportamento dos decoradores já testados
+    # -- usado pelos fluxos de validação (PATCH /parecer e /validate), que só têm --
+    # activity_id na URL: localiza o documento via collection_group, sem o student_id.
+    # O scan roda em thread separada (asyncio.to_thread) para não bloquear o event loop.
 
-    def get_by_id(self, activity_id: str) -> dict[str, Any] | None:
-        for snapshot in get_firestore_client().collection_group("activities").stream():
-            if snapshot.id == activity_id:
-                item = snapshot.to_dict()
-                item["id"] = snapshot.id
-                item["student_id"] = snapshot.reference.parent.parent.id
-                return item
-        return None
-
-    def update_by_id(self, activity_id: str, data: dict[str, Any]) -> dict[str, Any]:
-        for snapshot in get_firestore_client().collection_group("activities").stream():
-            if snapshot.id == activity_id:
-                snapshot.reference.update(data)
-                updated = snapshot.reference.get()
-                item = updated.to_dict()
-                item["id"] = updated.id
-                item["student_id"] = updated.reference.parent.parent.id
-                return item
-        raise ValueError(f"Atividade {activity_id} não encontrada.")
-
-    def get_advisor_uid_by_student(self, student_id: str) -> str | None:
-        doc = get_firestore_client().collection("students").document(student_id).get()
-        if not doc.exists:
+    async def get_by_id(self, activity_id: str) -> dict[str, Any] | None:
+        def _find() -> dict[str, Any] | None:
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                if snapshot.id == activity_id:
+                    item = snapshot.to_dict()
+                    item["id"] = snapshot.id
+                    item["student_id"] = snapshot.reference.parent.parent.id
+                    return item
             return None
-        return doc.to_dict().get("orientador_uid")
 
-    def get_activity_type(self, tipo_id: str) -> dict[str, Any] | None:
-        doc = get_firestore_client().collection("activity_types").document(tipo_id).get()
-        if not doc.exists:
-            return None
-        return {"id": doc.id, **doc.to_dict()}
+        return await asyncio.to_thread(_find)
 
-    def count_approved_productions(self, student_id: str) -> int:
-        docs = (
-            get_firestore_client()
-            .collection("students")
-            .document(student_id)
-            .collection("activities")
-            .where("categoria", "==", "producao_bibliografica")
-            .where("status", "==", "aprovado")
-            .stream()
-        )
-        return sum(1 for _ in docs)
+    async def update_by_id(self, activity_id: str, data: dict[str, Any]) -> dict[str, Any]:
+        def _update() -> dict[str, Any]:
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                if snapshot.id == activity_id:
+                    snapshot.reference.update(data)
+                    updated = snapshot.reference.get()
+                    item = updated.to_dict()
+                    item["id"] = updated.id
+                    item["student_id"] = updated.reference.parent.parent.id
+                    return item
+            raise ValueError(f"Atividade {activity_id} não encontrada.")
+
+        return await asyncio.to_thread(_update)
+
+    async def get_activity_type(self, tipo_id: str) -> dict[str, Any] | None:
+        def _read() -> dict[str, Any] | None:
+            doc = get_firestore_client().collection("activity_types").document(tipo_id).get()
+            if not doc.exists:
+                return None
+            return {"id": doc.id, **doc.to_dict()}
+
+        return await asyncio.to_thread(_read)
