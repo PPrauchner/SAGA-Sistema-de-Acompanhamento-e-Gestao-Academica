@@ -10,18 +10,20 @@ Responsabilidades:
 - POST /api/v1/activities/{activity_id}/comprovante: aluno faz upload real do comprovante
   (PDF/JPEG/PNG) ao Firebase Storage. Backend persiste no bucket via Admin SDK e devolve a
   URL de download tokenizada. Aplica @requires_role('aluno') e @audit_operation.
-- PATCH /api/v1/activities/{activity_id}/validate: orientador emite parecer ou coordenação
-  aprova/rejeita. Operação mais crítica do fluxo — aplica @requires_role, @audit_operation
-  e @trigger_alerts (notifica aluno após decisão da coordenação). Motor verifica
-  elegibilidade (RL04) e gera fato producao_bibliografica_validada quando aplicável.
+- PATCH /api/v1/activities/{activity_id}/parecer: orientador emite parecer sobre a atividade
+  do próprio orientando. Aplica @requires_role('orientador'), @requires_ownership (A01 por
+  propriedade) e @audit_operation. O parecer é um campo; não altera o status.
+- PATCH /api/v1/activities/{activity_id}/validate: coordenação aprova/rejeita definitivamente.
+  Operação mais crítica do fluxo — aplica @requires_role('coordenacao') e @audit_operation.
+  Motor verifica elegibilidade (RL04) e gera fato producao_bibliografica_validada quando aplicável.
 """
-from typing import List, Optional, Union
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from backend.app.aspects.alerts import trigger_alerts
 from backend.app.aspects.audit import audit_operation
-from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.authorization import requires_ownership, requires_role
 from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
@@ -29,6 +31,7 @@ from backend.app.models.activity import (
     ActivityCreateResponse,
     ActivityResponse,
     ComprovanteUploadResponse,
+    ParecerRequest,
     ValidateActivityRequest,
     ValidateActivityResponse,
 )
@@ -154,39 +157,65 @@ async def upload_comprovante(
 
 
 # ---------------------------------------------------------------------------
-# PATCH /activities/{activity_id}/validate
+# PATCH /activities/{activity_id}/parecer  (orientador — issue #48)
+# ---------------------------------------------------------------------------
+
+def _owner_uid_da_atividade(kwargs: dict[str, Any]):
+    """Resolver do A01 por propriedade: uid do orientador responsável pela atividade.
+
+    Recebe os kwargs do endpoint (contêm `activity_id`) e delega a resolução em dois
+    saltos ao service. Retorna uma coroutine — o aspecto @requires_ownership a aguarda.
+    """
+    return activity_service.resolve_advisor_uid_for_activity(kwargs.get("activity_id"))
+
+
+@router.patch(
+    "/activities/{activity_id}/parecer",
+    response_model=ActivityResponse,
+)
+@requires_role("orientador")
+@requires_ownership(_owner_uid_da_atividade)
+@audit_operation
+async def emitir_parecer(
+    activity_id: str,
+    payload: ParecerRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> ActivityResponse:
+    """
+    Orientador emite parecer textual sobre uma atividade submetida pelo orientando.
+    - Apenas o orientador do próprio aluno pode emitir (A01 por propriedade)
+    - Operação auditada (A02)
+    - O parecer é um campo da atividade; o status permanece 'enviado' até a coordenação decidir
+    """
+    return await activity_service.emitir_parecer_orientador(
+        activity_id=activity_id,
+        payload=payload,
+        current_user=user,
+    )
+
+
+# ---------------------------------------------------------------------------
+# PATCH /activities/{activity_id}/validate  (coordenação — issue #49)
 # ---------------------------------------------------------------------------
 
 @router.patch(
     "/activities/{activity_id}/validate",
-    response_model=Union[ActivityResponse, ValidateActivityResponse],
+    response_model=ValidateActivityResponse,
 )
-@requires_role("orientador", "coordenacao")
+@requires_role("coordenacao")
 @audit_operation
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
     user: CurrentUser = Depends(get_current_user),
-) -> Union[ActivityResponse, ValidateActivityResponse]:
+) -> ValidateActivityResponse:
     """
-    Valida uma atividade submetida.
-    Ação `parecer_orientador`:
-    - Apenas o orientador do próprio aluno pode emitir (A01 por propriedade)
-    - Operação auditada (A02)
-    - Retorna ActivityResponse com status atualizado para 'parecer_emitido'
-    Ação `aprovar` | `rejeitar` (coordenação):
+    Coordenação aprova ou rejeita definitivamente a atividade submetida.
     - Apenas coordenação (A01)
     - Operação mais crítica — auditada com detalhes (A02)
     - Contabiliza créditos e gera fato para o motor se produção bibliográfica (RL04/RL05)
-    - Notifica o aluno do resultado (A05 — história 26)
     - Retorna ValidateActivityResponse com novo_status, creditos_contabilizados e fato_gerado
     """
-    if payload.acao.value == "parecer_orientador":
-        return await activity_service.emitir_parecer_orientador(
-            activity_id=activity_id,
-            payload=payload,
-            current_user=user,
-        )
     return await activity_service.validate_activity(
         activity_id=activity_id,
         payload=payload,
