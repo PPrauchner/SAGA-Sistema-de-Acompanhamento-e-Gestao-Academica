@@ -8,6 +8,8 @@
  *   a elegibilidade_preliminar calculada pelo motor RL04.
  * - uploadComprovante(token, activityId, file): POST /api/v1/activities/{id}/comprovante —
  *   envia o arquivo (multipart) ao Firebase Storage e devolve a URL de download tokenizada.
+ * - emitirParecer(token, activityId, parecer): PATCH /api/v1/activities/{id}/parecer —
+ *   orientador registra o parecer textual sobre a atividade do orientando.
  * - getActivityTypes(token): GET /api/v1/activity-types — lista tipos para o formulário de
  *   nova atividade.
  * - Todas as funções incluem Authorization: Bearer <token>.
@@ -99,6 +101,18 @@ export function getActivities(token: string, filters: ActivityFilters = {}): Pro
 
 export function getActivityTypes(token: string): Promise<ActivityType[]> {
   return request<ActivityType[]>("/api/v1/activity-types", token);
+}
+
+/** Orientador emite o parecer textual sobre uma atividade do orientando. */
+export function emitirParecer(
+  token: string,
+  activityId: string,
+  parecer: string,
+): Promise<Activity> {
+  return request<Activity>(`/api/v1/activities/${activityId}/parecer`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ parecer }),
+  });
 }
 
 export function createActivity(
