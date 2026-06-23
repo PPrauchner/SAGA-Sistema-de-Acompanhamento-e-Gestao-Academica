@@ -8,6 +8,10 @@
  *   a elegibilidade_preliminar calculada pelo motor RL04.
  * - uploadComprovante(token, activityId, file): POST /api/v1/activities/{id}/comprovante —
  *   envia o arquivo (multipart) ao Firebase Storage e devolve a URL de download tokenizada.
+ * - emitirParecer(token, activityId, parecer): PATCH /api/v1/activities/{id}/parecer —
+ *   orientador registra o parecer textual sobre a atividade do orientando.
+ * - validarAtividade(token, activityId, payload): PATCH /api/v1/activities/{id}/validate —
+ *   coordenação aprova/rejeita a atividade, contabiliza créditos e dispara a re-inferência.
  * - getActivityTypes(token): GET /api/v1/activity-types — lista tipos para o formulário de
  *   nova atividade.
  * - Todas as funções incluem Authorization: Bearer <token>.
@@ -67,6 +71,22 @@ export interface ComprovanteUploadResult {
   path_bucket: string;
 }
 
+export type ValidateAction = "aprovar" | "rejeitar";
+
+export interface ValidateActivityPayload {
+  acao: ValidateAction;
+  observacao?: string | null;
+  creditos_concedidos?: number | null;
+}
+
+export interface ValidateActivityResult {
+  message: string;
+  novo_status: ActivityStatus;
+  creditos_contabilizados: number | null;
+  motor_inferencia_executado: boolean;
+  fato_gerado: string | null;
+}
+
 export interface ActivityFilters {
   student_id?: string;
   status?: string;
@@ -100,6 +120,30 @@ export function getActivities(token: string, filters: ActivityFilters = {}): Pro
 
 export function getActivityTypes(token: string): Promise<ActivityType[]> {
   return request<ActivityType[]>("/api/v1/activity-types", token);
+}
+
+/** Orientador emite o parecer textual sobre uma atividade do orientando. */
+export function emitirParecer(
+  token: string,
+  activityId: string,
+  parecer: string,
+): Promise<Activity> {
+  return request<Activity>(`/api/v1/activities/${activityId}/parecer`, token, {
+    method: "PATCH",
+    body: JSON.stringify({ parecer }),
+  });
+}
+
+/** Coordenação aprova ou rejeita definitivamente a atividade submetida. */
+export function validarAtividade(
+  token: string,
+  activityId: string,
+  payload: ValidateActivityPayload,
+): Promise<ValidateActivityResult> {
+  return request<ValidateActivityResult>(`/api/v1/activities/${activityId}/validate`, token, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
 }
 
 export function createActivity(
