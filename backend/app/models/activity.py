@@ -23,14 +23,8 @@ ActivityCreateStatus = Literal["rascunho", "enviado"]
 
 
 class ValidateAction(str, Enum):
-    parecer_orientador = "parecer_orientador"
     aprovar = "aprovar"
     rejeitar = "rejeitar"
-
-
-class ParecerOrientador(BaseModel):
-    texto: str = Field(..., min_length=1, description="Texto do parecer do orientador")
-    recomendacao: str = Field(..., description="aprovar | rejeitar | aguardar")
 
 
 class ActivityCreateRequest(BaseModel):
@@ -62,9 +56,7 @@ class ActivityResponse(BaseModel):
     creditos_gerados: float = 0.0
     status: ActivityStatus | str = ActivityStatus.rascunho
 
-    parecer_orientador: Optional[ParecerOrientador] = None
-    parecer_orientador_em: Optional[datetime] = None
-    parecer_orientador_por: Optional[str] = None
+    parecer_orientador: Optional[str] = None
 
     observacao_coordenacao: Optional[str] = None
     aprovado_por: Optional[str] = None
@@ -76,9 +68,14 @@ class ActivityResponse(BaseModel):
     elegivel: Optional[bool] = None
 
 
+class ParecerRequest(BaseModel):
+    """Corpo de PATCH /activities/{id}/parecer — parecer textual do orientador."""
+
+    parecer: str = Field(..., min_length=1, description="Texto do parecer do orientador")
+
+
 class ValidateActivityRequest(BaseModel):
     acao: ValidateAction
-    parecer_orientador: Optional[ParecerOrientador] = None
     observacao: Optional[str] = Field(default=None)
     creditos_concedidos: Optional[float] = Field(default=None)
 
