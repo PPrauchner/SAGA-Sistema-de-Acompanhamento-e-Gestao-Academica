@@ -22,9 +22,11 @@ import {
   getActivities,
   getActivityTypes,
   uploadComprovante,
+  validarAtividade,
   type Activity,
   type ActivityCreateStatus,
   type ActivityType,
+  type ValidateAction,
 } from "@/api/activitiesApi";
 
 // ─── Config de apresentação ─────────────────────────────────────────────────
@@ -94,8 +96,14 @@ export function ActivitiesPage() {
   const [parecerText, setParecerText] = useState("");
   const [parecerSaving, setParecerSaving] = useState(false);
 
+  const [validateTarget, setValidateTarget] = useState<Activity | null>(null);
+  const [validateObs, setValidateObs] = useState("");
+  const [validateCreditos, setValidateCreditos] = useState("");
+  const [validateSaving, setValidateSaving] = useState(false);
+
   const canRegister = role === "aluno";
   const canDarParecer = role === "orientador";
+  const canValidar = role === "coordenacao";
 
   async function loadData(authToken: string): Promise<void> {
     setLoading(true);
@@ -203,6 +211,45 @@ export function ActivitiesPage() {
       setError(err instanceof Error ? err.message : "Falha ao registrar parecer");
     } finally {
       setParecerSaving(false);
+    }
+  }
+
+  function openValidate(activity: Activity): void {
+    setValidateTarget(activity);
+    setValidateObs(activity.observacao_coordenacao ?? "");
+    setValidateCreditos(String(activity.creditos_gerados ?? ""));
+    setError(null);
+    setFeedback(null);
+  }
+
+  async function handleValidar(activity: Activity, acao: ValidateAction): Promise<void> {
+    if (!token) return;
+
+    setValidateSaving(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      const creditos =
+        acao === "aprovar" && validateCreditos.trim() !== "" ? Number(validateCreditos) : null;
+      const result = await validarAtividade(token, activity.id, {
+        acao,
+        observacao: validateObs.trim() || null,
+        creditos_concedidos: creditos,
+      });
+      const label = acao === "aprovar" ? "aprovada" : "rejeitada";
+      setFeedback(
+        result.motor_inferencia_executado
+          ? `Atividade ${label}. O motor reavaliou a situação do aluno.`
+          : `Atividade ${label}.`,
+      );
+      setValidateTarget(null);
+      setValidateObs("");
+      setValidateCreditos("");
+      await loadData(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao validar atividade");
+    } finally {
+      setValidateSaving(false);
     }
   }
 
@@ -434,6 +481,23 @@ export function ActivitiesPage() {
                   </div>
                 )}
 
+                {activity.observacao_coordenacao && (
+                  <div
+                    className="mt-3 rounded-xl px-3 py-2.5"
+                    style={{ background: "#f1f5f9", border: "1px solid var(--border)" }}
+                  >
+                    <p
+                      className="flex items-center gap-1.5 mb-1"
+                      style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}
+                    >
+                      <MessageSquare size={12} /> Observação da coordenação
+                    </p>
+                    <p style={{ fontSize: "12px", color: "var(--foreground)", whiteSpace: "pre-wrap" }}>
+                      {activity.observacao_coordenacao}
+                    </p>
+                  </div>
+                )}
+
                 {canDarParecer && activity.status === "enviado" && (
                   parecerTarget?.id === activity.id ? (
                     <div className="mt-3">
@@ -475,6 +539,75 @@ export function ActivitiesPage() {
                     >
                       <MessageSquare size={13} />
                       {activity.parecer_orientador ? "Editar parecer" : "Dar parecer"}
+                    </button>
+                  )
+                )}
+
+                {canValidar && activity.status === "enviado" && (
+                  validateTarget?.id === activity.id ? (
+                    <div className="mt-3 space-y-2">
+                      <textarea
+                        value={validateObs}
+                        onChange={(e) => setValidateObs(e.target.value)}
+                        rows={2}
+                        placeholder="Observação (opcional)…"
+                        className="w-full rounded-xl px-3 py-2.5 outline-none resize-none"
+                        style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "12px", color: "var(--foreground)" }}
+                      />
+                      <label className="flex items-center justify-between gap-2">
+                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                          Créditos concedidos
+                        </span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0"
+                          value={validateCreditos}
+                          onChange={(e) => setValidateCreditos(e.target.value)}
+                          className="w-24 rounded-lg px-2 py-1.5 outline-none text-right"
+                          style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "12px", color: "var(--foreground)" }}
+                        />
+                      </label>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setValidateTarget(null)}
+                          className="rounded-lg px-3 py-1.5"
+                          style={{ border: "1px solid var(--border)", color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600 }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleValidar(activity, "rejeitar")}
+                          disabled={validateSaving}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+                          style={{ background: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600, opacity: validateSaving ? 0.6 : 1 }}
+                        >
+                          <XCircle size={12} />
+                          Rejeitar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleValidar(activity, "aprovar")}
+                          disabled={validateSaving}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+                          style={{ background: "#1F8A70", color: "#fff", fontSize: "12px", fontWeight: 600, opacity: validateSaving ? 0.6 : 1 }}
+                        >
+                          <CheckCircle2 size={12} />
+                          Aprovar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => openValidate(activity)}
+                      className="flex items-center gap-1.5 mt-3"
+                      style={{ fontSize: "12px", color: "#123C7A", fontWeight: 600 }}
+                    >
+                      <CheckCircle2 size={13} />
+                      Validar atividade
                     </button>
                   )
                 )}
