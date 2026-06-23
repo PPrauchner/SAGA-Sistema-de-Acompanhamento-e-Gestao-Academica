@@ -137,6 +137,8 @@ Mais um **ER macro** só com entidades-âncora e ligações principais (sem atri
 
 ### R1 — Escala de níveis de relevância: 4 níveis → 7 níveis (Qualis Único)
 
+> **⚠️ Superada por [ADR-0003](./adr/0003-pesos-qualis-versionados-por-programa.md).** A escala global única e estática (`A1, A2, A3, A4, B1, B2, SC` com `PESO_POR_NIVEL` hardcoded) foi substituída por pesos **A1–A8 + fallback**, configuráveis e versionados **por programa**. R1 e R4 abaixo ficam como registro histórico.
+
 **Contexto:** a escala original (Q10) tinha 4 níveis (`A1/A2/B/C`). O PR #111 introduziu uma escala
 de 7 níveis no código (fixtures/frontend/seed), gerando incoerência com a documentação.
 **Decisão:** adotar a escala de **7 níveis** alinhada ao Qualis Único da CAPES:
