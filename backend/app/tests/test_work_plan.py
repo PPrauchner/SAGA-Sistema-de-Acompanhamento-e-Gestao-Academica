@@ -136,6 +136,24 @@ def test_progress_update_recalculates_progress_and_notifies(fake_db) -> None:
     assert body["progresso_percentual"] > 0
 
 
+def test_progress_update_to_100_persists_plano_concluido(fake_db) -> None:
+    """Regressão M1: concluir a última task não-defesa via progresso 100% grava plano_concluido."""
+    ids = _build_plan_via_api("aluno_real")
+    headers = {"X-User-Id": "aluno_real", "X-User-Name": "Aluno Real", "X-User-Role": "aluno"}
+
+    for task_id in (ids["t1"], ids["t2"]):
+        response = _client("aluno").post(
+            f"/api/v1/tasks/{task_id}/updates",
+            json={"conteudo": "Concluída", "percentual": 100},
+            headers=headers,
+        )
+        assert response.status_code == 201
+
+    plan = _client().get(f"/api/v1/work-plan/{ids['student_id']}").json()
+    assert plan["plano_concluido"] is True
+    assert plan["fato_plano_concluido"] == "plano_concluido(aluno_real)"
+
+
 def test_progress_update_uses_deadline_and_alert_aspects() -> None:
     wrapped = work_plan.add_progress_update
 
