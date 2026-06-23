@@ -1,31 +1,50 @@
 """
-Router para veículos de publicação e seus níveis de relevância específicos por programa.
+Router FastAPI para os endpoints de veículos de publicação (eventos e revistas).
 
 Responsabilidades:
-- GET /vehicles: Listar veículos com seus níveis de relevância e pesos para o programa.
-- POST /vehicles: Registrar um novo veículo e seu nível de relevância inicial.
-- GET /vehicle-levels: Listar os níveis de relevância configurados para os veículos no programa.
-- PUT /vehicle-levels/{vehicle_id}: Atualizar o nível de relevância/peso de um veículo no programa.
+- GET /api/v1/vehicles: lista veículos com nível de relevância e peso do programa atual,
+  carregados de programs/prog_default/vehicle_levels/. Acessível por todos os papéis.
+- POST /api/v1/vehicles: coordenação cadastra novo veículo e define nível de relevância
+  inicial. Aplica @requires_role('coordenacao') e @audit_operation.
+- PUT /api/v1/vehicle-levels/{vehicle_id}: coordenação atualiza nível de relevância de
+  um veículo no programa. Altera fatos nivel_relevancia e relevancia_peso usados pelo
+  motor RL05. Aplica @requires_role('coordenacao') e @audit_operation.
+- DELETE /api/v1/vehicles/{vehicle_id}: coordenação remove um veículo e seu nível de
+  relevância no programa. Aplica @requires_role('coordenacao') e @audit_operation.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
-from backend.app.core.auth import get_current_user, CurrentUser
-from backend.app.models.vehicle_level import VehicleLevelUpdate, VehicleLevelCreate
-from backend.app.services.program_service import ProgramService
-from backend.app.aspects.authorization import requires_role
+from fastapi import APIRouter, Depends, status
+
 from backend.app.aspects.audit import audit_operation
+from backend.app.aspects.authorization import requires_role
+from backend.app.core.auth import CurrentUser, get_current_user
+from backend.app.models.vehicle import VehicleCreate, VehicleLevelUpdate
+from backend.app.services.vehicle_service import VehicleService
 
-router = APIRouter(tags=["vehicles"])
+router = APIRouter()
 
 
-@router.get("/vehicle-levels")
-@requires_role("coordenacao", "orientador")
-async def get_vehicle_levels(
+@router.get("/vehicles")
+@requires_role("coordenacao", "orientador", "aluno")
+async def list_vehicles(
     user: CurrentUser = Depends(get_current_user),
-    service: ProgramService = Depends(ProgramService)
-):
-    """Lista os níveis de relevância e pesos de veículos configurados no programa atual."""
-    return await service.get_vehicle_levels(user.programa_id)
+    service: VehicleService = Depends(VehicleService),
+) -> list[dict]:
+    return await service.list_vehicles(user)
+
+
+@router.post(
+    "/vehicles",
+    status_code=status.HTTP_201_CREATED,
+)
+@requires_role("coordenacao")
+@audit_operation
+async def create_vehicle(
+    body: VehicleCreate,
+    user: CurrentUser = Depends(get_current_user),
+    service: VehicleService = Depends(VehicleService),
+) -> dict:
+    return await service.create_vehicle(body, user)
 
 
 @router.put("/vehicle-levels/{vehicle_id}")
@@ -33,13 +52,19 @@ async def get_vehicle_levels(
 @audit_operation
 async def update_vehicle_level(
     vehicle_id: str,
-    data: VehicleLevelUpdate,
+    body: VehicleLevelUpdate,
     user: CurrentUser = Depends(get_current_user),
-    service: ProgramService = Depends(ProgramService)
-):
-    """Atualiza o nível de relevância e o peso de um veículo no programa atual."""
-    # Passamos o vehicle_id do path e o restante do body
-    success = await service.update_vehicle_level(user.programa_id, vehicle_id, data)
-    if not success:
-        raise HTTPException(status_code=500, detail="Falha ao atualizar nível do veículo")
-    return {"message": "Nível do veículo atualizado com sucesso"}
+    service: VehicleService = Depends(VehicleService),
+) -> dict:
+    return await service.update_vehicle_level(vehicle_id, body, user)
+
+
+@router.delete("/vehicles/{vehicle_id}")
+@requires_role("coordenacao")
+@audit_operation
+async def delete_vehicle(
+    vehicle_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    service: VehicleService = Depends(VehicleService),
+) -> dict:
+    return await service.delete_vehicle(vehicle_id, user)

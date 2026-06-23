@@ -22,9 +22,9 @@ const ROLES: RoleOption[] = [
 ];
 
 const FIELD_DEFAULTS: Record<UserRole, { email: string }> = {
-  coordenacao: { email: "roberto.almeida@ppg.ufx.br" },
-  orientador: { email: "carla.mendes@ppg.ufx.br" },
-  aluno: { email: "lucas.silva@pos.ufx.br" },
+  coordenacao: { email: "" },
+  orientador: { email: "" },
+  aluno: { email: "" },
 };
 
 type FormState = "idle" | "loading" | "success" | "error";
@@ -33,7 +33,7 @@ export function LoginPage() {
   const { login, setCurrentPage } = useApp();
   const [role, setRole] = useState<UserRole>("coordenacao");
   const [email, setEmail] = useState(FIELD_DEFAULTS.coordenacao.email);
-  const [password, setPassword] = useState("senha123");
+  const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [formState, setFormState] = useState<FormState>("idle");
@@ -138,7 +138,7 @@ export function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => { setEmail(e.target.value); setErrorMsg(""); }}
-              placeholder="seu.nome@ppg.ufx.br"
+              placeholder="nome.aluno@unipampa.edu.br"
               autoComplete="email"
               disabled={isLoading || isSuccess}
               className="w-full rounded-xl pl-10 pr-4 py-3 outline-none transition-all duration-150"

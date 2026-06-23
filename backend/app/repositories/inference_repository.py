@@ -18,15 +18,14 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from backend.app.models.vehicle import PESO_POR_NIVEL
+from backend.app.repositories.activity_repository import ActivityRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.student_repository import StudentRepository
+from backend.app.repositories.vehicle_repository import VehicleRepository
 
-_DEFAULT_RELEVANCIA_PESOS: dict[str, float] = {
-    "A1": 2.0,
-    "A2": 1.5,
-    "B": 1.0,
-    "C": 0.5,
-}
+_DEFAULT_RELEVANCIA_PESOS: dict[str, float] = dict(PESO_POR_NIVEL)
 
 
 def _to_date_str(value: Any) -> str | None:
@@ -54,6 +53,9 @@ class InferenceRepository:
     def __init__(self) -> None:
         self._students = StudentRepository()
         self._programs = FirebaseRepository("programs")
+        self._productions = ProductionRepository()
+        self._activities = ActivityRepository()
+        self._vehicles = VehicleRepository()
 
     async def get_student(self, student_id: str) -> dict[str, Any] | None:
         """Lê o aluno do Firestore e normaliza campos para o contrato InferenceDataSource.
@@ -126,8 +128,46 @@ class InferenceRepository:
         return []
 
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:
-        """Retorna [] até ProductionRepository estar implementado."""
-        return []
+        """Retorna as produções aprovadas do aluno com nível do veículo e pontuação base.
+
+        Com a FK invertida, o vínculo aluno↔produção vive em students/{id}/activities
+        (activities.producao_id) e o status de validação fica na atividade, não na produção.
+        Lê as atividades do aluno com producao_id, filtra por status='aprovado' e busca cada
+        produção correspondente na coleção raiz productions/, juntando-a ao seu nível de
+        relevância em programs/{id}/vehicle_levels/ (campo usado pelo fato RL05
+        nivel_relevancia).
+
+        Args:
+            student_id: ID do documento em students/.
+
+        Returns:
+            Lista de dicts com id, veiculo_id, nivel e pontuacao_base.
+        """
+        student = await self._students.get(student_id)
+        programa_id = student.get("programa_id", "prog_default") if student else "prog_default"
+
+        activities = await self._activities.list_by_student(student_id)
+        levels = await self._vehicles.list_levels(programa_id)
+        nivel_by_vehicle = {level["id"]: level.get("nivel") for level in levels}
+
+        result: list[dict[str, Any]] = []
+        for activity in activities:
+            producao_id = activity.get("producao_id")
+            if not producao_id or activity.get("status") != "aprovado":
+                continue
+            production = await self._productions.get(producao_id)
+            if production is None:
+                continue
+            veiculo_id = production.get("veiculo_id")
+            result.append(
+                {
+                    "id": production["id"],
+                    "veiculo_id": veiculo_id,
+                    "nivel": nivel_by_vehicle.get(veiculo_id),
+                    "pontuacao_base": production.get("pontuacao_base", 0),
+                }
+            )
+        return result
 
     async def save_inferred_status(self, student_id: str, snapshot: dict[str, Any]) -> str:
         """Persiste snapshot em students/{id}/inferred_status/ e atualiza situacao_inferida.

@@ -46,6 +46,8 @@ interface AppContextType {
   mobileMenuOpen: boolean;
   loading: boolean;
   token: string | null;
+  profileUnavailable: boolean;
+  retryProfile: () => Promise<void>;
   login: (email: string, senha: string) => Promise<void>;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
@@ -58,7 +60,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { profile, token, login, logout: signOut, loading } = useAuth();
+  const { currentUser: firebaseUser, profile, profileError, token, login, logout: signOut, loading, retryProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -80,6 +82,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
         advisor_id: profile.advisorId ?? undefined,
       }
     : null;
+
+  // Sessão Firebase válida, mas perfil indisponível (GET /auth/me falhou). Distinto
+  // de "deslogado": o usuário permanece na app em estado degradado, com retry. A guarda
+  // de rota vive no PrivateRoute, que suprime o redirect quando profileUnavailable é true.
+  const profileUnavailable = !!firebaseUser && profileError && !profile;
 
   const toggleDarkMode = () => {
     setDarkMode((d) => {
@@ -107,6 +114,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         mobileMenuOpen,
         loading,
         token,
+        profileUnavailable,
+        retryProfile,
         login,
         setCurrentPage,
         setSelectedStudentId,

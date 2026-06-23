@@ -11,8 +11,8 @@ Responsabilidades:
   (nenhum fato de risco presente → em_risco retorna False).
 - RL04 activity_eligibility: testar elegivel (4 fatos), sem_comprovante, tipo_inativo,
   excede_limite_tecnologico.
-- RL05 production_scoring: testar producao_A1_base10 → Score=20.0, producao_B_base10 →
-  Score=10.0, producao_C_base10 → Score=5.0.
+- RL05 production_scoring: testar producao_A1_base10 → Score=10.0, producao_A4_base10 →
+  Score=5.5, producao_B2_base10 → Score=3.0 (escala Qualis Único monotônica).
 """
 """
 test_rules.py — Testes das regras acadêmicas (RL01–RL05).
@@ -27,6 +27,9 @@ Cobertura:
 
 import sys
 import os
+
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from inference_engine.terms import Atom, Variable, Compound
@@ -247,32 +250,32 @@ class TestProductionScoring:
         ]
 
     def test_producao_A1_base10(self):
-        engine = make_engine(*self._fatos_producao("p1", "v1", "A1", 2.0, 10))
+        engine = make_engine(*self._fatos_producao("p1", "v1", "A1", 1.0, 10))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"] == Atom(20.0)
+        assert results[0]["Score"].value == pytest.approx(10.0)
 
-    def test_producao_B_base10(self):
-        engine = make_engine(*self._fatos_producao("p1", "v2", "B", 1.0, 10))
+    def test_producao_A4_base10(self):
+        engine = make_engine(*self._fatos_producao("p1", "v2", "A4", 0.55, 10))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"] == Atom(10.0)
+        assert results[0]["Score"].value == pytest.approx(5.5)
 
-    def test_producao_C_base10(self):
-        engine = make_engine(*self._fatos_producao("p1", "v3", "C", 0.5, 10))
+    def test_producao_B2_base10(self):
+        engine = make_engine(*self._fatos_producao("p1", "v3", "B2", 0.3, 10))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"] == Atom(5.0)
+        assert results[0]["Score"].value == pytest.approx(3.0)
 
     def test_producao_A2_base8(self):
-        engine = make_engine(*self._fatos_producao("p1", "v4", "A2", 1.5, 8))
+        engine = make_engine(*self._fatos_producao("p1", "v4", "A2", 0.85, 8))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"] == Atom(12.0)
+        assert results[0]["Score"].value == pytest.approx(6.8)
 
     def test_veiculo_sem_nivel_configurado(self):
         fatos = [

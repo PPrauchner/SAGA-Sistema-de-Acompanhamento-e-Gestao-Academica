@@ -5,8 +5,12 @@
 > Atualizado a cada pergunta respondida.
 >
 > Fontes: `docs/specs/03_firebase_schema.json` (schema canônico), `05_discentes.json`,
-> `07_atividades_producoes.json`, `CONTEXT.md`. Onde código e spec divergem, **o código
-> em execução vence** (hoje só `users`/`invites` têm código real; o resto são stubs).
+> `07_atividades_producoes.json`, `CONTEXT.md`.
+>
+> **Precedência código × docs.** Divergência acidental numa entidade já implementada
+> (hoje só `users`/`invites`; o resto são stubs) → o **código em execução vence**; corrija a
+> doc. Refinamento deliberado da série **R** (abaixo) ainda não aplicado ao código → a
+> **decisão lidera** e o código deve ser ajustado (bloqueador, ex.: C1, M1).
 
 ---
 
@@ -139,10 +143,9 @@ de 7 níveis no código (fixtures/frontend/seed), gerando incoerência com a doc
 `A1 | A2 | A3 | A4 | B1 | B2 | SC` (`SC` = Sem Classificação), com pesos
 `A1=1.0, A2=0.85, A3=0.7, A4=0.7, B1=0.5, B2=0.5, SC=0.2`. O fallback para veículo sem nível
 configurado passa de `C=0.5` para **`SC=0.2`** (refina Q10).
-**Pendência:** os pesos `A3=A4=0.7` e `B1=B2=0.5` foram herdados do código e **não são monotônicos**;
-confirmar se devem seguir o Qualis normalizado (`A4=0.55`, `B1=0.4`, `B2=0.3`). Aplicar a escala
-escolhida em todo o código (model `RelevanceLevel`, `VehicleService.PESO_POR_NIVEL`, default da
-inferência) — hoje o runtime ainda usa a escala antiga (bloqueador C1 da revisão do PR #111).
+**Resolução:** a escala definitiva (monotônica) e a propagação ao runtime foram decididas e
+aplicadas na **R4** (issue #133); o bloqueador C1 (runtime na escala antiga de 4 níveis) fica
+resolvido.
 
 ### R2 — `tipo_producao` = natureza; situação em `status_publicacao`
 
@@ -159,3 +162,15 @@ Aplicado em `data-model.md`, specs 03 e 07.
 **Decisão:** **manter Q8** — `productions` é coleção raiz. Os specs 03/07 foram atualizados para
 refletir a estrutura raiz e a FK invertida; o código do PR #111 (subcoleção) precisa ser
 ajustado (bloqueador M1 da revisão).
+
+### R4 — Pesos Qualis monotônicos (resolve a pendência de R1)
+
+**Contexto:** R1 deixou em aberto se os pesos `A3=A4=0.7` e `B1=B2=0.5` (herdados do PR #111)
+deveriam ser monotônicos. Empates entre níveis tornam a distinção de nível irrelevante para o
+score da RL05, e o runtime ainda operava na escala antiga de 4 níveis (`A1=2.0…C=0.5`).
+**Decisão (issue #133):** adotar a escala **monotônica** (estritamente decrescente)
+`A1=1.0, A2=0.85, A3=0.7, A4=0.55, B1=0.4, B2=0.3, SC=0.2` — um nível superior sempre pondera
+mais que um inferior. Canonizada em **um único lugar de verdade** no código
+(`backend/app/models/vehicle.py` → `RelevanceLevel` + `PESO_POR_NIVEL`), consumida por
+`inference_repository`, `fixtures` e `seed_firestore`. Aplicada também em `data-model.md`,
+specs 01 e 03, e nos casos RL05 dos testes. R1 deixa de ter pendência.

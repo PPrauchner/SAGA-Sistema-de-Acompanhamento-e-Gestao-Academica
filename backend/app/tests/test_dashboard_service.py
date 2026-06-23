@@ -615,7 +615,7 @@ async def test_aluno_dashboard_calculates_real_progress():
 
     student = _make_student()
     tasks = [
-        {"id": "t1", "status": "concluida", "titulo": "T1", "prazo": "2026-06-25"},
+        {"id": "t1", "status": "concluido", "titulo": "T1", "prazo": "2026-06-25"},
         {"id": "t2", "status": "pendente", "titulo": "T2", "prazo": "2026-06-21"}, # mais próxima
         {"id": "t3", "status": "pendente", "titulo": "T3", "prazo": "2026-06-30"},
         {"id": "t4", "status": "pendente", "titulo": "T4", "prazo": "2026-06-28"},
@@ -656,8 +656,8 @@ async def test_orientador_dashboard_shows_orientando_progress():
         _make_student({"id": "stu_001", "orientador_id": "adv_001"}),
     ]
     tasks_stu1 = [
-        {"id": "t1", "status": "concluida"},
-        {"id": "t2", "status": "concluida"},
+        {"id": "t1", "status": "concluido"},
+        {"id": "t2", "status": "concluido"},
         {"id": "t3", "status": "pendente"},
         {"id": "t4", "status": "pendente"},
     ] # 50%

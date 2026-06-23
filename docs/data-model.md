@@ -5,7 +5,17 @@ Documenta o **modelo completo pretendido**, marcando o que já está implementad
 
 > **Fonte canônica:** `docs/specs/03_firebase_schema.json`, refinado pelas decisões em
 > [`data-model-decisions.md`](./data-model-decisions.md) (sessão de *grill-me*).
-> Onde código e spec divergem, o **código em execução vence**.
+>
+> **Precedência código × docs.** Depende da natureza da divergência:
+> - **Divergência acidental** numa entidade já implementada (✅) — a doc apenas se
+>   desatualizou: o **código em execução vence**; corrija a doc. (Hoje só `users`/`invites`
+>   têm código real.)
+> - **Refinamento deliberado** registrado em [`data-model-decisions.md`](./data-model-decisions.md)
+>   (série **R**) ainda **não aplicado ao código**: a **decisão/doc lidera**; o código diverge
+>   de forma conhecida e **deve ser ajustado** (rastreado como bloqueador, ex.: C1, M1).
+>
+> Em suma: o código vence quando a doc só se atrasou; a doc/decisão vence quando o log
+> deliberou uma mudança que o código ainda não acompanhou.
 >
 > **Escopo:** apenas backend / Firestore. O motor de inferência (`Atom`, `Variable`,
 > `Compound`, `FactBase`) é representação lógica em memória, **não** dados persistidos, e
@@ -62,7 +72,9 @@ erDiagram
     students ||--o{ work_plan : possui
     students ||--o{ activities : registra
     students ||--o{ extensions : solicita
+    students ||--o{ transfer_requests : transfere
     students ||--o{ inferred_status : historiza
+    programs ||--o{ coordination_transfers : transfere_coordenacao
     activity_types ||--o{ activities : tipifica
     productions ||--o{ activities : "creditada por"
     vehicles ||--o{ productions : publica
@@ -201,6 +213,57 @@ a **divergência entre as duas é sinal de atenção**.
 | `limite_orientandos` | int | | default 5 |
 | `criado_em` / `atualizado_em` | timestamp | | |
 | `orientandos_ativos` | int | `calc` | computado em leitura (contagem de `students` por `orientador_id`) |
+
+### `transfer_requests` - colecao raiz - chave: `auto-id`
+
+Registra transferencias same-program de orientando entre orientadores. A mesma entidade cobre
+o mover-direto da coordenacao e a solicitacao do orientador com aprovacao da coordenacao.
+
+| Campo | Tipo | Ref | Notas |
+|-------|------|-----|-------|
+| `student_id` | string | ->`students` | aluno transferido |
+| `orientador_origem_id` | string | ->`advisors` | orientador atual no momento da solicitacao |
+| `orientador_destino_id` | string | ->`advisors` | destino imutavel da solicitacao |
+| `solicitante_id` | string | ->`users.uid` | quem iniciou a solicitacao/acao |
+| `programa_id` | string | ->`programs` (soft) | origem e destino precisam pertencer ao mesmo programa |
+| `status` | string | | `pendente`\|`aprovada`\|`rejeitada`\|`cancelada` |
+| `tipo` | string | | `direta_coordenacao`\|`solicitada_orientador` |
+| `motivo` / `observacao` | string\|null | | justificativa de rejeicao/cancelamento ou observacao livre |
+| `created_at` / `updated_at` | timestamp | | |
+| `approved_at` / `approved_by` | timestamp / uid | | preenchido quando aprovada ou mover-direto efetivado |
+| `rejected_at` / `rejected_by` | timestamp / uid | | preenchido quando rejeitada |
+| `cancelled_at` / `cancelled_by` | timestamp / uid | | preenchido quando cancelada |
+| `cancel_reason` | string\|null | | motivo tecnico/usuario do cancelamento |
+| `cancelled_request_id` | string\|null | ->`transfer_requests` | mover-direto pode cancelar pendente anterior |
+
+> Invariante: so pode existir uma solicitacao `pendente` por aluno. A efetivacao atualiza
+> `students.orientador_id`, limpa `coorientador_id` quando o destino era coorientador atual,
+> registra A02/A03 e dispara A05 para origem, destino e aluno.
+
+### `coordination_transfers` - colecao raiz - chave: `auto-id`
+
+Registra a transferencia do papel de coordenacao para um orientador sucessor do mesmo programa,
+com aceite obrigatorio do sucessor. Nao gera A03 porque nao altera historico de aluno.
+
+| Campo | Tipo | Ref | Notas |
+|-------|------|-----|-------|
+| `programa_id` | string | ->`programs` (soft) | programa da coordenacao transferida |
+| `initiator_uid` | string | ->`users.uid` | coordenacao atual que iniciou o convite |
+| `successor_uid` | string | ->`users.uid` | orientador convidado para assumir coordenacao |
+| `status` | string | | `pendente`\|`aceita`\|`rejeitada`\|`cancelada` |
+| `created_at` / `updated_at` | timestamp | | |
+| `decided_at` | timestamp\|null | | preenchido em aceite/rejeicao |
+| `accepted_at` | timestamp\|null | | preenchido no aceite |
+| `rejected_at` / `rejected_by` | timestamp / uid | | preenchido na rejeicao |
+| `cancelled_at` / `cancelled_by` | timestamp / uid | | preenchido no cancelamento |
+
+> Swap no aceite: valida pendencia e vinculo ao mesmo programa; troca `set_custom_user_claims`
+> do sucessor e do iniciador; atualiza `users/{uid}.role` dos dois; cria `advisors/` para o
+> ex-coordenador com `limite_orientandos=5` se ainda nao existir; revoga refresh tokens dos dois;
+> marca a transferencia como `aceita`. Se houver falha parcial, repetir o aceite e seguro desde
+> que a transferencia continue `pendente`: claims e roles sao regravados com os mesmos valores,
+> o documento `advisors/` e reutilizado/criado com id estavel, e tokens podem ser revogados
+> novamente sem alterar o resultado final.
 
 ### `programs` 🔲 — chave: `prog_default` (singleton de configuração)
 
@@ -453,13 +516,14 @@ Config de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode e
 |-------|------|-------|
 | `veiculo_id` | string (PK = id do veículo) | |
 | `nivel` | string | `A1`\|`A2`\|`A3`\|`A4`\|`B1`\|`B2`\|`SC` (Qualis Único; `SC` = Sem Classificação) |
-| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.7, B1=0.5, B2=0.5, SC=0.2 |
+| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.55, B1=0.4, B2=0.3, SC=0.2 (escala monotônica) |
 | `atualizado_em` / `atualizado_por` | timestamp / uid | |
 
 > **Sem nível configurado:** RL05 usa **peso default `SC` = 0.2** (fallback). Reclassificar recalcula o score.
 >
-> ⚠️ **A confirmar:** os pesos `A3=A4=0.7` e `B1=B2=0.5` foram herdados do código (PR #111); avaliar
-> se devem ser monotônicos (ex.: Qualis normalizado `A4=0.55`, `B1=0.4`, `B2=0.3`).
+> **Escala monotônica (decisão R4, issue #133):** estritamente decrescente — um nível superior
+> sempre pondera mais que um inferior. Substitui os pesos não-monotônicos herdados do PR #111
+> (`A4=0.7`, `B1=B2=0.5`). Fonte de verdade no código: `backend/app/models/vehicle.py`.
 
 ---
 
@@ -588,7 +652,7 @@ Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genéri
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida` |
+| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador`\|`transferencia_coordenacao` |
 | `titulo` / `mensagem` | string | |
 | `destinatario_id` | string | →`users.uid` (soft) |
 | `entidade_tipo` / `entidade_id` | string | ref soft polimórfica — **sem aresta** |
@@ -612,6 +676,11 @@ O Firestore não impõe integridade referencial. Estas regras são responsabilid
    Perder a última capacidade ⇒ desativar conta (`ativo=false`), nunca `role` vazio.
 4. **`prazo_final` vigente**: atualizado no ingresso e a cada prorrogação aprovada; cada
    `extensions.prazo_novo` guarda o histórico.
+5. **Transferencia same-program**: origem e destino pertencem ao mesmo `programa_id`, destino
+   respeita `limite_orientandos`, aluno terminal (`concluido`/`desligado`) nao transfere e
+   solicitacao duplicada pendente retorna conflito.
+6. **Transferencia de coordenacao**: apenas uma `coordination_transfers` pendente por programa;
+   sucessor deve ser orientador do mesmo programa; aceite mantem exatamente uma coordenacao ativa.
 
 ## Campos calculados (não-entrada do usuário)
 

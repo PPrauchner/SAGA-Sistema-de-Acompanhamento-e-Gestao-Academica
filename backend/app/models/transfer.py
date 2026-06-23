@@ -8,7 +8,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 TransferStatus = Literal["pendente", "aprovada", "rejeitada", "cancelada"]
-TransferTipo = Literal["direta_coordenacao", "solicitada_orientador", "solicitada_aluno"]
+TransferTipo = Literal["direta_coordenacao", "solicitada_orientador"]
 
 
 class DirectTransferRequest(BaseModel):
@@ -39,9 +39,11 @@ class TransferRequestResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     cancelled_at: datetime | None = None
-    cancelado_em: datetime | None = None
-    decidido_por: str | None = None
-    decidido_em: datetime | None = None
+    cancelled_by: str | None = None
+    approved_at: datetime | None = None
+    approved_by: str | None = None
+    rejected_at: datetime | None = None
+    rejected_by: str | None = None
     motivo: str | None = None
     observacao: str | None = None
 

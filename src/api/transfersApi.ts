@@ -17,7 +17,7 @@ export interface DirectTransferResult {
 }
 
 export type TransferStatus = "pendente" | "aprovada" | "rejeitada" | "cancelada";
-export type TransferTipo = "direta_coordenacao" | "solicitada_orientador" | "solicitada_aluno";
+export type TransferTipo = "direta_coordenacao" | "solicitada_orientador";
 
 export interface TransferRequest {
   id: string;
@@ -31,9 +31,12 @@ export interface TransferRequest {
   motivo?: string | null;
   created_at?: string;
   updated_at?: string;
-  decidido_por?: string | null;
-  decidido_em?: string | null;
-  cancelado_em?: string | null;
+  approved_by?: string | null;
+  approved_at?: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
+  cancelled_by?: string | null;
+  cancelled_at?: string | null;
 }
 
 export interface TransferCreatePayload {
