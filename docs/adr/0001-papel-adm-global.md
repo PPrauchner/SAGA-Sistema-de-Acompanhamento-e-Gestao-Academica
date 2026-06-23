@@ -1,0 +1,5 @@
+# Papel `adm` é global, fora de qualquer programa
+
+Introduzimos um superusuário técnico/institucional (`adm`) responsável por criar, editar e desativar coordenadores. Diferente de `coordenacao`, `orientador` e `aluno` — que pertencem a exatamente um programa via `programa_id` no claim — o `adm` é **global**: seu `programa_id` é `null` e a gestão de coordenadores é cross-programa.
+
+Escolhemos isso em vez de reaproveitar `coordenacao` ou amarrar o ADM a um pseudo-programa/sentinela, porque a gestão de coordenadores é uma operação institucional que não deve viver dentro do escopo de nenhum programa, e misturar essa capability no papel `coordenacao` permitiria escalada de privilégios (um coordenador criando outros). O custo: `adm` é o primeiro papel que fura a premissa "todo usuário pertence a um programa", então qualquer query ou aspecto que assuma `programa_id` não-nulo precisa tratar o `adm` como exceção. Pode haver mais de um `adm`; sua criação é feita via script/backend, fora da interface.

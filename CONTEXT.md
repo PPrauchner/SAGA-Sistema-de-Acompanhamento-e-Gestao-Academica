@@ -66,7 +66,13 @@ Publicação científica associada ao discente. Associada a um **veículo** (fat
 Extensão de prazo concedida ao discente. Muda o estado para "Em Prorrogação" e recalcula o prazo final. Registrada pela coordenação ou orientador.
 
 ### Veículo
-Publicação ou evento científico com fator de pontuação configurado pela coordenação. Usado pela RL05 para ponderar o score de produções bibliográficas.
+Publicação ou evento científico classificado em um **nível Qualis** (`A1`–`A8`, ou _fallback_ quando não classificado). Usado pela RL05 para ponderar o score de produções bibliográficas.
+
+### Peso Qualis
+Fator de ponderação de cada nível Qualis, definido **por programa** por cada coordenador. Mantido em coleção **versionada**: cada conjunto de pesos carrega `vigente_desde`, `alterado_por` e `alterado_em` — a coleção é o próprio histórico de mudanças. A RL05 aplica o peso **vigente na data de publicação** da produção; produção não publicada usa o peso vigente atual (provisório) até publicar. Ver [ADR-0003](./docs/adr/0003-pesos-qualis-versionados-por-programa.md).
+
+### Índice de Produção
+Soma ponderada dos `score` (RL05) de todas as produções bibliográficas **validadas**, sem filtro de estrato. Por aluno é a soma direta. Por orientador existe em duas formas selecionáveis: **soma total** (volume absoluto dos orientandos) e **média por orientando** (produtividade normalizada para comparação). Calculado no service layer, não no motor. _Avoid_: índice restrito.
 
 ---
 
@@ -88,11 +94,18 @@ Publicação ou evento científico com fator de pontuação configurado pela coo
 
 | Papel | Permissões principais |
 |-------|----------------------|
+| `adm` | Superusuário técnico/institucional global; cria/edita/desativa coordenadores em qualquer programa. Fora de todo programa acadêmico |
 | `coordenacao` | CRUD completo, validação final, relatórios, configurações |
 | `orientador` | Leitura de orientandos, criar plano/tasks, emitir pareceres |
 | `aluno` | Próprios dados, registrar atividades/produções/progresso |
 
-Papéis são armazenados como custom claims `{ role, programa_id }` no JWT do Firebase Auth.
+Papéis são armazenados como custom claims `{ role, programa_id }` no JWT do Firebase Auth. O papel `adm` é global: seu `programa_id` é `null` (não pertence a nenhum programa), e a gestão de coordenadores é cross-programa. Pode haver mais de um `adm`. Coordenadores **não** criam coordenadores — apenas transferem a própria coordenação (hand-off: o coordenador anterior passa a `orientador`).
+
+Os valores canônicos de `role` são exatamente `adm`, `coordenacao`, `orientador` e `aluno` — usados em claims, `@requires_role` e seeds.
+- `coordenacao` — _Avoid_: coordenador
+- `aluno` — _Avoid_: discente
+
+A prosa das histórias de usuário pode dizer "coordenador" ou "discente"; identificadores (claims, decoradores, enums) usam sempre o termo canônico.
 
 ---
 
@@ -106,7 +119,7 @@ Regras declarativas — alterar uma política acadêmica significa editar o arqu
 | RL02 | `credit_validation.py` | Créditos por grupo | Respeitar mínimos/máximo por categoria (básico ≥12, específico ≥8, tecnológico ≤4, total ≥24) |
 | RL03 | `academic_status.py` | Em risco | **Qualquer** das 4 condições: prazo estourado OU créditos insuficientes OU qualificação pendente OU plano atrasado |
 | RL04 | `activity_eligibility.py` | Elegibilidade de atividade | Tipo de atividade ativo + dentro do período de validade + sem duplicata no mesmo período |
-| RL05 | `production_scoring.py` | Pontuação de produção | `score = pontuação_base × fator_veículo` |
+| RL05 | `production_scoring.py` | Pontuação de produção | `score = pontuação_base × peso_qualis`, com o peso vigente na data de publicação (ver [Peso Qualis](#peso-qualis)) |
 
 ---
 
