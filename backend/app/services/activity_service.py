@@ -1,10 +1,9 @@
 """
 Serviço de negócio para atividades creditáveis.
 
-- ActivityService (classe): submit_activity / list_activities — registro e listagem
-  (restaurado da development, removido indevidamente na pr-68).
-- emitir_parecer_orientador / validate_activity (funções de módulo):
-  validação pela coordenação/orientador — issue #49, implementada nesta PR (#68).
+- ActivityService (classe): submit_activity / list_activities — registro e listagem.
+- emitir_parecer_orientador (função de módulo): parecer do orientador (issue #48).
+- validate_activity (função de módulo): aprovação/rejeição da coordenação (issue #49).
 """
 
 from __future__ import annotations
@@ -20,6 +19,7 @@ from backend.app.models.activity import (
     ActivityCreateRequest,
     ActivityResponse,
     ActivityStatus,
+    ParecerRequest,
     ValidateAction,
     ValidateActivityRequest,
     ValidateActivityResponse,
@@ -206,30 +206,62 @@ class ActivityService:
 
 
 # ---------------------------------------------------------------------------------------
-# Validação (issue #49 / PATCH /activities/{id}/validate) — funções de módulo puras
+# Validação — funções de módulo puras (sem aspectos; a autorização vive no router).
+# - emitir_parecer_orientador: parecer do orientador (issue #48 / PATCH /parecer)
+# - validate_activity: aprovação/rejeição da coordenação (issue #49 / PATCH /validate)
 # ---------------------------------------------------------------------------------------
 
 _repo = ActivityRepository()
 _student_repo = StudentRepository()
+_advisor_repo = AdvisorRepository()
+
+
+async def resolve_advisor_uid_for_activity(activity_id: str) -> str | None:
+    """Resolve o uid do orientador responsável pela atividade (suporte ao A01 por propriedade).
+
+    Faz a resolução em dois saltos a partir da atividade, pois `students.orientador_id`
+    aponta para o auto-id em `advisors` (não para o uid):
+    atividade → `students.orientador_id` → `advisors.uid`.
+
+    Args:
+        activity_id: ID da atividade alvo do parecer.
+
+    Returns:
+        O uid do orientador, ou None se a atividade, o aluno ou o orientador não existirem.
+    """
+    activity = await _repo.get_by_id(activity_id)
+    if not activity:
+        return None
+    student = await _student_repo.get(activity["student_id"])
+    if not student or not student.get("orientador_id"):
+        return None
+    advisor = await _advisor_repo.get(student["orientador_id"])
+    return advisor.get("uid") if advisor else None
 
 
 async def emitir_parecer_orientador(
     activity_id: str,
-    payload: ValidateActivityRequest,
-    user_uid: str,
+    payload: ParecerRequest,
+    current_user: CurrentUser,
 ) -> ActivityResponse:
-    if payload.acao != ValidateAction.parecer_orientador:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Esta função aceita apenas a ação 'parecer_orientador'.",
-        )
-    if not payload.parecer_orientador:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Campo 'parecer_orientador' é obrigatório para esta ação.",
-        )
+    """Grava o parecer textual do orientador sobre uma atividade submetida.
 
-    activity = _repo.get_by_id(activity_id)
+    O parecer é um campo (`activities.parecer_orientador`), não um estado: o status
+    permanece `enviado` até a decisão da coordenação. A autoria/horário ficam no
+    registro de auditoria (A02); não são duplicados no documento da atividade.
+
+    Args:
+        activity_id: ID da atividade que recebe o parecer.
+        payload: Texto do parecer.
+        current_user: Orientador autenticado (propriedade já garantida pelo A01 no router).
+
+    Returns:
+        A atividade atualizada.
+
+    Raises:
+        HTTPException: 404 se a atividade não existir; 409 se não estiver em `enviado`.
+    """
+    activity = await _repo.get_by_id(activity_id)
     if not activity:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atividade não encontrada.")
 
@@ -239,19 +271,20 @@ async def emitir_parecer_orientador(
             detail=f"Atividade com status '{activity['status']}' não pode receber parecer.",
         )
 
-    update_data = {
-        "parecer_orientador": payload.parecer_orientador.model_dump(),
-        "parecer_orientador_em": datetime.now(timezone.utc),
-        "parecer_orientador_por": user_uid,
-    }
-    updated = _repo.update_by_id(activity_id, update_data)
+    updated = await _repo.update_by_id(
+        activity_id,
+        {
+            "parecer_orientador": payload.parecer,
+            "atualizado_em": datetime.now(timezone.utc),
+        },
+    )
     return ActivityResponse(**updated)
 
 
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
-    user_uid: str,
+    current_user: CurrentUser,
 ) -> ValidateActivityResponse:
     if payload.acao not in (ValidateAction.aprovar, ValidateAction.rejeitar):
         raise HTTPException(
@@ -259,7 +292,7 @@ async def validate_activity(
             detail="Esta função aceita apenas as ações 'aprovar' ou 'rejeitar'.",
         )
 
-    activity = _repo.get_by_id(activity_id)
+    activity = await _repo.get_by_id(activity_id)
     if not activity:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atividade não encontrada.")
 
@@ -279,7 +312,7 @@ async def validate_activity(
     update_data: dict = {
         "status": novo_status,
         "observacao_coordenacao": payload.observacao,
-        "aprovado_por": user_uid,
+        "aprovado_por": current_user.uid,
         "aprovado_em": datetime.now(timezone.utc),
     }
 
@@ -288,7 +321,7 @@ async def validate_activity(
             creditos_contabilizados = payload.creditos_concedidos
         else:
             tipo_id = activity.get("tipo_id", "")
-            tipo = _repo.get_activity_type(tipo_id)
+            tipo = await _repo.get_activity_type(tipo_id)
             creditos_contabilizados = (
                 float(tipo["pontuacao_base"]) if tipo and "pontuacao_base" in tipo else 0.0
             )
@@ -318,12 +351,12 @@ async def validate_activity(
     else:
         update_data["creditos_gerados"] = 0.0
 
-    _repo.update_by_id(activity_id, update_data)
+    await _repo.update_by_id(activity_id, update_data)
 
     acao_label = "aprovada" if aprovando else "rejeitada"
     logger.info(
         "[S6b] Atividade %s %s pela coordenação (uid=%s). Créditos: %s. Fato: %s",
-        activity_id, acao_label, user_uid, creditos_contabilizados, fato_gerado,
+        activity_id, acao_label, current_user.uid, creditos_contabilizados, fato_gerado,
     )
 
     return ValidateActivityResponse(
