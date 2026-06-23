@@ -27,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 _COLLECTION = "audit_logs"
 
+SENSITIVE_FIELDS: frozenset[str] = frozenset(
+    {"password", "senha", "token", "secret", "api_key", "private_key", "refresh_token"}
+)
+
+_REDACTED = "***"
+
 
 class FirebaseRepository:
     """Repositório Firestore para registros de auditoria."""
@@ -80,6 +86,24 @@ def _extrair_recurso_do_resultado(resultado: Any) -> str | None:
     return None
 
 
+def _redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
+    """Substitui valores de campos sensíveis por '***' em valor_entrada.
+
+    Percorre o dict recursivamente para cobrir payloads aninhados. A denylist
+    centralizada é SENSITIVE_FIELDS; adicionar uma chave lá basta para protegê-la
+    em todos os endpoints auditados.
+    """
+    result: dict[str, Any] = {}
+    for key, value in data.items():
+        if key in SENSITIVE_FIELDS:
+            result[key] = _REDACTED
+        elif isinstance(value, dict):
+            result[key] = _redact_sensitive(value)
+        else:
+            result[key] = value
+    return result
+
+
 def _extrair_valor_entrada(
     sig: inspect.Signature,
     bound: inspect.BoundArguments,
@@ -91,7 +115,8 @@ def _extrair_valor_entrada(
         if hasattr(valor, "role") and hasattr(valor, "uid"):
             continue
         resultado[nome] = valor
-    return resultado
+    # Redação A02 (portada da development): nunca persistir segredos no audit_log.
+    return _redact_sensitive(resultado)
 
 
 def audit_operation(

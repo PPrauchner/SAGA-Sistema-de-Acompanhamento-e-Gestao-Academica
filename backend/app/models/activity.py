@@ -45,9 +45,15 @@ class ActivityResponse(BaseModel):
     id: str
     student_id: Optional[str] = None
 
-    tipo_id: str
+    # None para atividades lastreadas em produção bibliográfica (ver producao_id);
+    # obrigatório apenas na criação de atividades regulares (ActivityCreateRequest).
+    tipo_id: str | None = None
     tipo_nome: Optional[str] = None
     categoria: Optional[str] = None
+
+    # FK invertida para produção bibliográfica em coleção raiz (productions/{id}); None
+    # para atividades regulares (não-bibliográficas).
+    producao_id: str | None = None
 
     descricao: Optional[str] = None
     data_realizacao: datetime | None = None
