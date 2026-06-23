@@ -14,8 +14,9 @@ Responsabilidades:
   do próprio orientando. Aplica @requires_role('orientador'), @requires_ownership (A01 por
   propriedade) e @audit_operation. O parecer é um campo; não altera o status.
 - PATCH /api/v1/activities/{activity_id}/validate: coordenação aprova/rejeita definitivamente.
-  Operação mais crítica do fluxo — aplica @requires_role('coordenacao') e @audit_operation.
-  Motor verifica elegibilidade (RL04) e gera fato producao_bibliografica_validada quando aplicável.
+  Operação mais crítica do fluxo — aplica @requires_role('coordenacao'), @audit_operation e
+  @trigger_alerts (notifica o aluno do resultado). Motor verifica elegibilidade (RL04) e gera
+  fato producao_bibliografica_validada quando aplicável.
 """
 from typing import Any, List, Optional
 
@@ -30,6 +31,7 @@ from backend.app.models.activity import (
     ActivityCreateRequest,
     ActivityCreateResponse,
     ActivityResponse,
+    ActivityStatus,
     ComprovanteUploadResponse,
     ParecerRequest,
     ValidateActivityRequest,
@@ -198,12 +200,38 @@ async def emitir_parecer(
 # PATCH /activities/{activity_id}/validate  (coordenação — issue #49)
 # ---------------------------------------------------------------------------
 
+async def _build_notificacao_validacao(result, args, kwargs):
+    """Notifica o aluno após a decisão da coordenação (A05 — After advice).
+
+    Resolve o destinatário (uid do aluno dono da atividade) a partir do activity_id dos
+    kwargs e usa o novo_status do resultado para compor a mensagem. Retorna None quando o
+    aluno não pode ser resolvido — nesse caso nenhuma notificação é emitida.
+    """
+    activity_id = kwargs.get("activity_id")
+    if not activity_id:
+        return None
+    aluno_uid = await activity_service.resolve_student_uid_for_activity(activity_id)
+    if not aluno_uid:
+        return None
+    aprovada = getattr(result, "novo_status", None) == ActivityStatus.aprovado
+    label = "aprovada" if aprovada else "rejeitada"
+    return {
+        "tipo": "atividade_validada",
+        "titulo": "Atividade validada",
+        "mensagem": f"Sua atividade foi {label} pela coordenação.",
+        "destinatario_id": aluno_uid,
+        "entidade_tipo": "activities",
+        "entidade_id": activity_id,
+    }
+
+
 @router.patch(
     "/activities/{activity_id}/validate",
     response_model=ValidateActivityResponse,
 )
 @requires_role("coordenacao")
 @audit_operation
+@trigger_alerts(_build_notificacao_validacao)
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
