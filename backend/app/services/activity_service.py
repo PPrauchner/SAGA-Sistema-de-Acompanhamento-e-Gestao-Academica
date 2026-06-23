@@ -239,6 +239,25 @@ async def resolve_advisor_uid_for_activity(activity_id: str) -> str | None:
     return advisor.get("uid") if advisor else None
 
 
+async def resolve_student_uid_for_activity(activity_id: str) -> str | None:
+    """Resolve o uid do aluno dono da atividade (suporte ao A05 — notificar o resultado).
+
+    A notificação de validação é endereçada ao aluno; o `student_id` da atividade aponta
+    para o auto-id em `students`, de onde se obtém o uid de destino.
+
+    Args:
+        activity_id: ID da atividade validada pela coordenação.
+
+    Returns:
+        O uid do aluno, ou None se a atividade ou o aluno não existirem.
+    """
+    activity = await _repo.get_by_id(activity_id)
+    if not activity:
+        return None
+    student = await _student_repo.get(activity["student_id"])
+    return student.get("uid") if student else None
+
+
 async def emitir_parecer_orientador(
     activity_id: str,
     payload: ParecerRequest,
