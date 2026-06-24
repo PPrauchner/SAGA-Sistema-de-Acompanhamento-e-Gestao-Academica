@@ -18,6 +18,8 @@ Referência: docs/specs/04_autenticacao.json (seção dependencia_fastapi).
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import Header, HTTPException, status
 from firebase_admin import auth as firebase_auth
 from firebase_admin import exceptions as firebase_exceptions
@@ -62,7 +64,7 @@ async def get_current_user(
     token = _extrair_bearer_token(authorization)
 
     try:
-        decoded = firebase_auth.verify_id_token(token)
+        decoded = await asyncio.to_thread(firebase_auth.verify_id_token, token)
     except (ValueError, firebase_exceptions.FirebaseError) as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
