@@ -41,6 +41,7 @@ from backend.app.api.v1 import (
 from backend.app.core.config import settings
 from backend.app.core.firebase import init_firebase, shutdown_firebase
 from backend.app.api.v1.transfer_cross import router as transfer_cross_router
+from app.api.v1.extensions import router as extensions_router
 
 logger = logging.getLogger(__name__)
 
@@ -97,3 +98,4 @@ app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
 app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
 app.include_router(transfers.router, prefix=_PREFIX, tags=["transfers"])
 app.include_router(transfer_cross_router)
+app.include_router(extensions_router,prefix="/api/v1/extensions",tags=["Extensions"])
