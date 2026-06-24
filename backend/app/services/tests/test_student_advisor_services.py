@@ -78,6 +78,15 @@ class _FakeAdvisorRepository(_FakeRepo):
         )
 
 
+class _FakeProgramRepository(_FakeRepo):
+    store: dict[str, dict[str, Any]] = {}
+    prefix = "program"
+    counter = 0
+
+    async def get_config(self, programa_id: str) -> dict[str, Any] | None:
+        return await self.get(programa_id)
+
+
 class _FakeAuthService:
     async def create_invite(
         self,
@@ -102,9 +111,12 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeStudentRepository.counter = 0
     _FakeAdvisorRepository.store = {}
     _FakeAdvisorRepository.counter = 0
+    _FakeProgramRepository.store = {}
+    _FakeProgramRepository.counter = 0
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
     monkeypatch.setattr(student_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(student_module, "AdvisorRepository", _FakeAdvisorRepository)
+    monkeypatch.setattr(student_module, "ProgramRepository", _FakeProgramRepository)
     monkeypatch.setattr(advisor_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(advisor_module, "AdvisorRepository", _FakeAdvisorRepository)
 
@@ -134,6 +146,60 @@ async def test_create_student_usa_auto_id_e_retorna_invite_token() -> None:
         2026,
         3,
         31,
+        tzinfo=timezone.utc,
+    )
+
+
+async def test_create_student_usa_duracao_meses_do_programa() -> None:
+    _FakeProgramRepository.store = {
+        "programa_mestrado_30": {"duracao_meses": 30},
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    await service.create_student(
+        StudentCreateRequest(
+            nome="Aluno 30",
+            email="aluno30@x.com",
+            matricula="2026001",
+            orientador_id="advisor1",
+            nivel="mestrado",
+            data_ingresso=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            programa_id="programa_mestrado_30",
+        ),
+        _coord(),
+    )
+
+    assert _FakeStudentRepository.store["student1"]["prazo_final"] == datetime(
+        2028,
+        7,
+        1,
+        tzinfo=timezone.utc,
+    )
+
+
+async def test_create_student_usa_fallback_quando_duracao_meses_ausente() -> None:
+    _FakeProgramRepository.store = {
+        "programa_sem_duracao": {"nome": "Programa sem duração"},
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    await service.create_student(
+        StudentCreateRequest(
+            nome="Aluno fallback",
+            email="fallback@x.com",
+            matricula="2026002",
+            orientador_id="advisor1",
+            nivel="mestrado",
+            data_ingresso=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            programa_id="programa_sem_duracao",
+        ),
+        _coord(),
+    )
+
+    assert _FakeStudentRepository.store["student1"]["prazo_final"] == datetime(
+        2028,
+        1,
+        1,
         tzinfo=timezone.utc,
     )
 
