@@ -2,18 +2,151 @@
 Router FastAPI para os endpoints de solicitações de prorrogação de prazo.
 
 Responsabilidades:
-- GET /api/v1/extensions: lista prorrogações. Aluno vê as próprias; coordenação vê todas.
-  Aplica @requires_role para todos os papéis.
-- POST /api/v1/extensions: aluno solicita prorrogação de prazo. Aplica
-  @requires_role('aluno'), @audit_operation e @check_deadlines (verifica se aluno não
-  atingiu max_prorrogacoes e ainda está dentro do período elegível para solicitar).
-- PATCH /api/v1/extensions/{extension_id}/review: orientador emite parecer sem aprovar.
-  Aplica @requires_role('orientador') e @audit_operation.
-- PATCH /api/v1/extensions/{extension_id}/approve: coordenação aprova ou rejeita. Se
-  aprovada, atualiza prazo_final do aluno. Aplica @requires_role('coordenacao'),
-  @audit_operation e @trigger_alerts (notifica aluno com resultado e novo prazo).
+- Gerenciar rotas de criação, parecer técnico e homologação final de prazos.
+- Aplicar decoradores AOP estritamente nos join points definidos pelas especificações.
 """
 
-from fastapi import APIRouter
+from __future__ import annotations
 
-router = APIRouter()
+from typing import Annotated
+from fastapi import APIRouter, Depends, status
+
+# Correção C2: Ajuste dos caminhos de aspectos, core auth e remoção de app.dependencies
+from app.aspects.audit import audit_operation                       # A02
+from app.aspects.deadline_validation import check_deadlines         # A04
+from app.aspects.alerts import trigger_alerts                       # A05
+from app.aspects.authorization import requires_role                # A01
+from app.core.auth import get_current_user                          # A01
+
+# Correção C2/C4: Modelos corretos e payload alinhado
+from app.models.extension import (
+    ExtensionCreateRequest,
+    ReviewRequest,
+    DecisionRequest,
+    ExtensionResponse,
+)
+# Correção C2: Serviço no singular
+from app.services.extension_service import ExtensionService
+
+router = APIRouter(
+    prefix="/api/v1/extensions",
+    tags=["Prorrogações"],
+)
+
+# Provedor local de dependência do serviço para evitar app.dependencies inexistente
+async def get_extension_service() -> ExtensionService:
+    return ExtensionService()
+
+CurrentUser = Annotated[dict, Depends(get_current_user)]
+Service     = Annotated[ExtensionService, Depends(get_extension_service)]
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/extensions
+# ---------------------------------------------------------------------------
+@router.post(
+    "",
+    response_model=ExtensionResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Criar solicitação de prorrogação (aluno)",
+)
+@requires_role("aluno")
+@audit_operation
+@check_deadlines
+@trigger_alerts
+async def create_extension(
+    payload: ExtensionCreateRequest,
+    current_user: CurrentUser,
+    service: Service,
+) -> ExtensionResponse:
+    """Cria uma nova solicitação de prorrogação com status 'pendente'."""
+    return await service.create_extension(
+        student_id=current_user["uid"],
+        payload=payload,
+        requesting_uid=current_user["uid"],
+    )
+
+# ---------------------------------------------------------------------------
+# PATCH /api/v1/extensions/{student_id}/{extension_id}/review
+# ---------------------------------------------------------------------------
+@router.patch(
+    "/{student_id}/{extension_id}/review",
+    response_model=ExtensionResponse,
+    summary="Emitir parecer técnico (orientador)",
+)
+@requires_role("orientador")
+@audit_operation
+async def review_extension(
+    student_id: str,
+    extension_id: str,
+    payload: ReviewRequest,
+    current_user: CurrentUser,
+    service: Service,
+) -> ExtensionResponse:
+    """Permite ao orientador emitir o parecer técnico de uma prorrogação."""
+    return await service.add_review(
+        student_id=student_id,
+        extension_id=extension_id,
+        parecer=payload.parecer_orientador,
+        orientador_uid=current_user["uid"],
+    )
+
+# ---------------------------------------------------------------------------
+# PATCH /api/v1/extensions/{student_id}/{extension_id}/approve (Spec 08 M1/C4)
+# ---------------------------------------------------------------------------
+@router.patch(
+    "/{student_id}/{extension_id}/approve",
+    response_model=ExtensionResponse,
+    summary="Homologar decisão de prorrogação (coordenação)",
+)
+@requires_role("coordenacao")
+@audit_operation
+@check_deadlines
+@trigger_alerts
+async def decide_extension(
+    student_id: str,
+    extension_id: str,
+    payload: DecisionRequest,
+    current_user: CurrentUser,
+    service: Service,
+) -> ExtensionResponse:
+    """Processa o deferimento/indeferimento baseado na Spec 08 e contrato booleano."""
+    return await service.process_decision(
+        student_id=student_id,
+        extension_id=extension_id,
+        payload=payload,
+        coordinator_uid=current_user["uid"],
+    )
+
+# ---------------------------------------------------------------------------
+# GET — Listagens e Dashboard (AOP mitigado para evitar M2)
+# ---------------------------------------------------------------------------
+@router.get(
+    "/students/{student_id}",
+    response_model=list[ExtensionResponse],
+    summary="Listar prorrogações do aluno (Contrato Front C4)",
+)
+@requires_role("aluno", "coordenacao")
+@audit_operation
+async def list_student_extensions(
+    student_id: str,
+    current_user: CurrentUser,
+    service: Service,
+) -> list[ExtensionResponse]:
+    """Retorna o histórico completo de prorrogações de um discente."""
+    return await service.list_by_student(student_id)
+
+@router.get(
+    "/dashboard",
+    response_model=list[ExtensionResponse],
+    summary="Dashboard de prorrogações pendentes (Contrato Front C4)",
+)
+@requires_role("orientador", "coordenacao")
+@audit_operation
+async def get_dashboard_extensions(
+    current_user: CurrentUser,
+    service: Service,
+) -> list[ExtensionResponse]:
+    """Retorna as prorrogações aplicáveis ao contexto do painel do avaliador."""
+    if current_user["role"] == "orientador":
+        return await service.list_pending_for_advisor(current_user["uid"])
+    return await service.list_all_pending()
