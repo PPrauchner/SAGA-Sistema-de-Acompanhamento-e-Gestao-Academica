@@ -263,9 +263,11 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
     assert por_aluno["Caio"].por_nivel.B1 == 1
 
     por_orientador = {item.advisor_id: item for item in result.por_orientador}
-    # Prof. X tem 2 orientandos (Ana=4.0, Bruno=0.0) → média 2.0; 1 produção.
+    # Prof. X tem 2 orientandos (Ana=4.0, Bruno=0.0) → soma 4.0, média 2.0; 1 produção.
     assert por_orientador["a1"].total == 1
+    assert por_orientador["a1"].pontuacao_total == 4.0
     assert por_orientador["a1"].pontuacao_media_orientandos == 2.0
+    assert por_orientador["a2"].pontuacao_total == 1.0
     assert por_orientador["a2"].pontuacao_media_orientandos == 1.0
 
 
@@ -296,6 +298,7 @@ async def test_productions_soma_multiplas_producoes_do_mesmo_aluno() -> None:
     assert item.por_nivel.A1 == 2
     assert item.por_nivel.A2 == 1
     assert result.por_orientador[0].total == 3
+    assert result.por_orientador[0].pontuacao_total == 9.5
     assert result.por_orientador[0].pontuacao_media_orientandos == 9.5
 
 
