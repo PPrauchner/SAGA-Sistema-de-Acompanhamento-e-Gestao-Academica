@@ -31,6 +31,11 @@ async def _endpoint_todos(user: CurrentUser) -> str:
     return "ok"
 
 
+@requires_role("adm")
+async def _endpoint_adm(user: CurrentUser) -> str:
+    return f"ok:{user.role}"
+
+
 async def test_papel_autorizado_executa() -> None:
     assert await _endpoint_coord(user=_fake_user("coordenacao")) == "ok:coordenacao"
 
@@ -49,6 +54,16 @@ async def test_usuario_ausente_401() -> None:
 
 async def test_qualquer_papel_aceito_quando_listado() -> None:
     assert await _endpoint_todos(user=_fake_user("aluno")) == "ok"
+
+
+async def test_adm_autorizado() -> None:
+    assert await _endpoint_adm(user=_fake_user("adm")) == "ok:adm"
+
+
+async def test_coordenacao_nao_acessa_endpoint_adm() -> None:
+    with pytest.raises(HTTPException) as exc:
+        await _endpoint_adm(user=_fake_user("coordenacao"))
+    assert exc.value.status_code == 403
 
 
 async def test_flag_desativada_passa_direto(monkeypatch: pytest.MonkeyPatch) -> None:
