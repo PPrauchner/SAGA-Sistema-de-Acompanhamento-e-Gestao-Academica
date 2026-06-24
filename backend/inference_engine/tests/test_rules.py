@@ -12,7 +12,7 @@ Responsabilidades:
 - RL04 activity_eligibility: testar elegivel (4 fatos), sem_comprovante, tipo_inativo,
   excede_limite_tecnologico.
 - RL05 production_scoring: testar producao_A1_base10 → Score=10.0, producao_A4_base10 →
-  Score=5.5, producao_B2_base10 → Score=3.0 (escala Qualis Único monotônica).
+  Score=5.5, producao_A8_base10 → Score=1.5 (escala Qualis Único monotônica A1–A8 + fallback).
 """
 """
 test_rules.py — Testes das regras acadêmicas (RL01–RL05).
@@ -263,12 +263,12 @@ class TestProductionScoring:
         assert len(results) == 1
         assert results[0]["Score"].value == pytest.approx(5.5)
 
-    def test_producao_B2_base10(self):
-        engine = make_engine(*self._fatos_producao("p1", "v3", "B2", 0.3, 10))
+    def test_producao_A8_base10(self):
+        engine = make_engine(*self._fatos_producao("p1", "v3", "A8", 0.15, 10))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"].value == pytest.approx(3.0)
+        assert results[0]["Score"].value == pytest.approx(1.5)
 
     def test_producao_A2_base8(self):
         engine = make_engine(*self._fatos_producao("p1", "v4", "A2", 0.85, 8))
