@@ -43,7 +43,6 @@ export function ExtensionsPage() {
         motivo: motivo,
         plano_atualizado: `Prazo atual: ${dataAtual} -> Novo prazo pretendido: ${novaData}`,
         semestres_solicitados: 1, 
-        tipo_solicitacao: tipoSol
       });
       setMotivo(""); setDataAtual(""); setNovaData("");
       setShowForm(false);
@@ -114,7 +113,7 @@ export function ExtensionsPage() {
                       </div>
                     </div>
                     <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--tint-blue-text)", marginBottom: "8px", wordBreak: "break-word" }}>
-                      {TIPO_MAP[ext.tipo_solicitacao || "prazo_defesa"]}
+                      Prorrogação de Prazo
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex items-center gap-1.5 min-w-0">
