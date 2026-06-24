@@ -23,9 +23,11 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 # Papéis reconhecidos pelo sistema (custom claim 'role').
-Role = Literal["aluno", "orientador", "coordenacao"]
+# `adm` é o superusuário global (ADR-0001): não pertence a programa algum,
+# por isso é o único papel com programa_id nulo.
+Role = Literal["aluno", "orientador", "coordenacao", "adm"]
 # Convites só podem ser emitidos para aluno ou orientador — a coordenação
-# não é criada por convite.
+# e o adm não são criados por convite (adm é criado via script/backend).
 InviteRole = Literal["aluno", "orientador"]
 
 # email-validator não faz parte das dependências do projeto; validação de
@@ -49,7 +51,9 @@ class UserBase(BaseModel):
     email: str
     nome: str
     role: Role
-    programa_id: str
+    # Nulo apenas para o papel `adm` (superusuário global, ADR-0001); para os
+    # demais papéis o service garante a invariante de programa não-nulo.
+    programa_id: str | None = None
     ativo: bool = True
 
     @field_validator("email")
