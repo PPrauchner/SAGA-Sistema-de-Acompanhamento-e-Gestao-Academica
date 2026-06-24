@@ -13,6 +13,10 @@ Responsabilidades:
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.deadline_validation import check_deadlines
+from backend.app.aspects.ownership import check_dashboard_ownership
+from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.checklist import ChecklistResponse
 from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.services.checklist_service import ChecklistService
@@ -29,10 +33,13 @@ def _get_checklist_service() -> ChecklistService:
     return ChecklistService(InferenceService(repo), repo)
 
 
-# TODO: adicionar @requires_role('aluno', 'orientador', 'coordenacao') e @check_deadlines
 @router.get("/checklist/{student_id}", response_model=ChecklistResponse)
+@requires_role("aluno", "orientador", "coordenacao")
+@check_dashboard_ownership()
+@check_deadlines
 async def get_checklist(
     student_id: str,
+    user: CurrentUser = Depends(get_current_user),
     service: ChecklistService = Depends(_get_checklist_service),
 ) -> ChecklistResponse:
     """Retorna o checklist de integralização do aluno."""
