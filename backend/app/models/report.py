@@ -121,6 +121,7 @@ class ProductionByAdvisorItem(BaseModel):
     advisor_id: str
     advisor_nome: str
     total: int
+    pontuacao_total: float
     pontuacao_media_orientandos: float
 
 
