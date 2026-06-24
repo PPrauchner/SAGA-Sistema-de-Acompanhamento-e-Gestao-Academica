@@ -230,6 +230,7 @@
             "advisor_id": "string",
             "advisor_nome": "string",
             "total": "int",
+            "pontuacao_total": "float",
             "pontuacao_media_orientandos": "float"
           }
         ]
