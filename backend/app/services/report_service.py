@@ -264,6 +264,7 @@ class ReportService:
                 advisor_id=orientador_id,
                 advisor_nome=advisor_names.get(orientador_id, ""),
                 total=int(acc["total"]),
+                pontuacao_total=round(acc["pontuacao"], 2),
                 pontuacao_media_orientandos=(
                     round(acc["pontuacao"] / acc["orientandos"], 2)
                     if acc["orientandos"]
