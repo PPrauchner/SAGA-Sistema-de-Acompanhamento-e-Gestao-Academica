@@ -9,6 +9,7 @@ import { useApp } from "@/app/context/AppContext";
 import { getInference, type InferenceResult } from "@/api/inferenceApi";
 import { getChecklist, type ChecklistResponse } from "@/api/checklistApi";
 import { useChecklistStudent } from "@/hooks/useChecklistStudent";
+import { useAuth } from "@/hooks/useAuth";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -723,6 +724,7 @@ function BoolPill({ label, value }: { label: string; value: boolean }) {
 
 function RealInferencePanel() {
   const { studentId, students, setStudentId } = useChecklistStudent();
+  const { token } = useAuth();
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [inf, setInf] = useState<InferenceResult | null>(null);
   const [chk, setChk] = useState<ChecklistResponse | null>(null);
@@ -731,16 +733,16 @@ function RealInferencePanel() {
   const [showFacts, setShowFacts] = useState(false);
 
   useEffect(() => {
-    if (!studentId) return;
+    if (!studentId || !token) return;
     let active = true;
     setLoading(true);
     setError(null);
-    Promise.all([getInference(studentId), getChecklist(studentId)])
+    Promise.all([getInference(studentId, token), getChecklist(studentId, token)])
       .then(([i, c]) => { if (active) { setInf(i); setChk(c); } })
       .catch(() => { if (active) setError("Não foi possível carregar a inferência do backend."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [studentId]);
+  }, [studentId, token]);
 
   const selectedLabel = students?.find((s) => s.id === studentId)?.label;
 
