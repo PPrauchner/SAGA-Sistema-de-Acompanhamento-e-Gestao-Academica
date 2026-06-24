@@ -201,7 +201,41 @@ class DashboardService:
                 status="Pendente"
             ))
 
-        checklist = ChecklistResumo(total=total_tasks, cumpridos=concluidas, pendentes=total_tasks - concluidas, em_risco=0)
+        snapshots = await self._students.list_subcollection(student_id, "inferred_status")
+        
+        cumpridos = 0
+        pend_chk = 8
+        em_risco = 0
+        total_chk = 8
+        
+        if snapshots:
+            latest = max(snapshots, key=lambda snap: snap.get("timestamp", ""))
+            checklist_data = latest.get("checklist", {})
+            
+            pend_chk = 0
+            for key in [
+                "creditos_minimos", "creditos_grupo_basico", "creditos_grupo_especifico", 
+                "creditos_grupo_tecnologico", "proficiencia", "qualificacao", 
+                "producao_validada", "plano_concluido"
+            ]:
+                item = checklist_data.get(key)
+                if item:
+                    item_status = item.get("status")
+                    if item_status == "cumprido":
+                        cumpridos += 1
+                    elif item_status == "pendente":
+                        pend_chk += 1
+                    elif item_status == "em_risco":
+                        em_risco += 1
+                else:
+                    pend_chk += 1
+
+        checklist = ChecklistResumo(
+            total=total_chk, 
+            cumpridos=cumpridos, 
+            pendentes=pend_chk, 
+            em_risco=em_risco
+        )
 
         return AlunoDashboardResponse(
             student_id=student_id,
