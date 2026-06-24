@@ -10,7 +10,9 @@ Responsabilidades:
     3. Lê os custom claims 'role' e 'programa_id' do token decodificado.
     4. Lança HTTPException(401) para token ausente, inválido ou expirado.
     5. Lança HTTPException(403) se os custom claims estiverem ausentes
-       (conta ainda não ativada via first-access).
+       (conta ainda não ativada via first-access). O papel `adm`
+       (superusuário global, ADR-0001) é a exceção à exigência de
+       'programa_id': por ser cross-programa, autentica com programa_id nulo.
 - Ser a base sobre a qual o aspecto @requires_role (authorization.py) opera.
 
 Referência: docs/specs/04_autenticacao.json (seção dependencia_fastapi).
@@ -33,7 +35,8 @@ class CurrentUser(BaseModel):
 
     uid: str
     role: Role
-    programa_id: str
+    # Nulo apenas para o papel `adm` (superusuário global, ADR-0001).
+    programa_id: str | None = None
     email: str | None = None
 
 
@@ -72,7 +75,9 @@ async def get_current_user(
 
     role = decoded.get("role")
     programa_id = decoded.get("programa_id")
-    if not role or not programa_id:
+    # `adm` é global (ADR-0001) e legitimamente não tem programa_id; os demais
+    # papéis sem programa_id indicam conta ainda não ativada via first-access.
+    if not role or (role != "adm" and not programa_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Conta não ativada: custom claims ausentes no token",
