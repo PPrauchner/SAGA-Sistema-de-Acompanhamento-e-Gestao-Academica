@@ -13,6 +13,8 @@ Responsabilidades:
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from backend.app.aspects.authorization import requires_role
+from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.inference import InferenceResult
 from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.services.inference_service import (
@@ -27,10 +29,12 @@ def _get_inference_service() -> InferenceService:
     return InferenceService(InferenceRepository())
 
 
-# TODO: adicionar @requires_role('aluno', 'orientador', 'coordenacao') e @audit_operation
+# TODO: adicionar @audit_operation
 @router.get("/inference/{student_id}", response_model=InferenceResult)
+@requires_role("aluno", "orientador", "coordenacao")
 async def get_inference(
     student_id: str,
+    user: CurrentUser = Depends(get_current_user),
     service: InferenceService = Depends(_get_inference_service),
 ) -> InferenceResult:
     """Retorna o resultado completo da inferência lógica do aluno."""
