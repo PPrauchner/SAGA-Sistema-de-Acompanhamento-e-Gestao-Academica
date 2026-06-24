@@ -16,7 +16,7 @@ from app.aspects.audit import audit_operation                       # A02
 from app.aspects.deadline_validation import check_deadlines         # A04
 from app.aspects.alerts import trigger_alerts                       # A05
 from app.aspects.authorization import requires_role                # A01
-from app.core.auth import get_current_user                          # A01
+from app.core.auth import get_current_user, CurrentUser             # A01
 
 # Correção C2/C4: Modelos corretos e payload alinhado
 from app.models.extension import (
@@ -29,7 +29,6 @@ from app.models.extension import (
 from app.services.extension_service import ExtensionService
 
 router = APIRouter(
-    prefix="/api/v1/extensions",
     tags=["Prorrogações"],
 )
 
@@ -37,7 +36,7 @@ router = APIRouter(
 async def get_extension_service() -> ExtensionService:
     return ExtensionService()
 
-CurrentUser = Annotated[dict, Depends(get_current_user)]
+AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
 Service     = Annotated[ExtensionService, Depends(get_extension_service)]
 
 # ---------------------------------------------------------------------------
@@ -55,7 +54,7 @@ Service     = Annotated[ExtensionService, Depends(get_extension_service)]
 @trigger_alerts
 async def create_extension(
     payload: ExtensionCreateRequest,
-    current_user: CurrentUser,
+    current_user: AuthUser,
     service: Service,
 ) -> ExtensionResponse:
     """Cria uma nova solicitação de prorrogação com status 'pendente'."""
@@ -79,7 +78,7 @@ async def review_extension(
     student_id: str,
     extension_id: str,
     payload: ReviewRequest,
-    current_user: CurrentUser,
+    current_user: AuthUser,
     service: Service,
 ) -> ExtensionResponse:
     """Permite ao orientador emitir o parecer técnico de uma prorrogação."""
@@ -106,7 +105,7 @@ async def decide_extension(
     student_id: str,
     extension_id: str,
     payload: DecisionRequest,
-    current_user: CurrentUser,
+    current_user: AuthUser,
     service: Service,
 ) -> ExtensionResponse:
     """Processa o deferimento/indeferimento baseado na Spec 08 e contrato booleano."""
@@ -129,7 +128,7 @@ async def decide_extension(
 @audit_operation
 async def list_student_extensions(
     student_id: str,
-    current_user: CurrentUser,
+    current_user: AuthUser,
     service: Service,
 ) -> list[ExtensionResponse]:
     """Retorna o histórico completo de prorrogações de um discente."""
@@ -143,7 +142,7 @@ async def list_student_extensions(
 @requires_role("orientador", "coordenacao")
 @audit_operation
 async def get_dashboard_extensions(
-    current_user: CurrentUser,
+    current_user: AuthUser,
     service: Service,
 ) -> list[ExtensionResponse]:
     """Retorna as prorrogações aplicáveis ao contexto do painel do avaliador."""

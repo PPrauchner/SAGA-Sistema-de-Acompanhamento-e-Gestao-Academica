@@ -27,7 +27,7 @@ from backend.app.api.v1 import (
     checklist,
     coordination_transfers,
     dashboard,
-    extensions,
+    extensions,          # C1-fix: único import — via backend.app.api.v1
     inference,
     notifications,
     productions,
@@ -41,7 +41,7 @@ from backend.app.api.v1 import (
 from backend.app.core.config import settings
 from backend.app.core.firebase import init_firebase, shutdown_firebase
 from backend.app.api.v1.transfer_cross import router as transfer_cross_router
-from app.api.v1.extensions import router as extensions_router
+# C1-fix: removido o import duplicado de `app.api.v1.extensions`
 
 logger = logging.getLogger(__name__)
 
@@ -75,27 +75,22 @@ app.add_middleware(
 
 _PREFIX = "/api/v1"
 
-app.include_router(auth.router, prefix=_PREFIX, tags=["auth"])
-app.include_router(students.router, prefix=_PREFIX, tags=["students"])
-app.include_router(advisors.router, prefix=_PREFIX, tags=["advisors"])
-app.include_router(work_plan.router, prefix=_PREFIX, tags=["work-plan"])
-app.include_router(activities.router, prefix=_PREFIX, tags=["activities"])
-app.include_router(activity_types.router, prefix=_PREFIX, tags=["activity-types"])
-app.include_router(productions.router, prefix=_PREFIX, tags=["productions"])
-app.include_router(vehicles.router, prefix=_PREFIX, tags=["vehicles"])
-app.include_router(extensions.router, prefix=_PREFIX, tags=["extensions"])
-app.include_router(checklist.router, prefix=_PREFIX, tags=["checklist"])
-app.include_router(
-    coordination_transfers.router,
-    prefix=_PREFIX,
-    tags=["coordination-transfers"],
-)
-app.include_router(programs.router, prefix=_PREFIX, tags=["programs"])
-app.include_router(inference.router, prefix=_PREFIX, tags=["inference"])
-app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
-app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
-app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
-app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
-app.include_router(transfers.router, prefix=_PREFIX, tags=["transfers"])
+app.include_router(auth.router,prefix=_PREFIX, tags=["auth"])
+app.include_router(students.router,prefix=_PREFIX, tags=["students"])
+app.include_router(advisors.router,prefix=_PREFIX, tags=["advisors"])
+app.include_router(work_plan.router,prefix=_PREFIX, tags=["work-plan"])
+app.include_router(activities.router,prefix=_PREFIX, tags=["activities"])
+app.include_router(activity_types.router,prefix=_PREFIX, tags=["activity-types"])
+app.include_router(productions.router,prefix=_PREFIX, tags=["productions"])
+app.include_router(vehicles.router,prefix=_PREFIX, tags=["vehicles"])
+app.include_router(extensions.router,prefix=f"{_PREFIX}/extensions", tags=["Prorrogações"])
+app.include_router(checklist.router,prefix=_PREFIX, tags=["checklist"])
+app.include_router(coordination_transfers.router,prefix=_PREFIX,tags=["coordination-transfers"],)
+app.include_router(programs.router,prefix=_PREFIX, tags=["programs"])
+app.include_router(inference.router,prefix=_PREFIX, tags=["inference"])
+app.include_router(reports.router,prefix=_PREFIX, tags=["reports"])
+app.include_router(dashboard.router,prefix=_PREFIX, tags=["dashboard"])
+app.include_router(audit_logs.router,prefix=_PREFIX, tags=["audit-logs"])
+app.include_router(notifications.router,prefix=_PREFIX, tags=["notifications"])
+app.include_router(transfers.router,prefix=_PREFIX, tags=["transfers"])
 app.include_router(transfer_cross_router)
-app.include_router(extensions_router,prefix="/api/v1/extensions",tags=["Extensions"])
