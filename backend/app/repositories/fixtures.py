@@ -229,6 +229,11 @@ _PRODUCTIONS: dict[str, list[dict[str, Any]]] = {
 }
 
 
+# Versões de pesos Qualis por programa. Vazio → InferenceService faz fallback para a escala
+# default PESO_POR_NIVEL. Cenários com versões datadas são adicionados nos testes de #160.
+_QUALIS_WEIGHTS_VERSIONS: dict[str, list[dict[str, Any]]] = {}
+
+
 class FixtureRepository:
     """Fonte de dados em memória que implementa o contrato InferenceDataSource.
 
@@ -264,6 +269,10 @@ class FixtureRepository:
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as produções aprovadas do aluno."""
         return [dict(p) for p in _PRODUCTIONS.get(student_id, [])]
+
+    async def get_qualis_weights_versions(self, programa_id: str) -> list[dict[str, Any]]:
+        """Retorna as versões de pesos Qualis do programa (vazio → escala default)."""
+        return [dict(v) for v in _QUALIS_WEIGHTS_VERSIONS.get(programa_id, [])]
 
     async def save_inferred_status(self, student_id: str, snapshot: dict[str, Any]) -> str:
         """Persiste um snapshot imutável e atualiza situacao_inferida; retorna o snapshot_id."""
