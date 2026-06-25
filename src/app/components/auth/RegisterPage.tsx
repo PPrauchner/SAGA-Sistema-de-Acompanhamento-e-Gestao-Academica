@@ -432,15 +432,28 @@ export function RegisterPage() {
       </form>
 
       <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", marginTop: "20px" }}>
-        Já tem acesso?{" "}
-        <button
-          type="button"
-          onClick={() => setCurrentPage("login")}
-          style={{ color: "#123C7A", fontWeight: 700, background: "none", border: "none" }}
-          className="hover:underline"
-        >
-          Fazer login
-        </button>
+        {step < 3 ? (
+          <button
+            type="button"
+            onClick={() => setCurrentPage("login")}
+            style={{ color: "#123C7A", fontWeight: 700, background: "none", border: "none" }}
+            className="hover:underline"
+          >
+            ← Voltar ao Login
+          </button>
+        ) : (
+          <>
+            Já tem acesso?{" "}
+            <button
+              type="button"
+              onClick={() => setCurrentPage("login")}
+              style={{ color: "#123C7A", fontWeight: 700, background: "none", border: "none" }}
+              className="hover:underline"
+            >
+              Fazer login
+            </button>
+          </>
+        )}
       </p>
     </AuthLayout>
   );
