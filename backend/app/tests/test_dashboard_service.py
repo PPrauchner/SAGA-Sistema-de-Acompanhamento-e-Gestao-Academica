@@ -182,21 +182,74 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
         patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.WorkPlanRepository") as MockWPR,
+        patch("backend.app.services.dashboard_service.ProductionRepository") as MockPR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
         MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
         MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
         MockATR.return_value.list_all = AsyncMock(return_value=[])
+        MockPR.return_value.list_productions = AsyncMock(return_value=[
+            {"id": "prod_1", "nivel": "A1", "pontuacao_calculada": 4.0},
+            {"id": "prod_2", "nivel": "A2", "pontuacao_calculada": 2.5},
+        ])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
         result = await service.get_aluno_dashboard("stu_001")
 
     assert result.producoes_aprovadas == 2 
+    assert result.producoes.total == 2
+    assert result.producoes.pontuacao_total == 6.5
+    assert result.producoes.por_nivel == {"A1": 1, "A2": 1}
     assert result.atividades_pendentes_validacao == 2 
 
     MockSR.return_value.get.assert_called_once_with("stu_001")
     MockAR.return_value.list_by_student.assert_called_once_with("stu_001")
+
+
+@pytest.mark.asyncio
+async def test_meu_aluno_dashboard_resolve_student_from_current_user():
+    """Dashboard do discente deriva o student_id do CurrentUser.uid."""
+    from backend.app.core.auth import CurrentUser
+    from backend.app.services.dashboard_service import DashboardService
+
+    student = _make_student()
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
+        patch("backend.app.services.dashboard_service.WorkPlanRepository") as MockWPR,
+    ):
+        MockSR.return_value.query = AsyncMock(return_value=[student])
+        MockSR.return_value.get = AsyncMock(return_value=student)
+        MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockATR.return_value.list_all = AsyncMock(return_value=[])
+        MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_meu_aluno_dashboard(
+            CurrentUser(uid="uid_aluno_001", role="aluno", programa_id="prog_default")
+        )
+
+    assert result.student_id == "stu_001"
+    MockSR.return_value.query.assert_called_once_with(filters=[("uid", "==", "uid_aluno_001")])
+    MockSR.return_value.get.assert_called_once_with("stu_001")
+
+
+@pytest.mark.asyncio
+async def test_meu_aluno_dashboard_blocks_non_student_role():
+    from backend.app.core.auth import CurrentUser
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_meu_aluno_dashboard(
+            CurrentUser(uid="uid_coord", role="coordenacao", programa_id="prog_default")
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 
