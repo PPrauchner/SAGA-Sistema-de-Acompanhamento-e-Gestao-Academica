@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from app.main import app
-from app.core.auth import get_current_user, CurrentUser
-from app.api.v1.extensions import get_extension_service
-from app.services.extension_service import ExtensionService
-from app.models.extension import (
+from backend.app.main import app
+from backend.app.core.auth import get_current_user, CurrentUser
+from backend.app.api.v1.extensions import get_extension_service
+from backend.app.services.extension_service import ExtensionService
+from backend.app.models.extension import (
     ExtensionCreateRequest,
     DecisionRequest,
     ExtensionStatus,
@@ -78,7 +78,7 @@ class TestAspectConfig:
     @pytest.mark.asyncio
     async def test_audit_desativado_nao_grava_log(self):
         with patch("app.aspects.aspect_config.AUDIT_ENABLED", False):
-            from app.aspects.audit import audit_operation
+            from backend.app.aspects.audit import audit_operation
 
             @audit_operation
             async def dummy():
@@ -97,7 +97,7 @@ class TestAspectConfig:
     async def test_ambos_desativados_logica_negocio_preservada(self):
         with patch("app.aspects.aspect_config.AUDIT_ENABLED", False), \
              patch("app.aspects.aspect_config.ALERTS_ENABLED", False):
-            from app.aspects.audit import audit_operation
+            from backend.app.aspects.audit import audit_operation
 
             @audit_operation
             async def endpoint_negocio():
@@ -119,7 +119,7 @@ class TestRoleConsistency:
 
     @pytest.mark.asyncio
     async def test_aluno_nao_pode_acessar_review(self):
-        from app.aspects.authorization import requires_role
+        from backend.app.aspects.authorization import requires_role
 
         @requires_role("orientador")
         async def endpoint(current_user):
@@ -131,7 +131,7 @@ class TestRoleConsistency:
 
     @pytest.mark.asyncio
     async def test_aluno_nao_pode_acessar_decision(self):
-        from app.aspects.authorization import requires_role
+        from backend.app.aspects.authorization import requires_role
 
         @requires_role("coordenacao")
         async def endpoint(current_user):
@@ -143,7 +143,7 @@ class TestRoleConsistency:
 
     @pytest.mark.asyncio
     async def test_orientador_nao_pode_deliberar(self):
-        from app.aspects.authorization import requires_role
+        from backend.app.aspects.authorization import requires_role
 
         @requires_role("coordenacao")
         async def endpoint(current_user):

@@ -6,27 +6,21 @@ Responsabilidades:
 - Aplicar decoradores AOP estritamente nos join points definidos pelas especificações.
 """
 
-from __future__ import annotations
-
-from typing import Annotated
-from fastapi import APIRouter, Depends, status
-
-# Correção C2: Ajuste dos caminhos de aspectos, core auth e remoção de app.dependencies
-from app.aspects.audit import audit_operation                       # A02
-from app.aspects.deadline_validation import check_deadlines         # A04
-from app.aspects.alerts import trigger_alerts                       # A05
-from app.aspects.authorization import requires_role                # A01
-from app.core.auth import get_current_user, CurrentUser             # A01
+from backend.app.aspects.audit import audit_operation
+from backend.app.aspects.deadline_validation import check_deadlines
+from backend.app.aspects.alerts import trigger_alerts
+from backend.app.aspects.authorization import requires_role
+from backend.app.core.auth import get_current_user, CurrentUser
 
 # Correção C2/C4: Modelos corretos e payload alinhado
-from app.models.extension import (
+from backend.app.models.extension import (
     ExtensionCreateRequest,
     ReviewRequest,
     DecisionRequest,
     ExtensionResponse,
 )
 # Correção C2: Serviço no singular
-from app.services.extension_service import ExtensionService
+from backend.app.services.extension_service import ExtensionService
 
 router = APIRouter(
     tags=["Prorrogações"],
