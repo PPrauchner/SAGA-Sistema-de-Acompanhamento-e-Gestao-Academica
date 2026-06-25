@@ -221,6 +221,7 @@ o mover-direto da coordenacao e a solicitacao do orientador com aprovacao da coo
 
 | Campo | Tipo | Ref | Notas |
 |-------|------|-----|-------|
+| `id` | string | | auto-id Firestore do documento em `transfer_requests/` |
 | `student_id` | string | ->`students` | aluno transferido |
 | `orientador_origem_id` | string | ->`advisors` | orientador atual no momento da solicitacao |
 | `orientador_destino_id` | string | ->`advisors` | destino imutavel da solicitacao |
@@ -235,6 +236,32 @@ o mover-direto da coordenacao e a solicitacao do orientador com aprovacao da coo
 | `cancelled_at` / `cancelled_by` | timestamp / uid | | preenchido quando cancelada |
 | `cancel_reason` | string\|null | | motivo tecnico/usuario do cancelamento |
 | `cancelled_request_id` | string\|null | ->`transfer_requests` | mover-direto pode cancelar pendente anterior |
+
+Status aceitos:
+
+| Status | Significado |
+|--------|-------------|
+| `pendente` | solicitacao criada por orientador e aguardando decisao da coordenacao |
+| `aprovada` | transferencia efetivada; tambem usado no mover-direto da coordenacao |
+| `rejeitada` | coordenacao recusou a solicitacao e registrou `motivo` |
+| `cancelada` | orientador solicitante cancelou a solicitacao, ou a coordenacao cancelou uma pendente ao mover direto |
+
+Relacionamentos:
+
+- `transfer_requests.student_id` -> `students`
+- `transfer_requests.orientador_origem_id` -> `advisors`
+- `transfer_requests.orientador_destino_id` -> `advisors`
+- `transfer_requests.programa_id` -> `programs`
+- `transfer_requests.solicitante_id`, `approved_by`, `rejected_by`, `cancelled_by` -> `users.uid`
+- `transfer_requests.cancelled_request_id` -> `transfer_requests`
+
+Ciclo de vida:
+
+- Coordenacao pode criar uma transferencia direta com `tipo="direta_coordenacao"`; o registro ja nasce `aprovada`.
+- Orientador pode criar solicitacao com `tipo="solicitada_orientador"`; o registro nasce `pendente`.
+- Coordenacao pode aprovar (`aprovada`) ou rejeitar (`rejeitada`) solicitacao pendente.
+- Orientador solicitante pode cancelar (`cancelada`) solicitacao pendente.
+- Transferencia direta pela coordenacao cancela eventual solicitacao pendente do mesmo aluno, preenchendo `cancelled_request_id` no novo registro e `cancel_reason` no registro cancelado.
 
 > Invariante: so pode existir uma solicitacao `pendente` por aluno. A efetivacao atualiza
 > `students.orientador_id`, limpa `coorientador_id` quando o destino era coorientador atual,
@@ -653,6 +680,7 @@ Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genéri
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador`\|`transferencia_coordenacao` |
+| `tipo="transferencia_orientador"` | uso | fluxo `transfer_requests`: criacao de solicitacao, aprovacao, rejeicao, cancelamento e transferencia direta pela coordenacao |
 | `titulo` / `mensagem` | string | |
 | `destinatario_id` | string | →`users.uid` (soft) |
 | `entidade_tipo` / `entidade_id` | string | ref soft polimórfica — **sem aresta** |

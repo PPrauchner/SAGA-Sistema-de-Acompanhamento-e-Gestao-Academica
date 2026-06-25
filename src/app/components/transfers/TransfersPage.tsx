@@ -34,7 +34,7 @@ function statusLabel(status: TransferRequest["status"]): string {
 }
 
 export function TransfersPage() {
-  const { currentUser, token, setCurrentPage, setSelectedStudentId } = useApp();
+  const { activeView, currentUser, token, setCurrentPage, setSelectedStudentId } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [transfers, setTransfers] = useState<TransferRequest[]>([]);
@@ -47,6 +47,7 @@ export function TransfersPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const isAdvisorView = activeView === "orientador" && Boolean(currentUser?.advisor_id);
   const isCoord = currentUser?.role === "coordenacao";
   const isAdvisor = currentUser?.role === "orientador";
 
@@ -81,7 +82,11 @@ export function TransfersPage() {
     () => new Map(students.map((student) => [student.id, student])),
     [students],
   );
-  const selectedStudent = students.find((student) => student.id === studentId) ?? null;
+  const visibleStudents =
+    isAdvisorView && currentUser?.advisor_id
+      ? students.filter((student) => student.orientador_id === currentUser.advisor_id)
+      : students;
+  const selectedStudent = visibleStudents.find((student) => student.id === studentId) ?? null;
   const selectedStudentTerminal = selectedStudent
     ? TERMINAL_STATUSES.has(selectedStudent.situacao_registrada)
     : false;
@@ -97,7 +102,17 @@ export function TransfersPage() {
   const selectedAdvisorHasCapacity = selectedAdvisor
     ? selectedAdvisor.orientandos_ativos < selectedAdvisor.limite_orientandos
     : false;
-  const listedTransfers = transfers;
+  const listedTransfers =
+    isAdvisorView && currentUser?.advisor_id
+      ? transfers.filter((transfer) => {
+          const student = studentById.get(transfer.student_id);
+          return (
+            student?.orientador_id === currentUser.advisor_id ||
+            transfer.orientador_origem_id === currentUser.advisor_id ||
+            transfer.orientador_destino_id === currentUser.advisor_id
+          );
+        })
+      : transfers;
 
   async function runAction(action: () => Promise<{ message: string }>): Promise<void> {
     if (!token) return;
@@ -152,7 +167,9 @@ export function TransfersPage() {
             Transferências
           </h1>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
-            {isCoord
+            {isAdvisorView
+              ? "Visualize transferencias relacionadas aos seus orientandos."
+              : isCoord
               ? "Aprove solicitações e mova orientandos diretamente."
               : "Solicite transferência dos seus orientandos para outro orientador."}
           </p>
@@ -207,7 +224,7 @@ export function TransfersPage() {
                           {statusLabel(transfer.status)}
                         </span>
                       </div>
-                      {isPending && isCoord ? (
+                      {isPending && isCoord && activeView === "coordenador" ? (
                         <div className="flex flex-col gap-2 md:min-w-[260px]">
                           <input
                             value={rejectReason[transfer.id] ?? ""}
@@ -239,7 +256,7 @@ export function TransfersPage() {
                             </button>
                           </div>
                         </div>
-                      ) : isPending ? (
+                      ) : isPending && isAdvisor ? (
                         <button
                           type="button"
                           disabled={saving}
@@ -290,7 +307,7 @@ export function TransfersPage() {
               style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "14px" }}
             >
               <option value="">Selecione...</option>
-              {students.map((student) => (
+              {visibleStudents.map((student) => (
                 <option key={student.id} value={student.id}>
                   {student.nome} ({student.matricula})
                 </option>

@@ -26,6 +26,7 @@ from backend.app.core.auth import (
 )
 from backend.app.models.advisor import (
     AdvisorCreateRequest,
+    AdvisorResponse,
     AdvisorUpdateRequest,
 )
 from backend.app.services.advisor_service import (
@@ -37,24 +38,24 @@ router = APIRouter()
 service = AdvisorService()
 
 
-@router.get("/advisors")
+@router.get("/advisors", response_model=list[AdvisorResponse])
 @requires_role("coordenacao", "orientador")
 async def list_advisors(
     user: CurrentUser = Depends(
         get_current_user,
     ),
-) -> list[dict]:
+) -> list[AdvisorResponse]:
     return await service.list_advisors(user)
 
 
-@router.get("/advisors/{advisor_id}")
+@router.get("/advisors/{advisor_id}", response_model=AdvisorResponse)
 @requires_role("coordenacao")
 async def get_advisor(
     advisor_id: str,
     user: CurrentUser = Depends(
         get_current_user,
     ),
-) -> dict:
+) -> AdvisorResponse:
     return await service.get_advisor(
         advisor_id,
     )
