@@ -2,6 +2,7 @@
 Router para os endpoints de configuração do programa acadêmico.
 
 Responsabilidades:
+- GET /programs: Listar programas cadastrados (id e nome) para seleção em formulários.
 - GET /config: Recuperar a configuração atual do programa.
 - PUT /config: Atualizar a configuração do programa (somente coordenação).
 - Aplicar aspectos AOP: @requires_role, @audit_operation, @track_history.
@@ -18,6 +19,20 @@ from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.history import track_history
 
 router = APIRouter(prefix="/programs", tags=["programs"])
+
+
+@router.get("")
+@requires_role("coordenacao")
+async def list_programs(
+    user: CurrentUser = Depends(get_current_user),
+    service: ProgramService = Depends(ProgramService)
+):
+    """Lista os programas cadastrados (id e nome) para seleção em formulários."""
+    programs = await service.list_programs()
+    return [
+        {"id": program["id"], "nome": program.get("nome", "")}
+        for program in programs
+    ]
 
 
 @router.get("/config")
