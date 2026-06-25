@@ -21,6 +21,7 @@ from backend.app.models.extension import (
 )
 # Correção C2: Serviço no singular
 from backend.app.services.extension_service import ExtensionService
+from backend.app.services.tests.test_notification_service import service
 
 router = APIRouter(
     tags=["Prorrogações"],
@@ -53,9 +54,9 @@ async def create_extension(
 ) -> ExtensionResponse:
     """Cria uma nova solicitação de prorrogação com status 'pendente'."""
     return await service.create_extension(
-        student_id=current_user["uid"],
+        student_id=current_user.uid,
         payload=payload,
-        requesting_uid=current_user["uid"],
+        requesting_uid=current_user.uid,
     )
 
 # ---------------------------------------------------------------------------
@@ -80,7 +81,7 @@ async def review_extension(
         student_id=student_id,
         extension_id=extension_id,
         parecer=payload.parecer_orientador,
-        orientador_uid=current_user["uid"],
+        orientador_uid=current_user.uid,
     )
 
 # ---------------------------------------------------------------------------
@@ -103,13 +104,13 @@ async def decide_extension(
     service: Service,
 ) -> ExtensionResponse:
     """Processa o deferimento/indeferimento baseado na Spec 08 e contrato booleano."""
-    return await service.process_decision(
+    # review_extension
+    return await service.add_review(
         student_id=student_id,
         extension_id=extension_id,
-        payload=payload,
-        coordinator_uid=current_user["uid"],
+        parecer=payload.parecer_orientador,
+        orientador_uid=current_user.uid,
     )
-
 # ---------------------------------------------------------------------------
 # GET — Listagens e Dashboard (AOP mitigado para evitar M2)
 # ---------------------------------------------------------------------------
@@ -140,6 +141,9 @@ async def get_dashboard_extensions(
     service: Service,
 ) -> list[ExtensionResponse]:
     """Retorna as prorrogações aplicáveis ao contexto do painel do avaliador."""
-    if current_user["role"] == "orientador":
-        return await service.list_pending_for_advisor(current_user["uid"])
+    if current_user.role == "orientador":
+        return await service.list_pending_for_advisor(
+            current_user.uid
+        )
+
     return await service.list_all_pending()
