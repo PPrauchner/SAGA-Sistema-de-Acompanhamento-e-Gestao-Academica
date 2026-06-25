@@ -102,11 +102,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const setActiveView = (view: ActiveView) => {
     if (!currentUser) return;
-    if (currentUser.role === "coordenacao" && view === "orientador" && isMultiRoleAdvisor) {
+
+    if (currentUser.role === "coordenacao") {
+      const canUseAdvisorView = view === "orientador" && isMultiRoleAdvisor;
+      const canUseCoordinatorView = view === "coordenador";
+
+      setActiveViewState(canUseAdvisorView || canUseCoordinatorView ? view : "coordenador");
+      return;
+    }
+
+    if (currentUser.role === "orientador") {
       setActiveViewState("orientador");
       return;
     }
-    setActiveViewState(defaultView);
+
+    setActiveViewState("aluno");
   };
 
   // Sessão Firebase válida, mas perfil indisponível (GET /auth/me falhou). Distinto
