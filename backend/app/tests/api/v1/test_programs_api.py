@@ -2,6 +2,7 @@
 Testes para os endpoints da API de Programas.
 
 Responsabilidades:
+- Verificar o endpoint GET de listagem de programas.
 - Verificar os endpoints GET e PUT para a configuração do programa.
 - Garantir a integração correta com o ProgramService.
 """
@@ -21,6 +22,27 @@ from backend.app.core.auth import get_current_user
 from backend.app.services.program_service import ProgramService
 
 client = TestClient(app)
+
+
+def test_list_programs_success():
+    """Deve retornar 200 e a lista de programas com id e nome."""
+    mock_service = AsyncMock()
+    mock_service.list_programs.return_value = [
+        {"id": "prog_default", "nome": "PPGCC", "creditos_total_min": 24},
+    ]
+
+    from backend.app.core.auth import CurrentUser
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
+    )
+    app.dependency_overrides[ProgramService] = lambda: mock_service
+
+    response = client.get("/api/v1/programs")
+
+    app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": "prog_default", "nome": "PPGCC"}]
 
 
 def test_get_config_success():
