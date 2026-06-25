@@ -32,6 +32,7 @@ from backend.app.services.auth_service import AuthService
 
 DEFAULT_ADVISOR_LIMIT = 5
 DEFAULT_ORIENTANDOS_ATIVOS = 0
+DEFAULT_LEGACY_ADVISOR_UID = ""
 
 
 class AdvisorService:
@@ -43,7 +44,7 @@ class AdvisorService:
     def _normalize_advisor_response(advisor: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(advisor)
         if normalized.get("uid") is None:
-            normalized["uid"] = None
+            normalized["uid"] = DEFAULT_LEGACY_ADVISOR_UID
         if normalized.get("lattes") is None:
             normalized["lattes"] = None
         if normalized.get("limite_orientandos") is None:

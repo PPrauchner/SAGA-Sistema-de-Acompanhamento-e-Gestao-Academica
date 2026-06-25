@@ -64,7 +64,7 @@ def test_get_advisors_response_model_normaliza_documento_legado(client: TestClie
     assert response.json() == [
         {
             "id": "advisor1",
-            "uid": None,
+            "uid": "",
             "nome": "Orientador Legado",
             "email": "orientador@saga.edu",
             "departamento": "Computacao",
@@ -84,7 +84,7 @@ def test_get_advisor_response_model_inclui_orientandos_ativos(client: TestClient
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == "advisor1"
-    assert body["uid"] is None
+    assert body["uid"] == ""
     assert body["lattes"] is None
     assert body["limite_orientandos"] == 5
     assert body["orientandos_ativos"] == 3
