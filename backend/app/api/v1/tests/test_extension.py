@@ -77,7 +77,7 @@ class TestAspectConfig:
 
     @pytest.mark.asyncio
     async def test_audit_desativado_nao_grava_log(self):
-        with patch("app.aspects.aspect_config.AUDIT_ENABLED", False):
+        with patch("backend.app.aspects.aspect_config.AUDIT_ENABLED", False):
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation
@@ -89,14 +89,14 @@ class TestAspectConfig:
     @pytest.mark.asyncio
     async def test_alerts_desativado_nao_dispara_notificacao(self):
         # trigger_alerts requer argumento build — testamos o flag diretamente
-        with patch("app.aspects.aspect_config.ALERTS_ENABLED", False):
-            import app.aspects.aspect_config as cfg
+        with patch("backend.app.aspects.aspect_config.ALERTS_ENABLED", False):
+            import backend.app.aspects.aspect_config as cfg
             assert cfg.ALERTS_ENABLED is False
 
     @pytest.mark.asyncio
     async def test_ambos_desativados_logica_negocio_preservada(self):
-        with patch("app.aspects.aspect_config.AUDIT_ENABLED", False), \
-             patch("app.aspects.aspect_config.ALERTS_ENABLED", False):
+        with patch("backend.app.aspects.aspect_config.AUDIT_ENABLED", False), \
+             patch("backend.app.aspects.aspect_config.ALERTS_ENABLED", False):
             from backend.app.aspects.audit import audit_operation
 
             @audit_operation
@@ -274,3 +274,108 @@ class TestBusinessInvariants:
                 plano_atualizado="http://link-valido.com",
                 semestres_solicitados=1,
             )
+            
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user]
+
+    def override_student():
+        return CurrentUser(
+            uid="student_001",
+            role="aluno",
+            programa_id="prog_001",
+        )
+    
+    def override_advisor():
+        return CurrentUser(
+            uid="advisor_001",
+            role="orientador",
+            programa_id="prog_001",
+        )
+    
+    def override_coord():
+        return CurrentUser(
+            uid="coord_001",
+            role="coordenacao",
+            programa_id="prog_001",
+        )
+    
+    response = client.get(...)
+    assert response.status_code == 200
+
+    response = client.post(...)
+    assert response.status_code == 403
+
+class TestExtensionHttp:
+
+    def setup_method(self):
+        self.client = TestClient(app)
+
+    def teardown_method(self):
+        app.dependency_overrides.clear()
+
+    def test_dashboard_200_para_orientador(self):
+        service = _mock_service()
+
+        app.dependency_overrides[get_current_user] = (
+            lambda: CurrentUser(
+                uid="advisor_001",
+                role="orientador",
+                programa_id="prog_001",
+            )
+        )
+
+        app.dependency_overrides[get_extension_service] = (
+            lambda: service
+        )
+
+        response = self.client.get("/api/v1/extensions/dashboard")
+
+        assert response.status_code == 200
+
+    def test_dashboard_403_para_aluno(self):
+        service = _mock_service()
+
+        app.dependency_overrides[get_current_user] = (
+            lambda: CurrentUser(
+                uid="student_001",
+                role="aluno",
+                programa_id="prog_001",
+            )
+        )
+
+        app.dependency_overrides[get_extension_service] = (
+            lambda: service
+        )
+
+        response = self.client.get("/api/v1/extensions/dashboard")
+
+        assert response.status_code == 403
+
+    def test_create_extension_403_para_orientador(self):
+        service = _mock_service()
+
+        app.dependency_overrides[get_current_user] = (
+            lambda: CurrentUser(
+                uid="advisor_001",
+                role="orientador",
+                programa_id="prog_001",
+            )
+        )
+
+        app.dependency_overrides[get_extension_service] = (
+            lambda: service
+        )
+
+        payload = {
+            "motivo": "Motivo suficientemente longo para passar na validacao",
+            "plano_atualizado": "http://plano.com",
+            "semestres_solicitados": 1,
+        }
+
+        response = self.client.post(
+            "/api/v1/extensions",
+            json=payload,
+        )
+
+        assert response.status_code == 403
+
