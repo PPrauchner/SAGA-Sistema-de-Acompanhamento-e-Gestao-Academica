@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { getAdvisors, type Advisor } from "@/api/advisorsApi";
+import { programsApi, type Program } from "@/api/programsApi";
 import {
   createStudent,
   getStudents,
@@ -63,6 +64,7 @@ export function StudentsPage() {
   const { activeView, currentUser, setCurrentPage, setSelectedStudentId, token } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
   const [filterNivel, setFilterNivel] = useState("todos");
   const [filterStatus, setFilterStatus] = useState("todos");
@@ -79,12 +81,14 @@ export function StudentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [studentsData, advisorsData] = await Promise.all([
+      const [studentsData, advisorsData, programsData] = await Promise.all([
         getStudents(authToken),
         getAdvisors(authToken).catch(() => []),
+        programsApi.listPrograms(authToken).catch(() => []),
       ]);
       setStudents(studentsData);
       setAdvisors(advisorsData);
+      setPrograms(programsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar alunos");
     } finally {
@@ -118,7 +122,7 @@ export function StudentsPage() {
 
   function openCreateForm(): void {
     setEditingStudent(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, programa_id: programs[0]?.id ?? "" });
     setInviteToken(null);
     setShowForm(true);
   }
@@ -303,7 +307,7 @@ export function StudentsPage() {
               <Field label="E-mail"><input required disabled={Boolean(editingStudent)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Matrícula"><input required disabled={Boolean(editingStudent)} value={form.matricula} onChange={(e) => setForm({ ...form, matricula: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Orientador" className="col-span-2"><select required value={form.orientador_id} onChange={(e) => setForm({ ...form, orientador_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione...</option>{advisors.map((advisor) => <option key={advisor.id} value={advisor.id}>{advisor.nome}</option>)}</select></Field>
-              <Field label="Programa"><input required disabled={Boolean(editingStudent)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              <Field label="Programa"><select required disabled={Boolean(editingStudent)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione...</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.nome}</option>)}</select></Field>
               <Field label="Ingresso"><input required disabled={Boolean(editingStudent)} type="date" value={form.data_ingresso} onChange={(e) => setForm({ ...form, data_ingresso: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Nível"><select disabled={Boolean(editingStudent)} value={form.nivel} onChange={(e) => setForm({ ...form, nivel: e.target.value as StudentCreatePayload["nivel"] })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="mestrado">Mestrado</option><option value="doutorado">Doutorado</option></select></Field>
             </div>
