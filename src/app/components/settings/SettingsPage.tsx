@@ -7,6 +7,7 @@ import { activityTypesApi } from "../../../api/activityTypesApi";
 import { getAdvisors, type Advisor } from "../../../api/advisorsApi";
 import { coordinationTransfersApi, type CoordinationTransfer } from "../../../api/coordinationTransfersApi";
 import { toast } from "sonner";
+import { QualisWeightsSection } from "./QualisWeightsSection";
 
 export interface ProgramConfig {
   id?: string;
@@ -705,6 +706,8 @@ export function SettingsPage() {
                   </form>
                 )}
               </div>
+
+              <QualisWeightsSection />
 
               <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                 <div className="flex items-center justify-between mb-6">

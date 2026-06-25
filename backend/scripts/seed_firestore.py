@@ -10,6 +10,9 @@ Responsabilidades:
 - Popular programs/prog_default/vehicle_levels/ com os níveis de relevância default
   (escala Qualis Único monotônica A1–A8 + fallback): A1 (1.0), A2 (0.85), A3 (0.7),
   A4 (0.55), A5 (0.45), A6 (0.35), A7 (0.25), A8 (0.15), SC (0.1).
+- Criar a versão inicial (bootstrap) de pesos Qualis em
+  programs/prog_default/qualis_weights/ a partir de PESO_POR_NIVEL — fonte versionada da
+  RL05 (ADR-0003), vigente desde uma data-base que cobre toda produção histórica.
 - Popular activity_types/ com os 6 tipos de atividade padrão: Artigo Publicado (específico,
   pontuacao_base=10), Artigo Submetido (específico, 5), Disciplina Cursada (básico, 4),
   Estágio Docência (básico, 2), Software Registrado (tecnológico, 3, limite=4),
@@ -43,6 +46,11 @@ from backend.app.repositories.work_plan_repository import (
 PROGRAM_ID = "prog_default"
 SEED_USER_ID = "seed_firestore"
 SEED_STUDENT_ID = "seed_aluno_exemplo"
+
+# Versão inicial dos pesos Qualis. O id é fixo para idempotência; vigente_desde usa uma
+# data-base bem anterior para que qualquer produção (mesmo histórica) resolva esta versão.
+QUALIS_WEIGHTS_BOOTSTRAP_ID = "bootstrap"
+QUALIS_WEIGHTS_BASELINE_DATE = datetime(2000, 1, 1, tzinfo=timezone.utc)
 
 PROGRAM_DEFAULT: dict[str, Any] = {
     "nome": "PPGCC — Programa de Pós-Graduação em Ciência da Computação",
@@ -210,11 +218,13 @@ async def seed_firestore() -> dict[str, int]:
     now = datetime.now(timezone.utc)
     programs = FirebaseRepository("programs")
     vehicle_levels = FirebaseRepository(f"programs/{PROGRAM_ID}/vehicle_levels")
+    qualis_weights = FirebaseRepository(f"programs/{PROGRAM_ID}/qualis_weights")
     activity_types = FirebaseRepository("activity_types")
 
     created = {
         "programs": 0,
         "vehicle_levels": 0,
+        "qualis_weights": 0,
         "activity_types": 0,
         "work_plans": 0,
     }
@@ -228,6 +238,17 @@ async def seed_firestore() -> dict[str, int]:
         payload = {**data, "atualizado_por": SEED_USER_ID, "atualizado_em": now}
         if await _create_if_missing(vehicle_levels, doc_id, payload):
             created["vehicle_levels"] += 1
+
+    qualis_bootstrap = {
+        "pesos": dict(PESO_POR_NIVEL),
+        "vigente_desde": QUALIS_WEIGHTS_BASELINE_DATE,
+        "alterado_por": SEED_USER_ID,
+        "alterado_em": now,
+    }
+    if await _create_if_missing(
+        qualis_weights, QUALIS_WEIGHTS_BOOTSTRAP_ID, qualis_bootstrap
+    ):
+        created["qualis_weights"] += 1
 
     for doc_id, data in ACTIVITY_TYPES_DEFAULT.items():
         payload = {
@@ -258,6 +279,7 @@ def main() -> None:
     print("Seed Firestore concluído.")
     print(f"programs criados: {created['programs']}")
     print(f"vehicle_levels criados: {created['vehicle_levels']}")
+    print(f"qualis_weights criados: {created['qualis_weights']}")
     print(f"activity_types criados: {created['activity_types']}")
     print(f"work_plans criados: {created['work_plans']}")
 

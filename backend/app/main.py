@@ -32,6 +32,7 @@ from backend.app.api.v1 import (
     notifications,
     productions,
     programs,
+    qualis_weights,
     reports,
     students,
     transfers,
@@ -91,6 +92,7 @@ app.include_router(
     tags=["coordination-transfers"],
 )
 app.include_router(programs.router, prefix=_PREFIX, tags=["programs"])
+app.include_router(qualis_weights.router, prefix=_PREFIX, tags=["qualis-weights"])
 app.include_router(inference.router, prefix=_PREFIX, tags=["inference"])
 app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
 app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
