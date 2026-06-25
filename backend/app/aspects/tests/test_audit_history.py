@@ -10,6 +10,7 @@ from backend.app.aspects import history as history_module
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.history import track_history
 from backend.app.core.auth import CurrentUser
+from backend.app.models.user import ProfileUpdateRequest
 
 
 class _AuditRepo:
@@ -379,6 +380,55 @@ async def test_audit_redige_campo_token_em_payload_aninhado(
     log = next(iter(_AuditRepo.store.values()))
     assert log["valor_entrada"]["payload"]["email"] == "a@b.com"
     assert log["valor_entrada"]["payload"]["token"] == "***"
+
+
+class _UsersRepo:
+    documents: dict[str, dict[str, Any]] = {}
+    history: list[tuple[str, dict[str, Any]]] = []
+
+    def __init__(self, collection: str) -> None:
+        self.collection = collection
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        data = self.documents.get(doc_id)
+        return dict(data) if data else None
+
+    async def update(self, doc_id: str, data: dict[str, Any]) -> None:
+        self.documents.setdefault(doc_id, {}).update(data)
+
+    async def save_history_snapshot(
+        self,
+        doc_id: str,
+        snapshot: dict[str, Any],
+    ) -> str:
+        self.history.append((doc_id, dict(snapshot)))
+        return "hist1"
+
+
+async def test_track_history_resolve_perfil_do_usuario(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _UsersRepo.documents = {"coord1": {"uid": "coord1", "nome": "Antigo"}}
+    _UsersRepo.history = []
+    monkeypatch.setattr(history_module, "FirebaseRepository", _UsersRepo)
+
+    @track_history
+    async def update_profile(
+        body: ProfileUpdateRequest,
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        await _UsersRepo("users").update(user.uid, {"nome": body.nome})
+        return {"message": "ok"}
+
+    await update_profile(ProfileUpdateRequest(nome="Novo"), _user())
+
+    doc_id, snapshot = _UsersRepo.history[0]
+    assert doc_id == "coord1"
+    assert snapshot["entidade_tipo"] == "user"
+    assert snapshot["entidade_id"] == "coord1"
+    assert snapshot["valor_anterior"]["nome"] == "Antigo"
+    assert snapshot["valor_novo"]["nome"] == "Novo"
+    assert snapshot["usuario_id"] == "coord1"
 
 
 async def test_track_history_respeita_flag_desativada(
