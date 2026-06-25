@@ -35,6 +35,7 @@ from backend.app.api.v1 import (
     reports,
     students,
     transfers,
+    users,
     vehicles,
     work_plan,
 )
@@ -96,4 +97,5 @@ app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
 app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
 app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
 app.include_router(transfers.router, prefix=_PREFIX, tags=["transfers"])
+app.include_router(users.router, prefix=_PREFIX, tags=["users"])
 app.include_router(transfer_cross_router)
