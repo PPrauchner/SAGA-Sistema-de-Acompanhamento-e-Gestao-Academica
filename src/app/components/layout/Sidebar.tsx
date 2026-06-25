@@ -44,11 +44,15 @@ const ROLE_COLORS: Record<UserRole, string> = {
 };
 
 function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
-  const { currentUser, currentPage, setCurrentPage, logout, notificationCount } = useApp();
+  const { activeView, currentUser, currentPage, setCurrentPage, logout, notificationCount } = useApp();
 
   if (!currentUser) return null;
 
-  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(currentUser.role));
+  const visualRole: UserRole =
+    currentUser.role === "coordenacao" && activeView === "orientador"
+      ? "orientador"
+      : currentUser.role;
+  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(visualRole));
 
   const navigate = (id: PageId) => {
     setCurrentPage(id);
@@ -78,7 +82,9 @@ function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavig
                 className="inline-block rounded px-1.5 py-0.5"
                 style={{ background: ROLE_COLORS[currentUser.role], fontSize: "9px", color: "#fff", fontWeight: 600 }}
               >
-                {ROLE_LABELS[currentUser.role]}
+                {currentUser.role === "coordenacao" && activeView === "orientador"
+                  ? "Visao orientador"
+                  : ROLE_LABELS[currentUser.role]}
               </span>
             </div>
           </div>
