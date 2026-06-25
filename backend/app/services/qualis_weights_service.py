@@ -44,6 +44,30 @@ def _as_aware(value: Any) -> datetime:
     return value
 
 
+def resolve_weights_at(
+    versions: list[dict[str, Any]],
+    when: datetime,
+) -> dict[str, float] | None:
+    """Resolve o conjunto de pesos vigente em `when`, ou None se nenhuma versão se aplica.
+
+    Função pura (sem I/O), compartilhada pelo QualisWeightsService e pelo InferenceService:
+    seleciona a versão de maior vigente_desde que não ultrapassa `when`.
+
+    Args:
+        versions: Versões de pesos do programa (cada uma com pesos e vigente_desde).
+        when: Momento de referência (ex: data de publicação da produção).
+
+    Returns:
+        Mapa nível -> peso da versão vigente, ou None se não houver versão aplicável.
+    """
+    aware_when = _as_aware(when)
+    candidates = [v for v in versions if _as_aware(v.get("vigente_desde")) <= aware_when]
+    if not candidates:
+        return None
+    best = max(candidates, key=lambda v: _as_aware(v.get("vigente_desde")))
+    return dict(best.get("pesos") or {}) or None
+
+
 class QualisWeightsService:
     """Serviço de negócio das versões de pesos Qualis de um programa."""
 
@@ -96,10 +120,7 @@ class QualisWeightsService:
             versão aplicável.
         """
         versions = await self._repo.list_versions(programa_id)
-        active = self._resolve_active(versions, _as_aware(when))
-        if active is None:
-            return dict(PESO_POR_NIVEL)
-        return dict(active.get("pesos", {})) or dict(PESO_POR_NIVEL)
+        return resolve_weights_at(versions, when) or dict(PESO_POR_NIVEL)
 
     async def get_active_weights(self, programa_id: str) -> dict[str, float]:
         """Atalho para os pesos vigentes hoje."""
@@ -110,14 +131,3 @@ class QualisWeightsService:
         versions = await self._repo.list_versions(programa_id)
         versions.sort(key=lambda v: _as_aware(v.get("vigente_desde")), reverse=True)
         return versions
-
-    @staticmethod
-    def _resolve_active(
-        versions: list[dict[str, Any]],
-        when: datetime,
-    ) -> dict[str, Any] | None:
-        """Seleciona a versão de maior vigente_desde que não ultrapassa `when`."""
-        candidates = [v for v in versions if _as_aware(v.get("vigente_desde")) <= when]
-        if not candidates:
-            return None
-        return max(candidates, key=lambda v: _as_aware(v.get("vigente_desde")))
