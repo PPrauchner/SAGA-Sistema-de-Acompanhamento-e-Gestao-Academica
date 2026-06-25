@@ -75,6 +75,25 @@ class ProductionRepository(FirebaseRepository):
             for production in productions
         ]
 
+    async def list_by_ids(self, production_ids: set[str]) -> list[dict[str, Any]]:
+        """Lista produções específicas por id, normalizadas para relatórios/dashboard."""
+        productions = []
+        for production_id in production_ids:
+            production = await self.get(production_id)
+            if production is not None:
+                productions.append(production)
+
+        program_ids = {
+            production["programa_id"]
+            for production in productions
+            if production.get("programa_id")
+        }
+        niveis_por_veiculo = await self._vehicle_levels(program_ids)
+        return [
+            _normalize_production(production, niveis_por_veiculo)
+            for production in productions
+        ]
+
     async def _vehicle_levels(self, program_ids: set[str]) -> dict[str, str]:
         """Mapa veiculo_id → nivel lido de programs/{id}/vehicle_levels/ dos programas dados.
 

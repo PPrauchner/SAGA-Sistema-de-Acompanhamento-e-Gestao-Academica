@@ -188,7 +188,7 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
         MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
         MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
         MockATR.return_value.list_all = AsyncMock(return_value=[])
-        MockPR.return_value.list_productions = AsyncMock(return_value=[
+        MockPR.return_value.list_by_ids = AsyncMock(return_value=[
             {"id": "prod_1", "nivel": "A1", "pontuacao_calculada": 4.0},
             {"id": "prod_2", "nivel": "A2", "pontuacao_calculada": 2.5},
         ])
@@ -205,6 +205,7 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
 
     MockSR.return_value.get.assert_called_once_with("stu_001")
     MockAR.return_value.list_by_student.assert_called_once_with("stu_001")
+    MockPR.return_value.list_by_ids.assert_called_once_with({"prod_1", "prod_2"})
 
 
 @pytest.mark.asyncio
