@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import datetime
+from typing import Any
 
 from fastapi import HTTPException, status
 
@@ -35,6 +36,7 @@ from backend.app.repositories.student_repository import StudentRepository
 from backend.app.services.auth_service import AuthService
 
 DEFAULT_DURACAO_MESES = 24
+DEFAULT_STUDENT_STATUS = "regular"
 
 
 class StudentService:
@@ -53,6 +55,27 @@ class StudentService:
         day = min(date_value.day, monthrange(year, month)[1])
 
         return date_value.replace(year=year, month=month, day=day)
+
+    @staticmethod
+    def _normalize_student_response(student: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(student)
+        if normalized.get("coorientador_id") is None:
+            normalized["coorientador_id"] = None
+        if normalized.get("situacao_registrada") is None:
+            normalized["situacao_registrada"] = DEFAULT_STUDENT_STATUS
+        if normalized.get("situacao_inferida") is None:
+            normalized["situacao_inferida"] = normalized["situacao_registrada"]
+        if normalized.get("qualificacao_aprovada") is None:
+            normalized["qualificacao_aprovada"] = False
+        if normalized.get("proficiencia_comprovada") is None:
+            normalized["proficiencia_comprovada"] = False
+        if normalized.get("qualificacao_data") is None:
+            normalized["qualificacao_data"] = None
+        if normalized.get("proficiencia_data") is None:
+            normalized["proficiencia_data"] = None
+        if normalized.get("prazo_final") is None:
+            normalized["prazo_final"] = None
+        return normalized
 
     async def _get_program_duration_months(self, programa_id: str) -> int:
         program = await self._programs.get_config(programa_id)
@@ -89,7 +112,7 @@ class StudentService:
         students = await self._students.list_all()
 
         if user.role == "coordenacao":
-            return students
+            return [self._normalize_student_response(student) for student in students]
 
         if user.role == "orientador":
             advisor_id = await self._get_advisor_id_for_user(user)
@@ -98,13 +121,13 @@ class StudentService:
                 return []
 
             return [
-                student
+                self._normalize_student_response(student)
                 for student in students
                 if student.get("orientador_id") == advisor_id
             ]
 
         return [
-            student
+            self._normalize_student_response(student)
             for student in students
             if student.get("uid") == user.uid
         ]
@@ -262,4 +285,4 @@ class StudentService:
                     detail="Acesso negado ao orientando",
                 )
 
-        return student
+        return self._normalize_student_response(student)
