@@ -52,6 +52,7 @@ interface AppContextType {
   isMultiRoleAdvisor: boolean;
   retryProfile: () => Promise<void>;
   login: (email: string, senha: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   setActiveView: (view: ActiveView) => void;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
@@ -64,7 +65,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { currentUser: firebaseUser, profile, profileError, token, login, logout: signOut, loading, retryProfile } = useAuth();
+  const { currentUser: firebaseUser, profile, profileError, token, login, loginWithGoogle, logout: signOut, loading, retryProfile } = useAuth();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -145,6 +146,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isMultiRoleAdvisor,
         retryProfile,
         login,
+        loginWithGoogle,
         setActiveView,
         setCurrentPage,
         setSelectedStudentId,

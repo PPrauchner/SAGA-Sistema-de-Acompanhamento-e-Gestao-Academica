@@ -26,8 +26,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  GoogleAuthProvider,
   onIdTokenChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   type User as FirebaseUser,
 } from "firebase/auth";
@@ -48,6 +50,7 @@ interface UseAuthResult {
   advisorId: string | null;
   token: string | null;
   login: (email: string, senha: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   retryProfile: () => Promise<void>;
   loading: boolean;
@@ -111,6 +114,31 @@ export function useAuth(): UseAuthResult {
     await signInWithEmailAndPassword(auth, email, senha);
   }, []);
 
+  /**
+   * Autentica via Google e verifica se o email pertence a uma conta ativa no SAGA.
+   *
+   * Se o usuário não existir no SAGA (claims ausentes → GET /auth/me retorna 4xx),
+   * encerra a sessão e lança um erro com mensagem de negócio para exibição na UI.
+   * O onIdTokenChanged também dispara após signInWithPopup e pode chamar loadProfile
+   * em paralelo — ambos são idempotentes neste cenário.
+   */
+  const loginWithGoogle = useCallback(async (): Promise<void> => {
+    const result = await signInWithPopup(auth, new GoogleAuthProvider());
+    const idToken = await result.user.getIdToken();
+    try {
+      const p = await getMe(idToken);
+      setProfile(p);
+      setProfileError(false);
+    } catch (err) {
+      await signOut(auth);
+      throw new Error(
+        err instanceof ApiError && err.status < 500
+          ? "Conta não encontrada. Entre em contato com a coordenação do programa."
+          : "Falha ao verificar sua conta. Tente novamente.",
+      );
+    }
+  }, []);
+
   const logout = useCallback(async (): Promise<void> => {
     await signOut(auth);
   }, []);
@@ -134,6 +162,7 @@ export function useAuth(): UseAuthResult {
     advisorId: profile?.advisorId ?? null,
     token,
     login,
+    loginWithGoogle,
     logout,
     retryProfile,
     loading,
