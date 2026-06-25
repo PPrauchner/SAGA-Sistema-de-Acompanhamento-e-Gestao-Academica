@@ -2,6 +2,7 @@
  * Camada de acesso à API REST para os três dashboards por papel.
  *
  * Responsabilidades:
+ * - getMeuAlunoDashboard(token): GET /api/v1/dashboard/aluno/me
  * - getAlunoDashboard(studentId, token): GET /api/v1/dashboard/aluno/{student_id}
  * - getOrientadorDashboard(advisorId, token): GET /api/v1/dashboard/orientador/{advisor_id}
  * - getCoordDashboard(token): GET /api/v1/dashboard/coordenacao
@@ -33,6 +34,12 @@ export interface TaskProxima {
   status: string;
 }
 
+export interface ProducoesResumo {
+  total: number;
+  pontuacao_total: number;
+  por_nivel: Record<string, number>;
+}
+
 export interface AlunoDashboardData {
   student_id: string;
   nome: string;
@@ -46,6 +53,7 @@ export interface AlunoDashboardData {
   checklist_resumo: ChecklistResumo;
   tasks_proximas: TaskProxima[];
   producoes_aprovadas: number;
+  producoes: ProducoesResumo;
   atividades_pendentes_validacao: number;
 }
 
@@ -110,6 +118,12 @@ export function getAlunoDashboard(
     `/dashboard/aluno/${encodeURIComponent(studentId)}`,
     token,
   );
+}
+
+export function getMeuAlunoDashboard(
+  token: string,
+): Promise<AlunoDashboardData> {
+  return apiGet<AlunoDashboardData>("/dashboard/aluno/me", token);
 }
 
 export function getOrientadorDashboard(
