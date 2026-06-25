@@ -44,6 +44,8 @@ from backend.app.models.inference import (
     SituacaoInferida,
     StatusItem,
 )
+from backend.app.models.vehicle import PESO_POR_NIVEL
+from backend.app.services.qualis_weights_service import resolve_weights_at
 
 # Janela (em dias) para considerar o prazo de qualificação "próximo" (~3 meses).
 _RISK_HORIZON_DAYS = 90
@@ -68,6 +70,7 @@ class InferenceDataSource(Protocol):
     async def get_approved_activities(self, student_id: str) -> list[dict[str, Any]]: ...
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]: ...
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]: ...
+    async def get_qualis_weights_versions(self, programa_id: str) -> list[dict[str, Any]]: ...
     async def save_inferred_status(self, student_id: str, snapshot: dict[str, Any]) -> str: ...
 
 
@@ -77,6 +80,20 @@ def _parse_date(value: Any) -> date | None:
         return None
     try:
         return date.fromisoformat(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_datetime(value: Any) -> datetime | None:
+    """Converte datetime/date/string ISO em datetime, ou None se ausente/inválido."""
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
     except (ValueError, TypeError):
         return None
 
@@ -143,6 +160,7 @@ class InferenceService:
         activities = await self._data.get_approved_activities(student_id)
         tasks = await self._data.get_plan_tasks(student_id)
         productions = await self._data.get_approved_productions(student_id)
+        weight_versions = await self._data.get_qualis_weights_versions(programa_id)
 
         facts, totals, risk_flags = self._build_facts(
             student_id, programa_id, student, program, activities, tasks, productions
@@ -153,7 +171,7 @@ class InferenceService:
         creditos_validos = bool(engine.query(Compound("creditos_validos", [Atom(student_id)])))
         em_risco = bool(engine.query(Compound("em_risco", [Atom(student_id)])))
         atividades_elegiveis = self._query_eligible_activities(engine, student_id, activities)
-        pontuacoes = self._query_production_scores(engine, productions)
+        pontuacoes = self._score_productions(productions, weight_versions)
 
         situacao = self._derive_situacao(apto, em_risco, student)
         checklist = self._build_checklist(totals, program, student, productions, tasks, risk_flags)
@@ -276,19 +294,9 @@ class InferenceService:
             if grupo is not None and grupo in category_running:
                 category_running[grupo] = running
 
-        pesos: dict[str, float] = program.get("relevancia_pesos", {})
-        for nivel, peso in pesos.items():
-            facts.append(Compound("relevancia_peso", [Atom(nivel), Atom(float(peso))]))
-
-        for production in productions:
-            pid = Atom(production["id"])
-            vid = Atom(production["veiculo_id"])
-            facts.append(Compound("producao_veiculo", [pid, vid]))
-            nivel = production.get("nivel")
-            if nivel:
-                facts.append(Compound("nivel_relevancia", [vid, prog, Atom(nivel)]))
-            facts.append(Compound("pontuacao_base", [pid, Atom(float(production.get("pontuacao_base", 0)))]))
-
+        # Pontuação RL05 de produções é calculada à parte (_score_productions), pois cada
+        # produção resolve o peso vigente na sua data de publicação (ADR-0003) — um fato
+        # global relevancia_peso(Nivel, Peso) não comportaria pesos distintos por versão.
         return facts, totals, risk_flags
 
     def _build_engine(self, facts: list[Compound]) -> InferenceEngine:
@@ -346,29 +354,58 @@ class InferenceService:
                 eligible.append(activity["id"])
         return eligible
 
-    def _query_production_scores(
+    def _score_productions(
         self,
-        engine: InferenceEngine,
         productions: list[dict[str, Any]],
+        weight_versions: list[dict[str, Any]],
     ) -> list[PontuacaoProducao]:
+        """Pontua cada produção (RL05) com o peso vigente na sua data de publicação.
+
+        Para cada produção resolve o conjunto de pesos vigente em `_publication_when`
+        (data_realizacao se publicada; agora, provisório, se submetida/aceita) e delega o
+        cálculo `base × peso` ao motor via score_production, mantendo o engine isolado.
+
+        Args:
+            productions: Produções aprovadas do aluno (com nível e dados de publicação).
+            weight_versions: Versões de pesos Qualis do programa.
+
+        Returns:
+            Lista de PontuacaoProducao para as produções com nível classificado.
+        """
         scores: list[PontuacaoProducao] = []
         for production in productions:
-            goal = Compound("pontuacao_producao", [Atom(production["id"]), Variable("Score")])
-            results = engine.query(goal)
-            if not results:
+            nivel = production.get("nivel")
+            if not nivel:
                 continue
-            score_term = results[0].get("Score")
-            score = float(score_term.value) if isinstance(score_term, Atom) else 0.0
-            base = float(production.get("pontuacao_base", 0)) or 1.0
+            when = self._publication_when(production)
+            weights = resolve_weights_at(weight_versions, when) or PESO_POR_NIVEL
+            peso = weights.get(nivel)
+            if peso is None:
+                continue
+            base = float(production.get("pontuacao_base", 0))
+            score = self.score_production(nivel, float(peso), base)
             scores.append(
                 PontuacaoProducao(
                     producao_id=production["id"],
                     score=score,
-                    nivel_veiculo=production.get("nivel", ""),
-                    peso_aplicado=round(score / base, 4),
+                    nivel_veiculo=nivel,
+                    peso_aplicado=round(float(peso), 4),
                 )
             )
         return scores
+
+    def _publication_when(self, production: dict[str, Any]) -> datetime:
+        """Resolve a data de referência para o peso de uma produção.
+
+        Produção publicada usa a data de publicação (reaproveita data_realizacao) — o peso
+        fica travado na versão vigente naquela data. Produção submetida/aceita usa o momento
+        atual (peso vigente provisório).
+        """
+        if production.get("status_publicacao") == "publicado":
+            when = _to_datetime(production.get("data_realizacao"))
+            if when is not None:
+                return when
+        return datetime.now(timezone.utc)
 
     def _derive_situacao(self, apto: bool, em_risco: bool, student: dict[str, Any]) -> SituacaoInferida:
         if apto:

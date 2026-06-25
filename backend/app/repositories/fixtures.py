@@ -20,7 +20,7 @@ Restrição: sem lógica de negócio — apenas dados e leitura.
 from __future__ import annotations
 
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 from backend.app.models.vehicle import PESO_POR_NIVEL
@@ -229,6 +229,21 @@ _PRODUCTIONS: dict[str, list[dict[str, Any]]] = {
 }
 
 
+# Versões de pesos Qualis por programa (espelha o seed: versão inicial vigente desde uma
+# data-base). Programa sem versão → InferenceService faz fallback para PESO_POR_NIVEL.
+_QUALIS_WEIGHTS_VERSIONS: dict[str, list[dict[str, Any]]] = {
+    "prog_default": [
+        {
+            "id": "qw_bootstrap",
+            "pesos": dict(PESO_POR_NIVEL),
+            "vigente_desde": datetime(2000, 1, 1, tzinfo=timezone.utc),
+            "alterado_por": "seed_firestore",
+            "alterado_em": datetime(2000, 1, 1, tzinfo=timezone.utc),
+        },
+    ],
+}
+
+
 class FixtureRepository:
     """Fonte de dados em memória que implementa o contrato InferenceDataSource.
 
@@ -264,6 +279,10 @@ class FixtureRepository:
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as produções aprovadas do aluno."""
         return [dict(p) for p in _PRODUCTIONS.get(student_id, [])]
+
+    async def get_qualis_weights_versions(self, programa_id: str) -> list[dict[str, Any]]:
+        """Retorna as versões de pesos Qualis do programa (vazio → escala default)."""
+        return [dict(v) for v in _QUALIS_WEIGHTS_VERSIONS.get(programa_id, [])]
 
     async def save_inferred_status(self, student_id: str, snapshot: dict[str, Any]) -> str:
         """Persiste um snapshot imutável e atualiza situacao_inferida; retorna o snapshot_id."""
