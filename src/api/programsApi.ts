@@ -4,7 +4,20 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
+export interface Program {
+  id: string;
+  nome: string;
+}
+
 export const programsApi = {
+  listPrograms: async (token: string): Promise<Program[]> => {
+    const response = await fetch(`${API_BASE_URL}/programs`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('Failed to fetch programs');
+    return response.json();
+  },
+
   getProgramConfig: async (token: string) => {
     const response = await fetch(`${API_BASE_URL}/programs/config`, {
       headers: { 'Authorization': `Bearer ${token}` }
