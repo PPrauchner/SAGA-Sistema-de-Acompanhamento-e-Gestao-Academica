@@ -365,7 +365,7 @@ class InferenceService:
                     producao_id=production["id"],
                     score=score,
                     nivel_veiculo=production.get("nivel", ""),
-                    peso_applied=round(score / base, 4),
+                    peso_aplicado=round(score / base, 4),
                 )
             )
         return scores

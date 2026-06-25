@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { CheckCircle2, Circle, AlertTriangle, Loader2, Search, ChevronDown } from "lucide-react";
 import { useChecklistStudent } from "@/hooks/useChecklistStudent";
+import { useAuth } from "@/hooks/useAuth";
 import {
   getChecklist,
   type ChecklistResponse,
@@ -62,6 +63,7 @@ function buildRequisitos(data: ChecklistResponse): RequisitoView[] {
 
 export function ChecklistPage() {
   const { studentId, students, setStudentId } = useChecklistStudent();
+  const { token } = useAuth();
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorSearch, setSelectorSearch] = useState("");
   const [data, setData] = useState<ChecklistResponse | null>(null);
@@ -69,16 +71,16 @@ export function ChecklistPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!studentId) return;
+    if (!studentId || !token) return;
     let active = true;
     setLoading(true);
     setError(null);
-    getChecklist(studentId)
+    getChecklist(studentId, token)
       .then((res) => { if (active) setData(res); })
       .catch(() => { if (active) setError("Não foi possível carregar o checklist."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [studentId]);
+  }, [studentId, token]);
 
   const requisitos = data ? buildRequisitos(data) : [];
   const cumpridos = requisitos.filter((r) => r.status === "cumprido").length;
