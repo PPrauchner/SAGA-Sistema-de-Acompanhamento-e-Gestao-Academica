@@ -38,7 +38,7 @@ class AdvisorUpdateRequest(BaseModel):
 
 class AdvisorResponse(BaseModel):
     id: str
-    uid: str
+    uid: str | None = None
 
     nome: str
     email: str
