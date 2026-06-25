@@ -10,14 +10,14 @@ from fastapi import HTTPException, status
 from google.cloud import firestore
 from google.cloud.firestore_v1 import AsyncTransaction
 
-from app.models.extension import (
+from backend.app.models.extension import (
     ExtensionCreateRequest,
     DecisionRequest,
     ExtensionDocument,
     ExtensionResponse,
     ExtensionStatus,
 )
-from app.repositories.extension_repository import ExtensionRepository
+from backend.app.repositories.extension_repository import ExtensionRepository
 
 DEFAULT_MAX_PRORROGACOES: int = 1
 DEFAULT_DURACAO_MESES:    int = 6
