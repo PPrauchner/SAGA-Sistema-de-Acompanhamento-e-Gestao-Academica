@@ -26,3 +26,11 @@ class ExtensionRepository:
 
     def transaction(self):
         return self._db.transaction()
+    async def get_advisor_doc_id_by_uid(self, advisor_uid: str) -> str | None:
+        query = (
+            self._db.collection("advisors")
+            .where("advisor_uid", "==", advisor_uid)
+            .limit(1)
+        )
+        docs = [doc async for doc in query.stream()]
+        return docs[0].id if docs else None

@@ -102,7 +102,8 @@ class ExtensionService:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
 
         student_data: dict = student_snap.to_dict()
-        if student_data.get("orientador_id") != orientador_uid:
+        advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
+        if student_data.get("orientador_id") != advisor_doc_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Voce nao e o orientador deste discente.",
@@ -206,9 +207,10 @@ class ExtensionService:
         return [_to_response(d.id, d.to_dict()) for d in docs]
 
     async def list_pending_for_advisor(self, orientador_uid: str) -> list[ExtensionResponse]:
+        advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
         students_query = (
             self._repo._db.collection("students")
-            .where("orientador_id", "==", orientador_uid)
+            .where("orientador_id", "==", advisor_doc_id)
         )
         results: list[ExtensionResponse] = []
         async for student_doc in students_query.stream():
