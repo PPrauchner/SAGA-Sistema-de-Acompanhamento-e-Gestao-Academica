@@ -220,7 +220,7 @@ _PRODUCTIONS: dict[str, list[dict[str, Any]]] = {
     ],
     "aluno_risco": [],
     "aluno_regular": [
-        {"id": "p_reg1", "veiculo_id": "v_b1", "nivel": "B1", "pontuacao_base": 8, "bibliografica": False},
+        {"id": "p_reg1", "veiculo_id": "v_a5", "nivel": "A5", "pontuacao_base": 8, "bibliografica": False},
     ],
     "aluno_recem": [],
     "aluno_credito_risco": [],

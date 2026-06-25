@@ -6,12 +6,28 @@ from typing import Callable
 from fastapi import HTTPException, status
 
 from backend.app.aspects import aspect_config
+from backend.app.core.auth import CurrentUser
 
 logger = logging.getLogger(__name__)
 
 
 def _extract_current_user(args, kwargs) -> dict | None:
-    for v in list(kwargs.values()) + list(args):
+    """Localiza o principal autenticado entre os argumentos do endpoint.
+
+    Dá precedência a uma instância de `CurrentUser` (a identidade verificada via
+    JWT). Sem isso, qualquer objeto auxiliar que também exponha `role`/`uid` —
+    como o `ActorContext` derivado de headers no router de plano de trabalho —
+    poderia ser confundido com o usuário autenticado, dependendo da ordem dos
+    parâmetros, e a verificação de papel passaria a ler um valor controlado pelo
+    cliente em vez do token.
+    """
+    values = list(kwargs.values()) + list(args)
+
+    for v in values:
+        if isinstance(v, CurrentUser):
+            return {"uid": v.uid, "email": v.email, "role": v.role}
+
+    for v in values:
         if isinstance(v, dict) and "role" in v:
             return v
         if hasattr(v, "role") and hasattr(v, "uid"):

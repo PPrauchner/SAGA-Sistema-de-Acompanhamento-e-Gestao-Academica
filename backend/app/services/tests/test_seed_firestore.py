@@ -58,7 +58,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_seed_cria_todos_os_documentos() -> None:
     created = await seed_module.seed_firestore()
 
-    assert created == {"programs": 1, "vehicle_levels": 7, "activity_types": 6, "work_plans": 1}
+    assert created == {"programs": 1, "vehicle_levels": 9, "activity_types": 6, "work_plans": 1}
     # programs com id explícito (não auto-id)
     assert ("programs", "prog_default") in _FakeRepository.store
     # vehicle_levels gravados como subcoleção via path

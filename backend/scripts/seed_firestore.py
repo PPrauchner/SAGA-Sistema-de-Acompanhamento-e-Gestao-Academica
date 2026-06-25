@@ -7,9 +7,9 @@ Responsabilidades:
   creditos_grupo_basico_min=12, creditos_grupo_especifico_min=8,
   creditos_grupo_tecnologico_max=4, creditos_total_min=24, max_prorrogacoes=1,
   duracao_prorrogacao_meses=6, meses_ate_qualificacao=12.
-- Popular programs/prog_default/vehicle_levels/ com os 7 níveis de relevância padrão
-  (escala Qualis Único monotônica): A1 (1.0), A2 (0.85), A3 (0.7), A4 (0.55), B1 (0.4),
-  B2 (0.3), SC (0.2).
+- Popular programs/prog_default/vehicle_levels/ com os níveis de relevância default
+  (escala Qualis Único monotônica A1–A8 + fallback): A1 (1.0), A2 (0.85), A3 (0.7),
+  A4 (0.55), A5 (0.45), A6 (0.35), A7 (0.25), A8 (0.15), SC (0.1).
 - Popular activity_types/ com os 6 tipos de atividade padrão: Artigo Publicado (específico,
   pontuacao_base=10), Artigo Submetido (específico, 5), Disciplina Cursada (básico, 4),
   Estágio Docência (básico, 2), Software Registrado (tecnológico, 3, limite=4),
