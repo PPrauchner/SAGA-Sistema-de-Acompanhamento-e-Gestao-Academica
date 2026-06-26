@@ -14,6 +14,7 @@ export type PageId =
   | "atividades"
   | "producoes"
   | "checklist"
+  | "solicitacoes"
   | "prorrogacoes"
   | "transferencias"
   | "relatorios"
