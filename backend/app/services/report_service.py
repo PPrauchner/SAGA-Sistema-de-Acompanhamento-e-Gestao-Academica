@@ -22,6 +22,8 @@ import asyncio
 from datetime import date, datetime
 from typing import Any
 
+from fastapi import HTTPException, status
+
 from backend.app.models.report import (
     AdvisorGroupItem,
     CompletionTimeItem,
@@ -85,6 +87,31 @@ class ReportService:
         self._advisors = advisors or AdvisorRepository()
         self._productions = productions or ProductionRepository()
         self._activities = activities or ActivityRepository()
+
+    @staticmethod
+    def _scope_to_own_student(
+        students: list[dict[str, Any]], uid: str
+    ) -> list[dict[str, Any]]:
+        """Restringe a lista ao registro de discente do próprio solicitante (US-AN06).
+
+        Args:
+            students: Alunos já filtrados pelo programa do solicitante.
+            uid: uid do discente solicitante.
+
+        Returns:
+            Lista contendo apenas o próprio aluno.
+
+        Raises:
+            HTTPException: 403 se o solicitante não tiver registro de discente no
+                programa — acesso fora do escopo.
+        """
+        own = [student for student in students if student.get("uid") == uid]
+        if not own:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado: discente sem registro no programa",
+            )
+        return own
 
     async def _advisor_names(self) -> dict[str, str]:
         """Mapa orientador_id → nome para enriquecer os relatórios."""
@@ -207,18 +234,26 @@ class ReportService:
             historico=historico,
         )
 
-    async def get_productions_report(self, programa_id: str) -> ProductionsReportResponse:
+    async def get_productions_report(
+        self, programa_id: str, role: str, uid: str
+    ) -> ProductionsReportResponse:
         """Agrega produção bibliográfica creditada por aluno (RL05) e por orientador.
 
         Args:
             programa_id: Programa do solicitante; restringe alunos e produções
                 agregados ao tenant correspondente (escopo US-AN06).
+            role: Papel do solicitante; define o escopo dos dados retornados —
+                discente vê apenas o próprio registro (US-AN06).
+            uid: uid do solicitante, usado para resolver o próprio registro de
+                discente quando o papel é aluno.
         """
         students = [
             student
             for student in await self._students.list_all()
             if student.get("programa_id") == programa_id
         ]
+        if role == "aluno":
+            students = self._scope_to_own_student(students, uid)
         advisor_names = await self._advisor_names()
         productions = [
             producao
@@ -272,7 +307,9 @@ class ReportService:
                 acc["total"] += len(credit_ids)
                 acc["pontuacao"] += pontuacao_total
 
-        por_orientador = [
+        # Discente vê apenas a própria produção; agregados por orientador são
+        # benchmarking gerencial fora do seu escopo (US-AN06).
+        por_orientador = [] if role == "aluno" else [
             ProductionByAdvisorItem(
                 advisor_id=orientador_id,
                 advisor_nome=advisor_names.get(orientador_id, ""),
