@@ -12,6 +12,9 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+import pytest
+from fastapi import HTTPException
+
 from backend.app.services.report_service import ReportService
 
 # Programa do solicitante usado nos testes do relatório de produção (escopo US-AN06).
@@ -255,7 +258,7 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
         },
     )
 
-    result = await service.get_productions_report(_PROG)
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     assert result.total_producoes_aprovadas == 2  # p1 e p2, sem duplicação
     por_aluno = {item.student_nome: item for item in result.por_aluno}
@@ -292,7 +295,7 @@ async def test_productions_soma_multiplas_producoes_do_mesmo_aluno() -> None:
         },
     )
 
-    result = await service.get_productions_report(_PROG)
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     assert result.total_producoes_aprovadas == 3
     item = result.por_aluno[0]
@@ -321,7 +324,7 @@ async def test_productions_nivel_ausente_cai_para_SC_e_classifica_a3() -> None:
         },
     )
 
-    result = await service.get_productions_report(_PROG)
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     item = result.por_aluno[0]
     assert item.total == 2  # ambas creditadas
@@ -340,7 +343,7 @@ async def test_productions_ignora_producao_id_inexistente() -> None:
         activities={"s1": [{"producao_id": "p_fantasma", "status": "aprovado"}]},
     )
 
-    result = await service.get_productions_report(_PROG)
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     assert result.total_producoes_aprovadas == 0
     assert result.por_aluno == []
@@ -363,9 +366,48 @@ async def test_productions_filtra_por_programa_id_do_solicitante() -> None:
         },
     )
 
-    result = await service.get_productions_report(_PROG)
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     # Apenas dados do próprio programa entram no relatório; o outro programa fica fora de escopo.
     assert result.total_producoes_aprovadas == 1
     assert {item.student_nome for item in result.por_aluno} == {"Ana"}
     assert {item.advisor_id for item in result.por_orientador} == {"a1"}
+
+
+async def test_productions_discente_ve_so_a_propria_linha() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+            {"id": "s2", "uid": "u2", "nome": "Bia", "orientador_id": "a1", "programa_id": _PROG},
+        ],
+        advisors=[{"id": "a1", "nome": "Prof. X"}],
+        productions=[
+            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+        ],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado"}],
+            "s2": [{"producao_id": "p2", "status": "aprovado"}],
+        },
+    )
+
+    result = await service.get_productions_report(_PROG, "aluno", "u1")
+
+    # Discente vê apenas a própria produção; sem agregados por orientador.
+    assert {item.student_nome for item in result.por_aluno} == {"Ana"}
+    assert result.por_orientador == []
+    assert result.total_producoes_aprovadas == 1
+
+
+async def test_productions_discente_sem_registro_no_programa_retorna_403() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+        ],
+        advisors=[{"id": "a1", "nome": "Prof. X"}],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_productions_report(_PROG, "aluno", "u_fantasma")
+
+    assert exc_info.value.status_code == 403
