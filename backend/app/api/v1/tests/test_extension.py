@@ -88,7 +88,6 @@ class TestAspectConfig:
 
     @pytest.mark.asyncio
     async def test_alerts_desativado_nao_dispara_notificacao(self):
-        # trigger_alerts requer argumento build — testamos o flag diretamente
         with patch("backend.app.aspects.aspect_config.ALERTS_ENABLED", False):
             import backend.app.aspects.aspect_config as cfg
             assert cfg.ALERTS_ENABLED is False
@@ -108,14 +107,10 @@ class TestAspectConfig:
 
 
 # ---------------------------------------------------------------------------
-# 3. Consistência de Papéis — HTTP 403 via dependency_overrides
+# 3. Consistência de Papéis
 # ---------------------------------------------------------------------------
 
 class TestRoleConsistency:
-    """
-    Testa o decorador @requires_role diretamente, sem HTTP.
-    Evita dependência de credenciais Firebase no ambiente de CI/dev.
-    """
 
     @pytest.mark.asyncio
     async def test_aluno_nao_pode_acessar_review(self):
@@ -274,36 +269,11 @@ class TestBusinessInvariants:
                 plano_atualizado="http://link-valido.com",
                 semestres_solicitados=1,
             )
-            
-    client = TestClient(app)
-    app.dependency_overrides[get_current_user]
 
-    def override_student():
-        return CurrentUser(
-            uid="student_001",
-            role="aluno",
-            programa_id="prog_001",
-        )
-    
-    def override_advisor():
-        return CurrentUser(
-            uid="advisor_001",
-            role="orientador",
-            programa_id="prog_001",
-        )
-    
-    def override_coord():
-        return CurrentUser(
-            uid="coord_001",
-            role="coordenacao",
-            programa_id="prog_001",
-        )
-    
-    response = client.get(...)
-    assert response.status_code == 200
 
-    response = client.post(...)
-    assert response.status_code == 403
+# ---------------------------------------------------------------------------
+# 6. HTTP via TestClient (C7: camada HTTP real)
+# ---------------------------------------------------------------------------
 
 class TestExtensionHttp:
 
@@ -317,16 +287,9 @@ class TestExtensionHttp:
         service = _mock_service()
 
         app.dependency_overrides[get_current_user] = (
-            lambda: CurrentUser(
-                uid="advisor_001",
-                role="orientador",
-                programa_id="prog_001",
-            )
+            lambda: CurrentUser(uid="advisor_001", role="orientador", programa_id="prog_001")
         )
-
-        app.dependency_overrides[get_extension_service] = (
-            lambda: service
-        )
+        app.dependency_overrides[get_extension_service] = lambda: service
 
         response = self.client.get("/api/v1/extensions/dashboard")
 
@@ -336,16 +299,9 @@ class TestExtensionHttp:
         service = _mock_service()
 
         app.dependency_overrides[get_current_user] = (
-            lambda: CurrentUser(
-                uid="student_001",
-                role="aluno",
-                programa_id="prog_001",
-            )
+            lambda: CurrentUser(uid="student_001", role="aluno", programa_id="prog_001")
         )
-
-        app.dependency_overrides[get_extension_service] = (
-            lambda: service
-        )
+        app.dependency_overrides[get_extension_service] = lambda: service
 
         response = self.client.get("/api/v1/extensions/dashboard")
 
@@ -355,27 +311,17 @@ class TestExtensionHttp:
         service = _mock_service()
 
         app.dependency_overrides[get_current_user] = (
-            lambda: CurrentUser(
-                uid="advisor_001",
-                role="orientador",
-                programa_id="prog_001",
-            )
+            lambda: CurrentUser(uid="advisor_001", role="orientador", programa_id="prog_001")
         )
-
-        app.dependency_overrides[get_extension_service] = (
-            lambda: service
-        )
-
-        payload = {
-            "motivo": "Motivo suficientemente longo para passar na validacao",
-            "plano_atualizado": "http://plano.com",
-            "semestres_solicitados": 1,
-        }
+        app.dependency_overrides[get_extension_service] = lambda: service
 
         response = self.client.post(
             "/api/v1/extensions",
-            json=payload,
+            json={
+                "motivo": "Motivo suficientemente longo para passar na validacao",
+                "plano_atualizado": "http://plano.com",
+                "semestres_solicitados": 1,
+            },
         )
 
         assert response.status_code == 403
-
