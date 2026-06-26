@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export type UserRole = "aluno" | "orientador" | "coordenacao";
 export type ActiveView = "aluno" | "orientador" | "coordenador";
@@ -67,11 +68,11 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const { currentUser: firebaseUser, profile, profileError, token, login, logout: signOut, loading, retryProfile } = useAuth();
+  const { unreadCount } = useNotifications();
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [notificationCount] = useState(5);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeView, setActiveViewState] = useState<ActiveView>("aluno");
 
@@ -150,7 +151,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         selectedStudentId,
         sidebarCollapsed,
         darkMode,
-        notificationCount,
+        notificationCount: unreadCount,
         mobileMenuOpen,
         loading,
         token,
