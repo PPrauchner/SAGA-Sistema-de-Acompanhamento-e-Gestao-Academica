@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ActivityStatus(str, Enum):
@@ -60,18 +60,31 @@ class ActivityResponse(BaseModel):
     comprovante_url: Optional[str] = None
 
     creditos_gerados: float = 0.0
+    creditos_concedidos: Optional[float] = None
     status: ActivityStatus | str = ActivityStatus.rascunho
 
     parecer_orientador: Optional[str] = None
 
     observacao_coordenacao: Optional[str] = None
-    aprovado_por: Optional[str] = None
-    aprovado_em: Optional[datetime] = None
+    validado_por: Optional[str] = None
+    validado_em: Optional[datetime] = None
 
     criado_em: Optional[datetime] = None
     atualizado_em: Optional[datetime] = None
 
     elegivel: Optional[bool] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalizar_campos_legados(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        normalized = dict(data)
+        if normalized.get("validado_por") is None and normalized.get("aprovado_por") is not None:
+            normalized["validado_por"] = normalized["aprovado_por"]
+        if normalized.get("validado_em") is None and normalized.get("aprovado_em") is not None:
+            normalized["validado_em"] = normalized["aprovado_em"]
+        return normalized
 
 
 class ParecerRequest(BaseModel):
