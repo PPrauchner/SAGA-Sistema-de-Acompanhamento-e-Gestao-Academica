@@ -68,9 +68,9 @@ async def get_completion_time(
 
 
 @router.get("/reports/productions", response_model=ProductionsReportResponse)
-@requires_role("coordenacao")
+@requires_role("aluno", "coordenacao")
 @audit_operation
 async def get_productions_report(
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionsReportResponse:
-    return await service.get_productions_report(user.programa_id)
+    return await service.get_productions_report(user.programa_id, user.role, user.uid)
