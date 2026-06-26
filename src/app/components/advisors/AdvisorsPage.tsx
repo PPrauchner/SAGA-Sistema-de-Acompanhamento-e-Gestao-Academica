@@ -8,6 +8,7 @@ import {
   type AdvisorCreatePayload,
   updateAdvisor,
 } from "@/api/advisorsApi";
+import { programsApi, type Program } from "@/api/programsApi";
 import { useAuth } from "@/hooks/useAuth";
 
 const emptyForm: AdvisorCreatePayload = {
@@ -30,6 +31,7 @@ const fieldStyle = {
 export function AdvisorsPage() {
   const { token } = useAuth();
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<AdvisorCreatePayload>(emptyForm);
@@ -43,7 +45,12 @@ export function AdvisorsPage() {
     setLoading(true);
     setError(null);
     try {
-      setAdvisors(await getAdvisors(authToken));
+      const [advisorsData, programsData] = await Promise.all([
+        getAdvisors(authToken),
+        programsApi.getPrograms(authToken),
+      ]);
+      setAdvisors(advisorsData);
+      setPrograms(programsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar orientadores");
     } finally {
@@ -89,6 +96,10 @@ export function AdvisorsPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!token) return;
+    if (!editingAdvisor && !form.programa_id) {
+      setError("Selecione um programa para cadastrar o orientador");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -202,7 +213,7 @@ export function AdvisorsPage() {
               <Field label="Nome Completo" className="col-span-2"><input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="E-mail"><input required disabled={Boolean(editingAdvisor)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Departamento"><input required value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
-              <Field label="Programa"><input required disabled={Boolean(editingAdvisor)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              <Field label="Programa"><select required disabled={Boolean(editingAdvisor)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione um programa</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.nome ?? program.id}</option>)}</select></Field>
               <Field label="Limite"><input required type="number" min={1} value={form.limite_orientandos} onChange={(e) => setForm({ ...form, limite_orientandos: Number(e.target.value) })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Lattes URL" className="col-span-2"><input value={form.lattes ?? ""} onChange={(e) => setForm({ ...form, lattes: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
             </div>
