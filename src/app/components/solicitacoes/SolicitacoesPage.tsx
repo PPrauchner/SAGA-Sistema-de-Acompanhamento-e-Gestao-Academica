@@ -2,6 +2,7 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Plus, Clock, CheckCircle, XCircle, AlertTriangle, FileText, Calendar } from "lucide-react";
 
 import { solicitacoesApi, type Solicitacao } from "@/api/solicitacoesApi";
+import { getStudents, type Student } from "@/api/studentsApi";
 import { useApp } from "../../context/AppContext";
 
 const STATUS_MAP = {
@@ -75,10 +76,10 @@ export function SolicitacoesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [advisorStudents, setAdvisorStudents] = useState<Student[]>([]);
   const canCreateRequest = currentUser?.role === "aluno" || currentUser?.role === "orientador";
   const isStudentRequest = currentUser?.role === "aluno";
   const isAdvisorRequest = currentUser?.role === "orientador";
-  const advisorStudents: Array<{ id: string; nome: string; matricula?: string }> = [];
 
   const loadSolicitacoes = useCallback(async () => {
     if (!token) {
@@ -100,6 +101,26 @@ export function SolicitacoesPage() {
   useEffect(() => {
     void loadSolicitacoes();
   }, [loadSolicitacoes]);
+
+  useEffect(() => {
+    if (!token || !isAdvisorRequest) {
+      setAdvisorStudents([]);
+      return;
+    }
+
+    let active = true;
+    getStudents(token)
+      .then((students) => {
+        if (active) setAdvisorStudents(students);
+      })
+      .catch(() => {
+        if (active) setAdvisorStudents([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [isAdvisorRequest, token]);
 
   const visibleSolicitacoes = solicitacoes.filter((solicitacao) => {
     if (currentUser?.role !== "aluno") return true;
