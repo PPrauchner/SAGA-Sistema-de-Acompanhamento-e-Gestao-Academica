@@ -67,8 +67,19 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { currentUser: firebaseUser, profile, profileError, token, login, logout: signOut, loading, retryProfile } = useAuth();
+  const {
+    currentUser: firebaseUser,
+    profile,
+    profileError,
+    token,
+    login,
+    logout: signOut,
+    loading,
+    retryProfile,
+  } = useAuth();
+
   const { unreadCount } = useNotifications();
+
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -77,7 +88,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [activeView, setActiveViewState] = useState<ActiveView>("aluno");
 
   // O perfil vem do backend (GET /auth/me) via useAuth; mapeamos para o formato
-  // de exibição consumido pelo layout. Campos sem origem no backend ficam vazios.
+  // de exibicao consumido pelo layout. Campos sem origem no backend ficam vazios.
   const currentUser: User | null = profile
     ? {
         id: profile.uid,
@@ -99,6 +110,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       : profile?.role === "orientador"
         ? "orientador"
         : "aluno";
+
   const isMultiRoleAdvisor = currentUser?.role === "coordenacao" && Boolean(currentUser.advisor_id);
 
   useEffect(() => {
@@ -124,9 +136,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveViewState("aluno");
   };
 
-  // Sessão Firebase válida, mas perfil indisponível (GET /auth/me falhou). Distinto
-  // de "deslogado": o usuário permanece na app em estado degradado, com retry. A guarda
-  // de rota vive no PrivateRoute, que suprime o redirect quando profileUnavailable é true.
+  // Sessao Firebase valida, mas perfil indisponivel (GET /auth/me falhou). Distinto
+  // de "deslogado": o usuario permanece na app em estado degradado, com retry. A guarda
+  // de rota vive no PrivateRoute, que suprime o redirect quando profileUnavailable e true.
   const profileUnavailable = !!firebaseUser && profileError && !profile;
 
   const toggleDarkMode = () => {
@@ -140,7 +152,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     void signOut();
     setMobileMenuOpen(false);
-    // PrivateRoute redireciona para "login" quando o perfil é limpo.
+    // PrivateRoute redireciona para "login" quando o perfil e limpo.
   };
 
   return (
