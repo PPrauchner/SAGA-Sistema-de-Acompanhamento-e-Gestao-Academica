@@ -332,7 +332,7 @@ async def validate_activity(
     motor_executado = False
 
     update_data: dict = {
-        "status": novo_status,
+        "status": novo_status.value,
         "observacao_coordenacao": payload.observacao,
         "validado_por": current_user.uid,
         "validado_em": datetime.now(timezone.utc),

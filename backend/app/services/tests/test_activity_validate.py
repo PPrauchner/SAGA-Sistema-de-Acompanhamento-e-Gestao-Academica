@@ -98,7 +98,7 @@ async def test_aprovar_muda_status_e_contabiliza_pontuacao_base(monkeypatch: pyt
     assert _FakeInference.chamado_com == ("s1", "prog_default")
 
     _, update_data = fake_repo.update_by_id.call_args.args
-    assert update_data["status"] == ActivityStatus.aprovado
+    assert update_data["status"] == ActivityStatus.aprovado.value
     assert update_data["validado_por"] == "uid-coord"
     assert update_data["validado_em"] is not None
     assert "aprovado_por" not in update_data
