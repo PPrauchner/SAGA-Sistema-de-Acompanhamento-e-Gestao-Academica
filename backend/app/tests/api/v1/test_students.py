@@ -29,8 +29,23 @@ class _FakeStudentRepository:
         return {"id": student_id, **student} if student is not None else None
 
 
+class _FakeStudentService:
+    def __init__(self) -> None:
+        self.user: CurrentUser | None = None
+        self.body: Any | None = None
+
+    async def create_student(self, body: Any, user: CurrentUser) -> dict[str, Any]:
+        self.body = body
+        self.user = user
+        return {"id": "student1", "nome": body.nome, "invite_token": "tok-aluno"}
+
+
 def _coord() -> CurrentUser:
     return CurrentUser(uid="coord1", role="coordenacao", programa_id="prog", email="coord@saga.edu")
+
+
+def _advisor() -> CurrentUser:
+    return CurrentUser(uid="advisor1", role="orientador", programa_id="prog", email="advisor@saga.edu")
 
 
 def _legacy_student() -> dict[str, Any]:
@@ -97,3 +112,32 @@ def test_get_student_response_model_normaliza_documento_legado(client: TestClien
     assert body["qualificacao_aprovada"] is False
     assert body["proficiencia_comprovada"] is False
     assert body["coorientador_id"] is None
+
+
+def test_post_students_permite_orientador(client: TestClient) -> None:
+    fake_service = _FakeStudentService()
+    original_service = students_router.service
+    students_router.service = fake_service
+    app.dependency_overrides[get_current_user] = _advisor
+
+    response = client.post(
+        "/api/v1/students",
+        json={
+            "nome": "Novo Aluno",
+            "email": "novo@saga.edu",
+            "matricula": "2026002",
+            "orientador_id": "advisor1",
+            "coorientador_id": None,
+            "nivel": "mestrado",
+            "data_ingresso": "2026-01-01T00:00:00Z",
+            "programa_id": "prog",
+        },
+    )
+
+    students_router.service = original_service
+    app.dependency_overrides[get_current_user] = _coord
+
+    assert response.status_code == 201
+    assert response.json()["invite_token"] == "tok-aluno"
+    assert fake_service.user is not None
+    assert fake_service.user.role == "orientador"
