@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Clock, CheckCircle, XCircle, AlertTriangle, FileText, Calendar } from "lucide-react";
+import { useApp } from "../../context/AppContext";
 
 const EXTENSIONS = [
   { id: "1", aluno: "Ana Paula Costa", matricula: "2021003", nivel: "Doutorado", tipo: "prazo_defesa", motivo: "Necessidade de mais experimentos para validação do modelo proposto. Os resultados iniciais foram promissores, mas a análise estatística indicou a necessidade de dados adicionais para robustez científica.", dataAtual: "2025-12-31", novaData: "2026-06-30", status: "aprovado", solicitacao: "2024-10-15", parecer: "Aprovado pelo orientador e coordenação. Justificativa aceita." },
@@ -23,8 +24,19 @@ const TIPO_MAP: Record<string, string> = {
 };
 
 export function ExtensionsPage() {
+  const { currentUser } = useApp();
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+  const canCreateRequest = currentUser?.role === "aluno" || currentUser?.role === "orientador";
+  const isStudentRequest = currentUser?.role === "aluno";
+  const isAdvisorRequest = currentUser?.role === "orientador";
+  const advisorStudents: Array<{ id: string; nome: string; matricula?: string }> = [];
+
+  function openRequestForm(): void {
+    setSelectedStudentId(isStudentRequest ? currentUser?.student_id ?? currentUser?.id ?? "" : "");
+    setShowForm(true);
+  }
 
   return (
     <div>
@@ -33,9 +45,11 @@ export function ExtensionsPage() {
           <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Prorrogações e Solicitações</h1>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>Gerenciamento de solicitações de extensão de prazo</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 flex-shrink-0 self-start sm:self-auto" style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontWeight: 600, fontSize: "14px" }}>
-          <Plus size={16} /> <span className="whitespace-nowrap">Nova Solicitação</span>
-        </button>
+        {canCreateRequest && (
+          <button onClick={openRequestForm} className="flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 flex-shrink-0 self-start sm:self-auto" style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontWeight: 600, fontSize: "14px" }}>
+            <Plus size={16} /> <span className="whitespace-nowrap">Nova Solicitação</span>
+          </button>
+        )}
       </div>
 
       {/* Summary */}
@@ -149,6 +163,41 @@ export function ExtensionsPage() {
               <button onClick={() => setShowForm(false)} style={{ color: "var(--muted-foreground)", fontSize: "20px" }}>✕</button>
             </div>
             <div className="space-y-4">
+              {isStudentRequest && (
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Aluno</label>
+                  <input
+                    readOnly
+                    value={currentUser?.name ?? ""}
+                    className="w-full rounded-xl px-3 py-2.5 outline-none"
+                    style={{ border: "1px solid var(--border)", background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "13px" }}
+                  />
+                </div>
+              )}
+              {isAdvisorRequest && (
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Orientando</label>
+                  <select
+                    disabled={advisorStudents.length === 0}
+                    value={selectedStudentId}
+                    onChange={(e) => setSelectedStudentId(e.target.value)}
+                    className="w-full rounded-xl px-3 py-2.5 outline-none"
+                    style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px", opacity: advisorStudents.length === 0 ? 0.7 : 1 }}
+                  >
+                    <option value="">Selecione um orientando</option>
+                    {advisorStudents.map((student) => (
+                      <option key={student.id} value={student.id}>
+                        {student.nome}{student.matricula ? ` - ${student.matricula}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {advisorStudents.length === 0 && (
+                    <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "6px" }}>
+                      Lista de orientandos será carregada pela integração futura.
+                    </p>
+                  )}
+                </div>
+              )}
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Tipo de Solicitação</label>
                 <select className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
