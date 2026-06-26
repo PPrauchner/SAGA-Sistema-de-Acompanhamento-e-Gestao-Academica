@@ -12,13 +12,15 @@ Responsabilidades:
 - Declarar RelevanceLevel: os 7 níveis canônicos do Qualis Único da CAPES.
 - Declarar PESO_POR_NIVEL: a escala de pesos monotônica única consumida pela RL05,
   fonte de verdade para inference_repository, fixtures e seed_firestore.
+- Declarar os campos descritivos do veículo (indice_h, percentil_scopus, jcr): métricas
+  informativas exibidas na tela de detalhes; NÃO alimentam a RL05 (US-VQ04/VQ05).
 """
 
 from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 VehicleType = Literal["evento", "revista"]
 
@@ -44,6 +46,11 @@ class VehicleCreate(BaseModel):
     sigla: str | None = None
     issn: str | None = None
     nivel: RelevanceLevel
+    # Métricas descritivas (US-VQ04/VQ05) — não alimentam a RL05. `jcr` só é
+    # válido para tipo 'revista'; essa regra é verificada no VehicleService.
+    indice_h: int | None = Field(default=None, ge=0)
+    percentil_scopus: int | None = Field(default=None, ge=0, le=100)
+    jcr: float | None = Field(default=None, gt=0)
 
 
 class VehicleLevelUpdate(BaseModel):
@@ -58,3 +65,6 @@ class VehicleResponse(BaseModel):
     issn: str | None = None
     nivel: RelevanceLevel
     peso: float
+    indice_h: int | None = None
+    percentil_scopus: int | None = None
+    jcr: float | None = None
