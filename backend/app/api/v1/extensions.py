@@ -1,19 +1,37 @@
-"""
-Router FastAPI para os endpoints de solicitações de prorrogação de prazo.
+"""Router FastAPI para solicitacoes de prorrogacao."""
 
-Responsabilidades:
-- GET /api/v1/extensions: lista prorrogações. Aluno vê as próprias; coordenação vê todas.
-  Aplica @requires_role para todos os papéis.
-- POST /api/v1/extensions: aluno solicita prorrogação de prazo. Aplica
-  @requires_role('aluno'), @audit_operation e @check_deadlines (verifica se aluno não
-  atingiu max_prorrogacoes e ainda está dentro do período elegível para solicitar).
-- PATCH /api/v1/extensions/{extension_id}/review: orientador emite parecer sem aprovar.
-  Aplica @requires_role('orientador') e @audit_operation.
-- PATCH /api/v1/extensions/{extension_id}/approve: coordenação aprova ou rejeita. Se
-  aprovada, atualiza prazo_final do aluno. Aplica @requires_role('coordenacao'),
-  @audit_operation e @trigger_alerts (notifica aluno com resultado e novo prazo).
-"""
+from fastapi import APIRouter, Depends, status
 
-from fastapi import APIRouter
+from backend.app.aspects.audit import audit_operation
+from backend.app.aspects.authorization import requires_role
+from backend.app.core.auth import CurrentUser, get_current_user
+from backend.app.models.extension import ExtensionCreateRequest, ExtensionResponse
+from backend.app.services.extension_service import ExtensionService
 
 router = APIRouter()
+
+service = ExtensionService()
+
+
+@router.get("/extensions", response_model=list[ExtensionResponse])
+@requires_role("aluno", "orientador", "coordenacao")
+async def list_extensions(
+    user: CurrentUser = Depends(get_current_user),
+) -> list[ExtensionResponse]:
+    """Lista prorrogacoes visiveis para o usuario autenticado."""
+    return await service.list_extensions(user)
+
+
+@router.post(
+    "/extensions",
+    response_model=ExtensionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@requires_role("aluno", "orientador")
+@audit_operation
+async def create_extension(
+    body: ExtensionCreateRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> ExtensionResponse:
+    """Cria uma solicitacao de prorrogacao para aluno ou orientando."""
+    return await service.create_extension(body, user)
