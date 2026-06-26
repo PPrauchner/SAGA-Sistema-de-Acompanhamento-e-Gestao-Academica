@@ -29,7 +29,7 @@ const fieldStyle = {
 };
 
 export function AdvisorsPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
@@ -163,6 +163,7 @@ export function AdvisorsPage() {
           {filtered.map((advisor) => {
             const usage = advisor.limite_orientandos > 0 ? advisor.orientandos_ativos / advisor.limite_orientandos : 0;
             const statusColor = usage >= 1 ? "#dc2626" : usage >= 0.8 ? "#D4A017" : "#1F8A70";
+            const isPendingInvite = !advisor.uid;
             return (
               <div key={advisor.id} className="rounded-2xl p-5 transition-all" style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                 <div className="flex items-start gap-4 mb-4">
@@ -172,7 +173,14 @@ export function AdvisorsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>{advisor.nome}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>{advisor.nome}</p>
+                          {role === "coordenacao" && isPendingInvite && (
+                            <span className="px-2 py-0.5 rounded-lg" style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 700 }}>
+                              Convite Pendente
+                            </span>
+                          )}
+                        </div>
                         <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{advisor.departamento}</p>
                         <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{advisor.email}</p>
                       </div>
