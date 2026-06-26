@@ -98,12 +98,12 @@ class ExtensionService:
         orientador_uid: str,
     ) -> ExtensionResponse:
         student_snap = await self._repo.student_ref(student_id).get()
-        if not student_snap.exists:
+        advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
+        if student_data.get("orientador_id") != advisor_doc_id:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
 
         student_data: dict = student_snap.to_dict()
-        advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
-        if student_data.get("orientador_id") != advisor_doc_id:
+        if student_data.get("orientador_id") != orientador_uid:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Voce nao e o orientador deste discente.",
@@ -207,18 +207,15 @@ class ExtensionService:
         return [_to_response(d.id, d.to_dict()) for d in docs]
 
     async def list_pending_for_advisor(self, orientador_uid: str) -> list[ExtensionResponse]:
-        advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
-        students_query = (
-            self._repo._db.collection("students")
-            .where("orientador_id", "==", advisor_doc_id)
-        )
+        
         results: list[ExtensionResponse] = []
         async for student_doc in students_query.stream():
-            pending = (
-                self._repo.extensions_col(student_doc.id)
-                .where("status", "==", ExtensionStatus.PENDENTE.value)
-            )
-            async for ext_doc in pending.stream():
+           advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
+           students_query = (
+                self._repo._db.collection("students")
+                .where("orientador_id", "==", advisor_doc_id)
+)
+        async for ext_doc in pending.stream():
                 results.append(_to_response(ext_doc.id, ext_doc.to_dict()))
         return results
 
