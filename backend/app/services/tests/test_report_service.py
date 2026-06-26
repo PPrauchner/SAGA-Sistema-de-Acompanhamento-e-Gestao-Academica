@@ -411,3 +411,56 @@ async def test_productions_discente_sem_registro_no_programa_retorna_403() -> No
         await service.get_productions_report(_PROG, "aluno", "u_fantasma")
 
     assert exc_info.value.status_code == 403
+
+
+async def test_productions_orientador_ve_orientandos_identificados_e_resto_anonimo() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+            {"id": "s2", "uid": "u2", "nome": "Bia", "orientador_id": "a2", "programa_id": _PROG},
+        ],
+        advisors=[
+            {"id": "a1", "nome": "Prof. X", "uid": "ua1"},
+            {"id": "a2", "nome": "Profa. Y", "uid": "ua2"},
+        ],
+        productions=[
+            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+        ],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado"}],
+            "s2": [{"producao_id": "p2", "status": "aprovado"}],
+        },
+    )
+
+    result = await service.get_productions_report(_PROG, "orientador", "ua1")
+
+    # Orientando próprio: identificado.
+    proprios = [item for item in result.por_aluno if not item.anonimo]
+    assert len(proprios) == 1
+    assert proprios[0].student_id == "s1"
+    assert proprios[0].student_nome == "Ana"
+
+    # Aluno de outro orientador: anônimo, sem id/nome, mas com as métricas preservadas.
+    anonimos = [item for item in result.por_aluno if item.anonimo]
+    assert len(anonimos) == 1
+    assert anonimos[0].student_id is None
+    assert anonimos[0].student_nome is None
+    assert anonimos[0].total == 1
+
+    # por_orientador traz apenas o próprio orientador.
+    assert {item.advisor_id for item in result.por_orientador} == {"a1"}
+
+
+async def test_productions_orientador_sem_registro_retorna_403() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+        ],
+        advisors=[{"id": "a1", "nome": "Prof. X", "uid": "ua1"}],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_productions_report(_PROG, "orientador", "ua_fantasma")
+
+    assert exc_info.value.status_code == 403
