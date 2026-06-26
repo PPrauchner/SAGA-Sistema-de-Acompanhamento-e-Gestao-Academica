@@ -339,7 +339,7 @@ export function SolicitacoesPage() {
                     <option value="">Selecione um orientando</option>
                     {advisorStudents.map((student) => <option key={student.id} value={student.id}>{student.nome}</option>)}
                   </select>
-                  {advisorStudents.length === 0 && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "6px" }}>Lista de orientandos será carregada pela integração futura.</p>}
+                  {advisorStudents.length === 0 && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "6px" }}>Nenhum orientando disponível para solicitação.</p>}
                 </div>
               )}
               <div>
