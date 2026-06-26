@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from backend.app.repositories import firebase_repository
@@ -12,6 +14,20 @@ def fake_db(monkeypatch: pytest.MonkeyPatch) -> FakeFirestore:
     db = FakeFirestore()
     monkeypatch.setattr(firebase_repository, "get_firestore_client", lambda: db)
     return db
+
+
+async def test_list_by_ids_vazio_retorna_sem_buscar_niveis(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_db: FakeFirestore,
+) -> None:
+    repo = ProductionRepository()
+    vehicle_levels = AsyncMock(return_value={})
+    monkeypatch.setattr(repo, "_vehicle_levels", vehicle_levels)
+
+    result = await repo.list_by_ids(set())
+
+    assert result == []
+    vehicle_levels.assert_not_called()
 
 
 async def test_list_by_ids_normaliza_apenas_producoes_solicitadas(fake_db: FakeFirestore) -> None:

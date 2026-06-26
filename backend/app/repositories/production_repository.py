@@ -77,6 +77,9 @@ class ProductionRepository(FirebaseRepository):
 
     async def list_by_ids(self, production_ids: set[str]) -> list[dict[str, Any]]:
         """Lista produções específicas por id, normalizadas para relatórios/dashboard."""
+        if not production_ids:
+            return []
+
         productions = []
         for production_id in production_ids:
             production = await self.get(production_id)
