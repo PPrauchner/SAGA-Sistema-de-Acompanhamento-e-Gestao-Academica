@@ -60,6 +60,7 @@ async def test_aluno_dashboard_returns_basic_student_data():
     ):
         MockStudentRepo.return_value.get = AsyncMock(return_value=student)
         MockStudentRepo.return_value.list_all = AsyncMock(return_value=[student])
+        MockStudentRepo.return_value.list_subcollection = AsyncMock(return_value=[])
         MockActivityRepo.return_value.list_by_student = AsyncMock(return_value=[])
         MockActivityTypeRepo.return_value.list_all = AsyncMock(return_value=[])
 
@@ -96,6 +97,7 @@ async def test_aluno_dashboard_detects_conflito_situacao():
         patch("backend.app.services.dashboard_service.WorkPlanRepository") as MockWPR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
+        MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
         MockAR.return_value.list_by_student = AsyncMock(return_value=[])
         MockATR.return_value.list_all = AsyncMock(return_value=[])
 
@@ -134,6 +136,7 @@ async def test_aluno_dashboard_aggregates_credits_by_group():
         patch("backend.app.services.dashboard_service.WorkPlanRepository") as MockWPR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
+        MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
         MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
         MockATR.return_value.list_all = AsyncMock(return_value=[
             {"id": "t_basico", "categoria": "basico"},
@@ -179,20 +182,74 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
         patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
         patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
         patch("backend.app.services.dashboard_service.WorkPlanRepository") as MockWPR,
+        patch("backend.app.services.dashboard_service.ProductionRepository") as MockPR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
+        MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
         MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
         MockATR.return_value.list_all = AsyncMock(return_value=[])
+        MockPR.return_value.list_productions = AsyncMock(return_value=[
+            {"id": "prod_1", "nivel": "A1", "pontuacao_calculada": 4.0},
+            {"id": "prod_2", "nivel": "A2", "pontuacao_calculada": 2.5},
+        ])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
         result = await service.get_aluno_dashboard("stu_001")
 
     assert result.producoes_aprovadas == 2 
+    assert result.producoes.total == 2
+    assert result.producoes.pontuacao_total == 6.5
+    assert result.producoes.por_nivel == {"A1": 1, "A2": 1}
     assert result.atividades_pendentes_validacao == 2 
 
     MockSR.return_value.get.assert_called_once_with("stu_001")
     MockAR.return_value.list_by_student.assert_called_once_with("stu_001")
+
+
+@pytest.mark.asyncio
+async def test_meu_aluno_dashboard_resolve_student_from_current_user():
+    """Dashboard do discente deriva o student_id do CurrentUser.uid."""
+    from backend.app.core.auth import CurrentUser
+    from backend.app.services.dashboard_service import DashboardService
+
+    student = _make_student()
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository") as MockATR,
+        patch("backend.app.services.dashboard_service.WorkPlanRepository") as MockWPR,
+    ):
+        MockSR.return_value.query = AsyncMock(return_value=[student])
+        MockSR.return_value.get = AsyncMock(return_value=student)
+        MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockATR.return_value.list_all = AsyncMock(return_value=[])
+        MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_meu_aluno_dashboard(
+            CurrentUser(uid="uid_aluno_001", role="aluno", programa_id="prog_default")
+        )
+
+    assert result.student_id == "stu_001"
+    MockSR.return_value.query.assert_called_once_with(filters=[("uid", "==", "uid_aluno_001")])
+    MockSR.return_value.get.assert_called_once_with("stu_001")
+
+
+@pytest.mark.asyncio
+async def test_meu_aluno_dashboard_blocks_non_student_role():
+    from backend.app.core.auth import CurrentUser
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_meu_aluno_dashboard(
+            CurrentUser(uid="uid_coord", role="coordenacao", programa_id="prog_default")
+        )
+
+    assert exc_info.value.status_code == 403
 
 
 
@@ -615,7 +672,7 @@ async def test_aluno_dashboard_calculates_real_progress():
 
     student = _make_student()
     tasks = [
-        {"id": "t1", "status": "concluida", "titulo": "T1", "prazo": "2026-06-25"},
+        {"id": "t1", "status": "concluido", "titulo": "T1", "prazo": "2026-06-25"},
         {"id": "t2", "status": "pendente", "titulo": "T2", "prazo": "2026-06-21"}, # mais próxima
         {"id": "t3", "status": "pendente", "titulo": "T3", "prazo": "2026-06-30"},
         {"id": "t4", "status": "pendente", "titulo": "T4", "prazo": "2026-06-28"},
@@ -629,6 +686,21 @@ async def test_aluno_dashboard_calculates_real_progress():
         patch("backend.app.services.dashboard_service.WorkPlanRepository") as MockWPR,
     ):
         MockSR.return_value.get = AsyncMock(return_value=student)
+        MockSR.return_value.list_subcollection = AsyncMock(return_value=[
+            {
+                "timestamp": "2026-06-20T10:00:00Z",
+                "checklist": {
+                    "creditos_minimos": {"status": "cumprido"},
+                    "creditos_grupo_basico": {"status": "pendente"},
+                    "creditos_grupo_especifico": {"status": "pendente"},
+                    "creditos_grupo_tecnologico": {"status": "pendente"},
+                    "proficiencia": {"status": "pendente"},
+                    "qualificacao": {"status": "em_risco"},
+                    "producao_validada": {"status": "pendente"},
+                    "plano_concluido": {"status": "pendente"},
+                }
+            }
+        ])
         MockAR.return_value.list_by_student = AsyncMock(return_value=[])
         MockATR.return_value.list_all = AsyncMock(return_value=[])
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=tasks)
@@ -638,8 +710,9 @@ async def test_aluno_dashboard_calculates_real_progress():
 
     assert result.progresso_plano_percentual == 20.0 # 1 concluída / 5 total * 100
     assert result.checklist_resumo.cumpridos == 1
-    assert result.checklist_resumo.pendentes == 4
-    assert result.checklist_resumo.total == 5
+    assert result.checklist_resumo.pendentes == 6
+    assert result.checklist_resumo.em_risco == 1
+    assert result.checklist_resumo.total == 8
     
     assert len(result.tasks_proximas) == 3
     assert result.tasks_proximas[0].titulo == "T2" # 2026-06-21
@@ -656,8 +729,8 @@ async def test_orientador_dashboard_shows_orientando_progress():
         _make_student({"id": "stu_001", "orientador_id": "adv_001"}),
     ]
     tasks_stu1 = [
-        {"id": "t1", "status": "concluida"},
-        {"id": "t2", "status": "concluida"},
+        {"id": "t1", "status": "concluido"},
+        {"id": "t2", "status": "concluido"},
         {"id": "t3", "status": "pendente"},
         {"id": "t4", "status": "pendente"},
     ] # 50%

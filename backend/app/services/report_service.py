@@ -48,7 +48,7 @@ from backend.app.repositories.student_repository import StudentRepository
 _DIAS_POR_MES = 30.44
 
 # Níveis Qualis Único contabilizados no relatório de produção (por_nivel).
-_NIVEIS_RELEVANCIA = ("A1", "A2", "A3", "A4", "B1", "B2", "SC")
+_NIVEIS_RELEVANCIA = ("A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "SC")
 
 
 def _to_date(value: Any) -> date | None:

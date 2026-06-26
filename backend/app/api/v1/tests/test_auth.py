@@ -14,6 +14,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.core import auth as auth_module
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.main import app
 from backend.app.models.user import (
@@ -133,4 +134,58 @@ def test_me_autenticado_200(client: TestClient) -> None:
     body = resp.json()
     assert body["uid"] == "u1"
     assert body["role"] == "aluno"
+    assert _FakeAuthService.chamadas[0][0] == "get_me"
+
+
+def test_me_token_sem_role_403(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        auth_module.firebase_auth,
+        "verify_id_token",
+        lambda _token: {"uid": "u1", "programa_id": "prog_default", "email": "u@x.com"},
+    )
+
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer token-sem-role"})
+
+    assert resp.status_code == 403
+    assert _FakeAuthService.chamadas == []
+
+
+def test_me_token_sem_programa_id_403(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        auth_module.firebase_auth,
+        "verify_id_token",
+        lambda _token: {"uid": "u1", "role": "aluno", "email": "u@x.com"},
+    )
+
+    resp = client.get("/api/v1/auth/me", headers={"Authorization": "Bearer token-sem-programa"})
+
+    assert resp.status_code == 403
+    assert _FakeAuthService.chamadas == []
+
+
+def test_me_usa_papel_dos_claims_e_ignora_header_cliente(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        auth_module.firebase_auth,
+        "verify_id_token",
+        lambda _token: {
+            "uid": "u1",
+            "role": "aluno",
+            "programa_id": "prog_default",
+            "email": "u@x.com",
+        },
+    )
+
+    resp = client.get(
+        "/api/v1/auth/me",
+        headers={
+            "Authorization": "Bearer token-com-claims",
+            "X-User-Role": "coordenacao",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "aluno"
     assert _FakeAuthService.chamadas[0][0] == "get_me"

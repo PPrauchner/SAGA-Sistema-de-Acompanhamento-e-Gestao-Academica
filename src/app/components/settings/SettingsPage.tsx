@@ -8,6 +8,7 @@ import { getAdvisors, type Advisor } from "../../../api/advisorsApi";
 import { coordinationTransfersApi, type CoordinationTransfer } from "../../../api/coordinationTransfersApi";
 import { getVehicles, type Vehicle } from "../../../api/productionsApi";
 import { toast } from "sonner";
+import { QualisWeightsSection } from "./QualisWeightsSection";
 
 export interface ProgramConfig {
   id?: string;
@@ -17,6 +18,15 @@ export interface ProgramConfig {
   creditos_total_min: number;
   meses_ate_qualificacao: number;
 }
+
+// Base usada quando o usuário edita antes de a API retornar a config.
+const DEFAULT_PROGRAM_CONFIG: ProgramConfig = {
+  creditos_grupo_basico_min: 0,
+  creditos_grupo_especifico_min: 0,
+  creditos_grupo_tecnologico_max: 0,
+  creditos_total_min: 0,
+  meses_ate_qualificacao: 0,
+};
 
 export interface ActivityType {
   id?: string;
@@ -656,7 +666,7 @@ export function SettingsPage() {
                       <input 
                         type="number"
                         value={programConfig?.creditos_grupo_basico_min || 0}
-                        onChange={e => setProgramConfig({...programConfig, creditos_grupo_basico_min: parseInt(e.target.value)})}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_basico_min: parseInt(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -665,7 +675,7 @@ export function SettingsPage() {
                       <input 
                         type="number"
                         value={programConfig?.creditos_grupo_especifico_min || 0}
-                        onChange={e => setProgramConfig({...programConfig, creditos_grupo_especifico_min: parseInt(e.target.value)})}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_especifico_min: parseInt(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -674,7 +684,7 @@ export function SettingsPage() {
                       <input 
                         type="number"
                         value={programConfig?.creditos_grupo_tecnologico_max || 0}
-                        onChange={e => setProgramConfig({...programConfig, creditos_grupo_tecnologico_max: parseInt(e.target.value)})}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_tecnologico_max: parseInt(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -683,7 +693,7 @@ export function SettingsPage() {
                       <input 
                         type="number"
                         value={programConfig?.creditos_total_min || 0}
-                        onChange={e => setProgramConfig({...programConfig, creditos_total_min: parseInt(e.target.value)})}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_total_min: parseInt(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -692,7 +702,7 @@ export function SettingsPage() {
                       <input 
                         type="number"
                         value={programConfig?.meses_ate_qualificacao || 0}
-                        onChange={e => setProgramConfig({...programConfig, meses_ate_qualificacao: parseInt(e.target.value)})}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), meses_ate_qualificacao: parseInt(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -705,6 +715,8 @@ export function SettingsPage() {
                   </form>
                 )}
               </div>
+
+              <QualisWeightsSection />
 
               <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                 <div className="flex items-center justify-between mb-6">
@@ -760,7 +772,7 @@ export function SettingsPage() {
                         <button onClick={() => openEditActivityModal(type)} title="Editar">
                           <Edit size={16} className="text-blue-600" />
                         </button>
-                        <button onClick={() => handleToggleActivity(type.id)} title={type.ativo ? "Desativar" : "Ativar"}>
+                        <button onClick={() => type.id && handleToggleActivity(type.id)} title={type.ativo ? "Desativar" : "Ativar"}>
                           {type.ativo ? <CheckCircle2 size={18} className="text-green-600" /> : <XCircle size={18} className="text-red-500" />}
                         </button>
                       </div>

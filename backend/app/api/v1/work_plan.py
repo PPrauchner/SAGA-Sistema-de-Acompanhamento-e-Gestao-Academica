@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from backend.app.aspects.alerts import trigger_alerts
 from backend.app.aspects.audit import audit_operation
@@ -29,16 +29,14 @@ from backend.app.models.work_plan import (
     WorkPlanFull,
     WorkPlanUpdate,
 )
-from backend.app.repositories.work_plan_repository import WorkPlanRepository, WorkPlanStore
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.services.work_plan_service import WorkPlanNotFoundError, WorkPlanService, _build_progress_update_alert
 
 router = APIRouter()
 
 
-def _get_service(request: Request) -> WorkPlanService:
-    if not hasattr(request.app.state, "work_plan_store"):
-        request.app.state.work_plan_store = WorkPlanStore()
-    return WorkPlanService(WorkPlanRepository(request.app.state.work_plan_store))
+def _get_service() -> WorkPlanService:
+    return WorkPlanService(WorkPlanRepository())
 
 
 def _actor(
@@ -55,8 +53,10 @@ def _not_found(exc: WorkPlanNotFoundError) -> HTTPException:
 
 
 @router.get("/work-plan/{student_id}", response_model=WorkPlanFull)
+@requires_role("aluno", "orientador", "coordenacao")
 async def get_work_plan(
     student_id: str,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> WorkPlanFull:
     try:
@@ -188,8 +188,10 @@ async def add_progress_update(
 
 
 @router.get("/tasks/{task_id}/updates", response_model=ProgressUpdateList)
+@requires_role("aluno", "orientador", "coordenacao")
 async def list_progress_updates(
     task_id: str,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> ProgressUpdateList:
     try:
@@ -199,8 +201,10 @@ async def list_progress_updates(
 
 
 @router.get("/work-plan/{student_id}/facts/plano-concluido", response_model=WorkPlanFact)
+@requires_role("aluno", "orientador", "coordenacao")
 async def get_plan_concluded_fact(
     student_id: str,
+    user: CurrentUser = Depends(get_current_user),
     service: WorkPlanService = Depends(_get_service),
 ) -> WorkPlanFact:
     try:

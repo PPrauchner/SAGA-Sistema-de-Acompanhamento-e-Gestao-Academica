@@ -3,7 +3,9 @@ import { AlertCircle, Calendar, CheckCircle2, Circle, Clock3, Loader2, Plus, Sen
 
 import {
   addProgressUpdate,
+  createStage,
   createTask,
+  createWorkPlan,
   getWorkPlan,
   updateTaskStatus,
   type TaskPriority,
@@ -12,12 +14,15 @@ import {
   type WorkPlanStage,
   type WorkPlanTask,
 } from "@/api/workPlanApi";
+import { ApiError } from "@/api/http";
 import { useApp } from "@/app/context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
 
 type Modal =
   | { kind: "task"; stage: WorkPlanStage }
   | { kind: "progress"; task: WorkPlanTask }
+  | { kind: "plan" }
+  | { kind: "stage" }
   | null;
 
 const STATUS_COLUMNS: { id: TaskStatus; label: string; icon: JSX.Element }[] = [
@@ -47,6 +52,7 @@ export function WorkPlanPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
 
   const targetStudentId = selectedStudentId ?? studentId ?? "aluno_regular";
@@ -56,10 +62,16 @@ export function WorkPlanPage() {
   async function load() {
     setLoading(true);
     setError(null);
+    setNotFound(false);
     try {
       setPlan(await getWorkPlan(targetStudentId, token ?? undefined));
-    } catch {
-      setError("Nao foi possivel carregar o plano de trabalho.");
+    } catch (err) {
+      setPlan(null);
+      if (err instanceof ApiError && err.status === 404) {
+        setNotFound(true);
+      } else {
+        setError("Nao foi possivel carregar o plano de trabalho.");
+      }
     } finally {
       setLoading(false);
     }
@@ -108,6 +120,44 @@ export function WorkPlanPage() {
     }
   }
 
+  async function handleCreatePlan(data: { titulo: string; dataInicio: string; dataFim: string; etapaNome: string }) {
+    setSaving(true);
+    try {
+      const { plan_id } = await createWorkPlan(
+        targetStudentId,
+        { titulo: data.titulo, data_inicio: `${data.dataInicio}T00:00:00Z`, data_fim_prevista: `${data.dataFim}T00:00:00Z` },
+        token ?? undefined,
+      );
+      if (data.etapaNome) {
+        await createStage(
+          plan_id,
+          { nome: data.etapaNome, ordem: 1, data_inicio: `${data.dataInicio}T00:00:00Z`, data_fim: `${data.dataFim}T00:00:00Z` },
+          token ?? undefined,
+        );
+      }
+      setModal(null);
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleCreateStage(data: { nome: string; dataInicio: string; dataFim: string }) {
+    if (!plan) return;
+    setSaving(true);
+    try {
+      await createStage(
+        plan.plan_id,
+        { nome: data.nome, ordem: plan.stages.length + 1, data_inicio: `${data.dataInicio}T00:00:00Z`, data_fim: `${data.dataFim}T00:00:00Z` },
+        token ?? undefined,
+      );
+      setModal(null);
+      await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[360px] items-center justify-center">
@@ -116,10 +166,34 @@ export function WorkPlanPage() {
     );
   }
 
-  if (error || !plan) {
+  if (!plan) {
+    if (notFound && isAdvisor) {
+      return (
+        <>
+          <div className="rounded-lg p-6 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+            <Calendar className="mx-auto" size={28} style={{ color: "var(--muted-foreground)" }} />
+            <p style={{ color: "var(--foreground)", fontWeight: 800, marginTop: 12 }}>Nenhum plano de trabalho ainda</p>
+            <p style={{ color: "var(--muted-foreground)", fontSize: 13, marginTop: 6 }}>
+              Este discente ainda nao possui um plano de trabalho. Crie o primeiro para comecar a acompanhar etapas e tarefas.
+            </p>
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "plan" })}
+              className="mt-4 inline-flex items-center gap-1.5 rounded-md px-3.5 py-2"
+              style={{ background: "#123C7A", color: "#fff", fontSize: 13, fontWeight: 800 }}
+            >
+              <Plus size={15} /> Criar plano de trabalho
+            </button>
+          </div>
+          {modal?.kind === "plan" && <PlanModal saving={saving} onClose={() => setModal(null)} onSave={handleCreatePlan} />}
+        </>
+      );
+    }
     return (
       <div className="rounded-lg p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-        <p style={{ color: "var(--foreground)", fontWeight: 700 }}>{error ?? "Plano nao encontrado."}</p>
+        <p style={{ color: "var(--foreground)", fontWeight: 700 }}>
+          {error ?? (notFound ? "Nenhum plano de trabalho cadastrado para este discente." : "Plano nao encontrado.")}
+        </p>
       </div>
     );
   }
@@ -189,6 +263,16 @@ export function WorkPlanPage() {
       <section className="rounded-lg p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <div className="mb-3 flex items-center justify-between">
           <h2 style={{ fontSize: 14, fontWeight: 800, color: "var(--foreground)" }}>Etapas</h2>
+          {isAdvisor && (
+            <button
+              type="button"
+              onClick={() => setModal({ kind: "stage" })}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5"
+              style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: 12, fontWeight: 800 }}
+            >
+              <Plus size={14} /> Nova etapa
+            </button>
+          )}
         </div>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {plan.stages.map((stage) => (
@@ -226,6 +310,8 @@ export function WorkPlanPage() {
       {modal?.kind === "progress" && (
         <ProgressModal task={modal.task} saving={saving} onClose={() => setModal(null)} onSave={(data) => handleProgress(modal.task, data)} />
       )}
+      {modal?.kind === "plan" && <PlanModal saving={saving} onClose={() => setModal(null)} onSave={handleCreatePlan} />}
+      {modal?.kind === "stage" && <StageModal saving={saving} onClose={() => setModal(null)} onSave={handleCreateStage} />}
     </div>
   );
 }
@@ -334,6 +420,78 @@ function TaskModal({
           style={{ background: "#123C7A", color: "#fff", fontSize: 13, fontWeight: 800, opacity: saving || !titulo || !prazo ? 0.6 : 1 }}
         >
           Criar task
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function PlanModal({
+  saving,
+  onClose,
+  onSave,
+}: {
+  saving: boolean;
+  onClose: () => void;
+  onSave: (data: { titulo: string; dataInicio: string; dataFim: string; etapaNome: string }) => void;
+}) {
+  const [titulo, setTitulo] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+  const [etapaNome, setEtapaNome] = useState("");
+
+  const disabled = saving || !titulo || !dataInicio || !dataFim;
+
+  return (
+    <ModalShell title="Criar plano de trabalho" onClose={onClose}>
+      <div className="space-y-3">
+        <Input label="Titulo do plano" value={titulo} onChange={setTitulo} />
+        <Input label="Data de inicio" type="date" value={dataInicio} onChange={setDataInicio} />
+        <Input label="Data fim prevista" type="date" value={dataFim} onChange={setDataFim} />
+        <Input label="Primeira etapa (opcional)" value={etapaNome} onChange={setEtapaNome} />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onSave({ titulo, dataInicio, dataFim, etapaNome })}
+          className="w-full rounded-md py-2.5"
+          style={{ background: "#123C7A", color: "#fff", fontSize: 13, fontWeight: 800, opacity: disabled ? 0.6 : 1 }}
+        >
+          Criar plano
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function StageModal({
+  saving,
+  onClose,
+  onSave,
+}: {
+  saving: boolean;
+  onClose: () => void;
+  onSave: (data: { nome: string; dataInicio: string; dataFim: string }) => void;
+}) {
+  const [nome, setNome] = useState("");
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+
+  const disabled = saving || !nome || !dataInicio || !dataFim;
+
+  return (
+    <ModalShell title="Nova etapa" onClose={onClose}>
+      <div className="space-y-3">
+        <Input label="Nome da etapa" value={nome} onChange={setNome} />
+        <Input label="Data de inicio" type="date" value={dataInicio} onChange={setDataInicio} />
+        <Input label="Data fim" type="date" value={dataFim} onChange={setDataFim} />
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onSave({ nome, dataInicio, dataFim })}
+          className="w-full rounded-md py-2.5"
+          style={{ background: "#123C7A", color: "#fff", fontSize: 13, fontWeight: 800, opacity: disabled ? 0.6 : 1 }}
+        >
+          Criar etapa
         </button>
       </div>
     </ModalShell>

@@ -32,6 +32,7 @@ from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.vehicle_repository import VehicleRepository
 from backend.app.services.inference_service import InferenceService
+from backend.app.services.qualis_weights_service import QualisWeightsService
 from backend.app.services.student_service import StudentService
 
 # Pontuação base por NATUREZA bibliográfica da produção. Publicações não são activity_types
@@ -78,6 +79,7 @@ class ProductionService:
         self._vehicles = VehicleRepository()
         self._students_service = StudentService()
         self._inference = InferenceService(InferenceRepository())
+        self._qualis_weights = QualisWeightsService()
 
     async def _resolve_vehicle_level(
         self,
@@ -104,10 +106,15 @@ class ProductionService:
                 detail="Aluno não encontrado para o usuário atual",
             )
 
-        nivel, peso = await self._resolve_vehicle_level(user.programa_id, data.veiculo_id)
+        nivel, _ = await self._resolve_vehicle_level(user.programa_id, data.veiculo_id)
         pontuacao_base = _resolve_pontuacao_base(data.tipo_producao, data.status_publicacao)
-        score = self._inference.score_production(nivel, peso, pontuacao_base)
         now = datetime.now(timezone.utc)
+        # Peso versionado por data (ADR-0003): produção publicada trava o peso na versão
+        # vigente em data_realizacao; submetida/aceita usa o peso vigente atual (provisório).
+        when = data.data_realizacao if data.status_publicacao == "publicado" else now
+        weights = await self._qualis_weights.get_weights_at(user.programa_id, when)
+        peso = weights.get(nivel, weights.get("SC", 0.0))
+        score = self._inference.score_production(nivel, peso, pontuacao_base)
 
         # O autor que registra é sempre incluído em autores[].
         autores = list(data.autores)

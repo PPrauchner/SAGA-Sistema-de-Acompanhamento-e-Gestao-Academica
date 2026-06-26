@@ -161,9 +161,14 @@ class WorkPlanService:
                 "criado_em": datetime.now(timezone.utc),
             },
         )
-        await self._recalculate(plan)
+        # get_task_context devolve cópias defasadas; recarrega o plano para que
+        # _recalculate veja o status/progresso gravados por create_update (senão
+        # concluir a última task via 100% não persiste plano_concluido).
         updated_plan = await self._repo.get_plan(plan["student_id"])
-        progresso = updated_plan["progresso_percentual"] if updated_plan else 0
+        if updated_plan is not None:
+            plan = updated_plan
+        await self._recalculate(plan)
+        progresso = plan["progresso_percentual"]
         return ProgressUpdateCreated(
             update_id=update_id,
             alerta_prazo=False,

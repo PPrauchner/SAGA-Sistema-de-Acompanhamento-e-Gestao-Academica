@@ -104,6 +104,13 @@ class _FakeInferenceService:
         return peso * pontuacao_base
 
 
+class _FakeQualisWeightsService:
+    """Pesos Qualis versionados: A1=2.0 (peso vigente resolvido por data)."""
+
+    async def get_weights_at(self, programa_id: str, when: Any) -> dict[str, float]:
+        return {"A1": 2.0, "SC": 0.1}
+
+
 @pytest.fixture(autouse=True)
 def _setup_coupling(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeProductionRepository.store = {}
@@ -116,6 +123,7 @@ def _setup_coupling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(production_module, "StudentService", _FakeStudentService)
     monkeypatch.setattr(production_module, "InferenceService", _FakeInferenceService)
     monkeypatch.setattr(production_module, "InferenceRepository", lambda: object())
+    monkeypatch.setattr(production_module, "QualisWeightsService", _FakeQualisWeightsService)
 
 
 def _aluno() -> CurrentUser:

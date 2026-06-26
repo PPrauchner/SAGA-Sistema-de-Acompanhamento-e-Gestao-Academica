@@ -247,7 +247,7 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
         advisors=[{"id": "a1", "nome": "Prof. X"}, {"id": "a2", "nome": "Profa. Y"}],
         productions=[
             {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
-            {"id": "p2", "nivel": "B1", "pontuacao_calculada": 1.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A5", "pontuacao_calculada": 1.0, "programa_id": _PROG},
         ],
         activities={
             "s1": [
@@ -266,7 +266,7 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
     assert por_aluno["Ana"].total == 1
     assert por_aluno["Ana"].pontuacao_total == 4.0
     assert por_aluno["Ana"].por_nivel.A1 == 1
-    assert por_aluno["Caio"].por_nivel.B1 == 1
+    assert por_aluno["Caio"].por_nivel.A5 == 1
 
     por_orientador = {item.advisor_id: item for item in result.por_orientador}
     # Prof. X tem 2 orientandos (Ana=4.0, Bruno=0.0) → soma 4.0, média 2.0; 1 produção.

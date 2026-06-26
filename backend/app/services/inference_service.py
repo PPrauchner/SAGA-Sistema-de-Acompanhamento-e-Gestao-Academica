@@ -4,19 +4,19 @@ Serviço orquestrador da carga de fatos e execução do motor de inferência.
 Responsabilidades:
 - run_inference(student_id, programa_id) -> InferenceResult: método principal que:
     1. Carrega student do Firestore (data_ingresso, prazo_final, proficiencia_comprovada,
-       qualificacao_aprovada).
+    qualificacao_aprovada).
     2. Carrega configurações do programa (créditos mínimos, pesos de relevância).
     3. Carrega atividades aprovadas e calcula créditos por categoria (básico, específico,
-       tecnológico).
+    tecnológico).
     4. Carrega tasks do plano e determina quais etapas estão concluídas.
     5. Carrega produções aprovadas e verifica ao menos 1 bibliográfica.
     6. Calcula fatos derivados temporais: prazo_estourado, prazo_qualificacao_proximo,
-       plano_atrasado, qualificacao_pendente, creditos_insuficientes.
+    plano_atrasado, qualificacao_pendente, creditos_insuficientes.
     7. Monta FactBase com todos os fatos coletados.
     8. Instancia InferenceEngine (de backend/inference_engine/) com FactBase + RuleBase.
     9. Executa queries: apto_defesa, creditos_validos, em_risco, atividades_elegiveis,
-       pontuacoes_producoes.
-   10. Persiste snapshot em students/{id}/inferred_status/ e atualiza situacao_inferida.
+    pontuacoes_producoes.
+    10. Persiste snapshot em students/{id}/inferred_status/ e atualiza situacao_inferida.
 - É o único módulo que instancia o InferenceEngine — outros serviços não acessam o motor
   diretamente.
 
@@ -44,6 +44,8 @@ from backend.app.models.inference import (
     SituacaoInferida,
     StatusItem,
 )
+from backend.app.models.vehicle import PESO_POR_NIVEL
+from backend.app.services.qualis_weights_service import resolve_weights_at
 
 # Janela (em dias) para considerar o prazo de qualificação "próximo" (~3 meses).
 _RISK_HORIZON_DAYS = 90
@@ -68,6 +70,7 @@ class InferenceDataSource(Protocol):
     async def get_approved_activities(self, student_id: str) -> list[dict[str, Any]]: ...
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]: ...
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]: ...
+    async def get_qualis_weights_versions(self, programa_id: str) -> list[dict[str, Any]]: ...
     async def save_inferred_status(self, student_id: str, snapshot: dict[str, Any]) -> str: ...
 
 
@@ -77,6 +80,20 @@ def _parse_date(value: Any) -> date | None:
         return None
     try:
         return date.fromisoformat(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+def _to_datetime(value: Any) -> datetime | None:
+    """Converte datetime/date/string ISO em datetime, ou None se ausente/inválido."""
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
     except (ValueError, TypeError):
         return None
 
@@ -97,14 +114,7 @@ class InferenceService:
         self._data = data_source
 
     async def evaluate_student(self, student_id: str) -> InferenceResult:
-        """Executa a inferência derivando o programa do próprio aluno.
-
-        Conveniência para o endpoint GET /inference/{student_id}, que recebe apenas o id do
-        aluno.
-
-        Raises:
-            StudentNotFoundError: Se o aluno não existir na fonte de dados.
-        """
+        """Executa a inferência derivando o programa do próprio aluno."""
         student = await self._data.get_student(student_id)
         if student is None:
             raise StudentNotFoundError(student_id)
@@ -142,19 +152,7 @@ class InferenceService:
         return float(score_term.value) if isinstance(score_term, Atom) else 0.0
 
     async def run_inference(self, student_id: str, programa_id: str) -> InferenceResult:
-        """Executa todas as inferências para o aluno e persiste o snapshot.
-
-        Args:
-            student_id: ID do documento do aluno.
-            programa_id: ID do programa do aluno (fonte da configuração de créditos/pesos).
-
-        Returns:
-            InferenceResult com situação inferida, booleanos das regras, checklist resumido,
-            atividades elegíveis (RL04), pontuações de produção (RL05) e fatos usados.
-
-        Raises:
-            StudentNotFoundError: Se o aluno não existir na fonte de dados.
-        """
+        """Executa todas as inferências para o aluno e persiste o snapshot."""
         student = await self._data.get_student(student_id)
         if student is None:
             raise StudentNotFoundError(student_id)
@@ -162,6 +160,7 @@ class InferenceService:
         activities = await self._data.get_approved_activities(student_id)
         tasks = await self._data.get_plan_tasks(student_id)
         productions = await self._data.get_approved_productions(student_id)
+        weight_versions = await self._data.get_qualis_weights_versions(programa_id)
 
         facts, totals, risk_flags = self._build_facts(
             student_id, programa_id, student, program, activities, tasks, productions
@@ -172,7 +171,7 @@ class InferenceService:
         creditos_validos = bool(engine.query(Compound("creditos_validos", [Atom(student_id)])))
         em_risco = bool(engine.query(Compound("em_risco", [Atom(student_id)])))
         atividades_elegiveis = self._query_eligible_activities(engine, student_id, activities)
-        pontuacoes = self._query_production_scores(engine, productions)
+        pontuacoes = self._score_productions(productions, weight_versions)
 
         situacao = self._derive_situacao(apto, em_risco, student)
         checklist = self._build_checklist(totals, program, student, productions, tasks, risk_flags)
@@ -197,8 +196,6 @@ class InferenceService:
         result.snapshot_id = snapshot_id
         return result
 
-    # -- construção de fatos ------------------------------------------------------------
-
     def _build_facts(
         self,
         student_id: str,
@@ -209,22 +206,16 @@ class InferenceService:
         tasks: list[dict[str, Any]],
         productions: list[dict[str, Any]],
     ) -> tuple[list[Compound], dict[str, int], dict[str, bool]]:
-        """Traduz os dados de domínio em fatos lógicos (Compounds) para a FactBase.
-
-        Returns:
-            (facts, totals, risk_flags) — a lista de fatos, os totais de crédito por grupo e
-            os gatilhos de risco detectados (para montagem das mensagens).
-        """
         sid = Atom(student_id)
         prog = Atom(programa_id)
         facts: list[Compound] = []
 
-        # Créditos por grupo a partir das atividades aprovadas.
         totals = {"basico": 0, "especifico": 0, "tecnologico": 0}
         for activity in activities:
             grupo = activity.get("grupo")
             if grupo in totals:
-                totals[grupo] += int(activity.get("creditos", 0))
+                # Trata creditos de forma resiliente tanto se vier float ou int
+                totals[grupo] += int(float(activity.get("creditos", 0)))
         total = totals["basico"] + totals["especifico"] + totals["tecnologico"]
         totals["total"] = total
         facts.append(Compound("creditos_grupo_basico", [sid, Atom(totals["basico"])]))
@@ -232,17 +223,17 @@ class InferenceService:
         facts.append(Compound("creditos_grupo_tecnologico", [sid, Atom(totals["tecnologico"])]))
         facts.append(Compound("total_creditos", [sid, Atom(total)]))
 
-        # Configuração do programa.
+        # M2 Correção: Alinhamento exato de chaves com o data-model gerado pelas seeds do banco
         min_basico = int(program.get("creditos_grupo_basico_min", 12))
         min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
         max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
         min_total = int(program.get("creditos_total_min", 24))
+        
         facts.append(Compound("min_creditos_basico", [prog, Atom(min_basico)]))
         facts.append(Compound("min_creditos_especifico", [prog, Atom(min_especifico)]))
         facts.append(Compound("max_creditos_tecnologico", [prog, Atom(max_tecnologico)]))
         facts.append(Compound("min_creditos_total", [prog, Atom(min_total)]))
 
-        # Requisitos booleanos.
         if student.get("proficiencia_comprovada"):
             facts.append(Compound("proficiencia_comprovada", [sid]))
         if student.get("qualificacao_aprovada"):
@@ -254,7 +245,6 @@ class InferenceService:
         if self._is_plano_concluido(tasks):
             facts.append(Compound("plano_concluido", [sid]))
 
-        # Fatos temporais derivados (gatilhos de RL03).
         today = date.today()
         risk_flags = {
             "prazo_estourado": False,
@@ -284,7 +274,6 @@ class InferenceService:
             facts.append(Compound("plano_atrasado", [sid]))
             risk_flags["plano_atrasado"] = True
 
-        # Fatos por atividade (RL04).
         category_running = {"basico": 0, "especifico": 0, "tecnologico": 0}
         ingresso = _parse_date(student.get("data_ingresso"))
         for activity in activities:
@@ -297,7 +286,7 @@ class InferenceService:
             if activity.get("tipo_ativo"):
                 facts.append(Compound("tipo_ativo", [atv]))
             grupo = activity.get("grupo")
-            creditos = int(activity.get("creditos", 0))
+            creditos = int(float(activity.get("creditos", 0)))
             running = (category_running.get(grupo, 0) if grupo is not None else 0) + creditos
             limite = max_tecnologico if grupo == "tecnologico" else None
             if limite is None or running <= limite:
@@ -305,25 +294,12 @@ class InferenceService:
             if grupo is not None and grupo in category_running:
                 category_running[grupo] = running
 
-        # Fatos de configuração de pesos (RL05) — uma vez por nível configurado.
-        pesos: dict[str, float] = program.get("relevancia_pesos", {})
-        for nivel, peso in pesos.items():
-            facts.append(Compound("relevancia_peso", [Atom(nivel), Atom(float(peso))]))
-
-        # Fatos por produção (RL05).
-        for production in productions:
-            pid = Atom(production["id"])
-            vid = Atom(production["veiculo_id"])
-            facts.append(Compound("producao_veiculo", [pid, vid]))
-            nivel = production.get("nivel")
-            if nivel:
-                facts.append(Compound("nivel_relevancia", [vid, prog, Atom(nivel)]))
-            facts.append(Compound("pontuacao_base", [pid, Atom(float(production.get("pontuacao_base", 0)))]))
-
+        # Pontuação RL05 de produções é calculada à parte (_score_productions), pois cada
+        # produção resolve o peso vigente na sua data de publicação (ADR-0003) — um fato
+        # global relevancia_peso(Nivel, Peso) não comportaria pesos distintos por versão.
         return facts, totals, risk_flags
 
     def _build_engine(self, facts: list[Compound]) -> InferenceEngine:
-        """Instancia o motor com os fatos coletados e as regras RL01-RL05."""
         fact_base = FactBase()
         for fact in facts:
             fact_base.add_fact(fact)
@@ -346,27 +322,7 @@ class InferenceService:
         pontuacao_base: float,
         limite_categoria: float | None,
     ) -> bool:
-        """Avalia RL04 (atividade_elegivel) para uma única atividade recém-registrada.
-
-        Monta apenas os 4 fatos da RL04 para a atividade e consulta o motor — sem rodar a
-        inferência completa do aluno nem persistir snapshot. Os booleanos das condições são
-        derivados dos dados crus aqui (não nos services de negócio), mantendo a regra
-        declarativa (a conjunção) isolada em rules/activity_eligibility.py.
-
-        Args:
-            activity_id: ID da atividade recém-criada.
-            student_id: ID do aluno dono da atividade.
-            data_ingresso: Data de ingresso do aluno (ISO 'YYYY-MM-DD') — dentro_periodo_curso.
-            data_realizacao: Data de realização da atividade (ISO 'YYYY-MM-DD').
-            tem_comprovante: Se a atividade tem comprovante_url.
-            tipo_ativo: Se o tipo de atividade está ativo.
-            categoria_creditos_aprovados: Soma de créditos já aprovados da mesma categoria.
-            pontuacao_base: Crédito gerado pela atividade (base do tipo).
-            limite_categoria: Teto de créditos da categoria, ou None se ilimitado.
-
-        Returns:
-            True se a atividade satisfaz as 4 condições da RL04, False caso contrário.
-        """
+        """Avalia RL04 (atividade_elegivel) para uma única atividade recém-registrada."""
         sid = Atom(student_id)
         atv = Atom(activity_id)
         facts: list[Compound] = []
@@ -391,7 +347,6 @@ class InferenceService:
         student_id: str,
         activities: list[dict[str, Any]],
     ) -> list[str]:
-        """Retorna os IDs das atividades que satisfazem RL04 (atividade_elegivel)."""
         eligible: list[str] = []
         for activity in activities:
             goal = Compound("atividade_elegivel", [Atom(activity["id"]), Atom(student_id)])
@@ -399,35 +354,60 @@ class InferenceService:
                 eligible.append(activity["id"])
         return eligible
 
-    def _query_production_scores(
+    def _score_productions(
         self,
-        engine: InferenceEngine,
         productions: list[dict[str, Any]],
+        weight_versions: list[dict[str, Any]],
     ) -> list[PontuacaoProducao]:
-        """Retorna as pontuações ponderadas (RL05) das produções com veículo classificado."""
+        """Pontua cada produção (RL05) com o peso vigente na sua data de publicação.
+
+        Para cada produção resolve o conjunto de pesos vigente em `_publication_when`
+        (data_realizacao se publicada; agora, provisório, se submetida/aceita) e delega o
+        cálculo `base × peso` ao motor via score_production, mantendo o engine isolado.
+
+        Args:
+            productions: Produções aprovadas do aluno (com nível e dados de publicação).
+            weight_versions: Versões de pesos Qualis do programa.
+
+        Returns:
+            Lista de PontuacaoProducao para as produções com nível classificado.
+        """
         scores: list[PontuacaoProducao] = []
         for production in productions:
-            goal = Compound("pontuacao_producao", [Atom(production["id"]), Variable("Score")])
-            results = engine.query(goal)
-            if not results:
+            nivel = production.get("nivel")
+            if not nivel:
                 continue
-            score_term = results[0].get("Score")
-            score = float(score_term.value) if isinstance(score_term, Atom) else 0.0
-            base = float(production.get("pontuacao_base", 0)) or 1.0
+            when = self._publication_when(production)
+            weights = resolve_weights_at(weight_versions, when) or PESO_POR_NIVEL
+            peso = weights.get(nivel)
+            if peso is None:
+                continue
+            base = float(production.get("pontuacao_base", 0))
+            score = self.score_production(nivel, float(peso), base)
             scores.append(
                 PontuacaoProducao(
                     producao_id=production["id"],
                     score=score,
-                    nivel_veiculo=production.get("nivel", ""),
-                    peso_aplicado=round(score / base, 4),
+                    nivel_veiculo=nivel,
+                    peso_aplicado=round(float(peso), 4),
                 )
             )
         return scores
 
-    # -- derivações de apresentação -----------------------------------------------------
+    def _publication_when(self, production: dict[str, Any]) -> datetime:
+        """Resolve a data de referência para o peso de uma produção.
+
+        Produção publicada usa a data de publicação (reaproveita data_realizacao) — o peso
+        fica travado na versão vigente naquela data. Produção submetida/aceita usa o momento
+        atual (peso vigente provisório).
+        """
+        if production.get("status_publicacao") == "publicado":
+            when = _to_datetime(production.get("data_realizacao"))
+            if when is not None:
+                return when
+        return datetime.now(timezone.utc)
 
     def _derive_situacao(self, apto: bool, em_risco: bool, student: dict[str, Any]) -> SituacaoInferida:
-        """Mapeia os booleanos das regras para a situação inferida do aluno."""
         if apto:
             return "em_fase_de_defesa"
         if em_risco:
@@ -445,7 +425,7 @@ class InferenceService:
         tasks: list[dict[str, Any]],
         risk_flags: dict[str, bool],
     ) -> InferenceChecklist:
-        """Monta o checklist resumido por item (status cumprido/pendente/em_risco)."""
+        # M2 Correção: Sincronização de chaves no checklist de saída
         min_basico = int(program.get("creditos_grupo_basico_min", 12))
         min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
         max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
@@ -511,11 +491,11 @@ class InferenceService:
         totals: dict[str, int],
         program: dict[str, Any],
     ) -> list[str]:
-        """Converte os gatilhos de risco em mensagens legíveis para a UI."""
         messages: list[str] = []
         if risk_flags["prazo_estourado"]:
             messages.append(f"Prazo final expirado em {student.get('prazo_final')}")
         if risk_flags["creditos_insuficientes"]:
+            # M2 Correção: Chave de exibição da mensagem de log sincronizada
             messages.append(
                 f"Créditos insuficientes ({totals['total']}/{program.get('creditos_total_min', 24)})"
             )
@@ -525,18 +505,7 @@ class InferenceService:
             messages.append("Plano de trabalho atrasado em relação ao cronograma")
         return messages
 
-    # -- helpers de plano ---------------------------------------------------------------
-
     def _fracao_prazo_decorrida(self, student: dict[str, Any]) -> float:
-        """Fração do prazo já decorrida desde data_ingresso até prazo_final.
-
-        Args:
-            student: Documento do aluno com campos data_ingresso e prazo_final.
-
-        Returns:
-            Float em [0.0, 1.0]: 0.0 se datas ausentes/inválidas ou se o prazo não
-            começou; 1.0 se o prazo já expirou; valor proporcional caso contrário.
-        """
         ingresso = _parse_date(student.get("data_ingresso"))
         prazo = _parse_date(student.get("prazo_final"))
         if ingresso is None or prazo is None or prazo <= ingresso:
@@ -548,20 +517,6 @@ class InferenceService:
     def _derive_prazo_qualificacao(
         self, student: dict[str, Any], program: dict[str, Any]
     ) -> date | None:
-        """Deriva o prazo de qualificação de data_ingresso + meses_ate_qualificacao.
-
-        Usado quando o aluno não traz prazo_qualificacao explícito: os dados reais do
-        Firestore não armazenam esse campo — o data-model define apenas
-        programs.meses_ate_qualificacao. Sem essa derivação o risco de qualificação
-        (RL03) nunca dispararia em produção.
-
-        Args:
-            student: Documento do aluno (fonte de data_ingresso).
-            program: Configuração do programa (fonte de meses_ate_qualificacao).
-
-        Returns:
-            Data derivada, ou None se faltar data_ingresso ou meses_ate_qualificacao.
-        """
         ingresso = _parse_date(student.get("data_ingresso"))
         meses = program.get("meses_ate_qualificacao")
         if ingresso is None or meses is None:
@@ -569,12 +524,10 @@ class InferenceService:
         return _add_months(ingresso, int(meses))
 
     def _is_plano_concluido(self, tasks: list[dict[str, Any]]) -> bool:
-        """True se todas as tasks não-defesa estiverem concluídas (e houver ao menos uma)."""
         non_defesa = [t for t in tasks if not t.get("is_defesa")]
         return bool(non_defesa) and all(t.get("concluida") for t in non_defesa)
 
     def _is_plano_atrasado(self, student: dict[str, Any], tasks: list[dict[str, Any]]) -> bool:
-        """True se a fração concluída do plano está abaixo do esperado para a data atual."""
         non_defesa = [t for t in tasks if not t.get("is_defesa")]
         if not non_defesa:
             return False

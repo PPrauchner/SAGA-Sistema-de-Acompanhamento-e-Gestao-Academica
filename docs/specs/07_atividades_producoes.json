@@ -60,8 +60,8 @@
         "ActivityTypeService.update_type()          — @requires_role('coordenacao'), @audit_operation, @track_history",
         "ActivityTypeService.toggle_active()        — @requires_role('coordenacao'), @audit_operation, @track_history",
         "ActivityService.submit_activity()          — @requires_role('aluno'), @audit_operation, @check_deadlines, @trigger_alerts",
-        "ActivityService.advisor_review()           — @requires_role('orientador'), @audit_operation",
-        "ActivityService.validate_activity()        — @requires_role('coordenacao'), @audit_operation, @trigger_alerts",
+        "emitir_parecer (PATCH /parecer)            — @requires_role('orientador'), @requires_ownership, @audit_operation",
+        "validate_activity (PATCH /validate)        — @requires_role('coordenacao'), @audit_operation, @trigger_alerts",
         "ProductionService.create_production()      — @requires_role('aluno'), @audit_operation, @check_deadlines",
         "VehicleService.create_vehicle()            — @requires_role('coordenacao'), @audit_operation",
         "VehicleService.update_vehicle_level()      — @requires_role('coordenacao'), @audit_operation"
@@ -195,17 +195,32 @@
       }
     },
     {
+      "path": "/api/v1/activities/{activity_id}/parecer",
+      "method": "PATCH",
+      "descricao": "Orientador emite parecer textual sobre a atividade do próprio orientando (issue #48). O parecer é um campo (activities.parecer_orientador), não um estado: o status permanece 'enviado' até a decisão da coordenação. Endpoint separado de /validate para que a autorização por propriedade (A01) seja expressa só por aspectos, sem despacho de papel por ação no router.",
+      "papeis_autorizados": ["orientador (dono do aluno)"],
+      "aspectos_aplicados": [
+        "@requires_role('orientador')",
+        "@requires_ownership (A01 por propriedade — só o orientador do aluno; resolução activities→students.orientador_id→advisors.uid)",
+        "@audit_operation"
+      ],
+      "request_body": {
+        "parecer": "string (texto do parecer; obrigatório, não vazio)"
+      },
+      "response_200": "ActivityResponse (atividade atualizada; parecer_orientador preenchido como string, status inalterado)"
+    },
+    {
       "path": "/api/v1/activities/{activity_id}/validate",
       "method": "PATCH",
-      "descricao": "Valida ou rejeita atividade. Orientador emite parecer (sem aprovar); coordenação aprova/rejeita definitivamente.",
-      "papeis_autorizados": ["orientador (parecer)", "coordenacao (aprovação final)"],
+      "descricao": "Coordenação aprova ou rejeita definitivamente a atividade submetida (issue #49). Separado de /parecer: cada endpoint tem um único papel, então a autorização vive inteiramente nos aspectos.",
+      "papeis_autorizados": ["coordenacao"],
       "aspectos_aplicados": [
-        "@requires_role('orientador','coordenacao')",
+        "@requires_role('coordenacao')",
         "@audit_operation (operação mais crítica — auditada com detalhes)",
         "@trigger_alerts (notifica aluno após decisão da coordenação)"
       ],
       "request_body": {
-        "acao": "string ('parecer_orientador'|'aprovar'|'rejeitar')",
+        "acao": "string ('aprovar'|'rejeitar')",
         "observacao": "string | null",
         "creditos_concedidos": "float | null (coordenação pode ajustar)"
       },

@@ -23,9 +23,11 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 # Papéis reconhecidos pelo sistema (custom claim 'role').
-Role = Literal["aluno", "orientador", "coordenacao"]
+# `adm` é o superusuário global (ADR-0001): não pertence a programa algum,
+# por isso é o único papel com programa_id nulo.
+Role = Literal["aluno", "orientador", "coordenacao", "adm"]
 # Convites só podem ser emitidos para aluno ou orientador — a coordenação
-# não é criada por convite.
+# e o adm não são criados por convite (adm é criado via script/backend).
 InviteRole = Literal["aluno", "orientador"]
 
 # email-validator não faz parte das dependências do projeto; validação de
@@ -49,7 +51,9 @@ class UserBase(BaseModel):
     email: str
     nome: str
     role: Role
-    programa_id: str
+    # Nulo apenas para o papel `adm` (superusuário global, ADR-0001); para os
+    # demais papéis o service garante a invariante de programa não-nulo.
+    programa_id: str | None = None
     ativo: bool = True
 
     @field_validator("email")
@@ -112,4 +116,37 @@ class FirstAccessResponse(BaseModel):
     message: str
     uid: str
     role: Role
+    email: str
+
+
+class CreateCoordinatorRequest(BaseModel):
+    """Corpo de POST /api/v1/users/coordenadores: criação direta de coordenador pelo adm."""
+
+    email: str
+    nome: str = Field(..., min_length=1)
+    senha: str
+    programa_id: str = Field(..., min_length=1)
+
+    @field_validator("email")
+    @classmethod
+    def _validar_email(cls, value: str) -> str:
+        return _normalizar_email(value)
+
+    @field_validator("senha")
+    @classmethod
+    def _validar_senha(cls, value: str) -> str:
+        if len(value) < _PASSWORD_MIN_LEN:
+            raise ValueError("Senha deve ter no mínimo 8 caracteres")
+        if not any(c.isupper() for c in value):
+            raise ValueError("Senha deve conter ao menos 1 letra maiúscula")
+        if not any(c.isdigit() for c in value):
+            raise ValueError("Senha deve conter ao menos 1 número")
+        return value
+
+
+class CreateCoordinatorResponse(BaseModel):
+    """Resposta 201 de POST /api/v1/users/coordenadores."""
+
+    message: str
+    uid: str
     email: str

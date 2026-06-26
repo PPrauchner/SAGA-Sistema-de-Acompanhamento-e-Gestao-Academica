@@ -114,8 +114,25 @@ function FullPageLoading() {
   );
 }
 
+function PageLoadingSkeleton() {
+  return (
+    <div className="p-2 md:p-0 animate-pulse">
+      <div className="h-8 rounded w-1/4 mb-6" style={{ background: "var(--border)" }}></div>
+      <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <div className="h-6 rounded w-1/3 mb-4" style={{ background: "var(--border)" }}></div>
+        <div className="h-4 rounded w-1/2 mb-8" style={{ background: "var(--border)" }}></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl" style={{ background: "var(--border)" }}></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
-  const { currentPage, profileUnavailable } = useApp();
+  const { currentPage, profileUnavailable, profileLoading } = useApp();
 
   // Sessão válida, mas perfil indisponível (GET /auth/me falhou): estado degradado
   // com retry. Precede a checagem de página de auth para não cair no login mesmo que
@@ -136,9 +153,13 @@ function AppContent() {
 
   return (
     <AppLayout>
-      <Suspense fallback={<PageLoading />}>
-        <PageRouter />
-      </Suspense>
+      {profileLoading ? (
+        <PageLoadingSkeleton />
+      ) : (
+        <Suspense fallback={<PageLoading />}>
+          <PageRouter />
+        </Suspense>
+      )}
     </AppLayout>
   );
 }

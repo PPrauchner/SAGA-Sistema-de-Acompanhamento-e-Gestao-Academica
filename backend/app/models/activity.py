@@ -1,28 +1,30 @@
 """
 Modelos Pydantic para a entidade Activity (atividade creditável).
-
-Responsabilidades:
-- Definir ActivityCreate para POST /api/v1/activities com campos: tipo_id, descricao,
-  data_realizacao, comprovante_url, status inicial.
-- Definir ActivityResponse para leitura incluindo tipo_nome, categoria, creditos_gerados,
-  status do fluxo de validação, parecer_orientador, observacao_coordenacao e campo
-  elegivel calculado pelo motor RL04 quando status='aprovado'.
-- Definir ActivityValidateRequest para PATCH /api/v1/activities/{id}/validate com campos:
-  acao (parecer_orientador | aprovar | rejeitar), observacao e creditos_concedidos.
-- Definir ComprovanteUploadResponse para POST /api/v1/activities/{activity_id}/comprovante
-  com a URL de download tokenizada e o path no bucket do Storage.
-- Mapear a sub-coleção Firestore students/{id}/activities.
+Mapeia a sub-coleção Firestore students/{id}/activities.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from enum import Enum
+from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-ActivityStatus = Literal["rascunho", "enviado", "aprovado", "rejeitado"]
+
+class ActivityStatus(str, Enum):
+    rascunho = "rascunho"
+    enviado = "enviado"
+    aprovado = "aprovado"
+    rejeitado = "rejeitado"
+
+
 ActivityCreateStatus = Literal["rascunho", "enviado"]
+
+
+class ValidateAction(str, Enum):
+    aprovar = "aprovar"
+    rejeitar = "rejeitar"
 
 
 class ActivityCreateRequest(BaseModel):
@@ -41,26 +43,55 @@ class ActivityCreateResponse(BaseModel):
 
 class ActivityResponse(BaseModel):
     id: str
+    student_id: Optional[str] = None
 
-    tipo_id: str
-    tipo_nome: str | None = None
-    categoria: str | None = None
+    # None para atividades lastreadas em produção bibliográfica (ver producao_id);
+    # obrigatório apenas na criação de atividades regulares (ActivityCreateRequest).
+    tipo_id: str | None = None
+    tipo_nome: Optional[str] = None
+    categoria: Optional[str] = None
 
     # FK invertida para produção bibliográfica em coleção raiz (productions/{id}); None
     # para atividades regulares (não-bibliográficas).
     producao_id: str | None = None
 
-    descricao: str
+    descricao: Optional[str] = None
     data_realizacao: datetime | None = None
-    comprovante_url: str | None = None
+    comprovante_url: Optional[str] = None
 
     creditos_gerados: float = 0.0
-    status: ActivityStatus | str = "rascunho"
+    status: ActivityStatus | str = ActivityStatus.rascunho
 
-    parecer_orientador: str | None = None
-    observacao_coordenacao: str | None = None
+    parecer_orientador: Optional[str] = None
 
-    elegivel: bool | None = None
+    observacao_coordenacao: Optional[str] = None
+    aprovado_por: Optional[str] = None
+    aprovado_em: Optional[datetime] = None
+
+    criado_em: Optional[datetime] = None
+    atualizado_em: Optional[datetime] = None
+
+    elegivel: Optional[bool] = None
+
+
+class ParecerRequest(BaseModel):
+    """Corpo de PATCH /activities/{id}/parecer — parecer textual do orientador."""
+
+    parecer: str = Field(..., min_length=1, description="Texto do parecer do orientador")
+
+
+class ValidateActivityRequest(BaseModel):
+    acao: ValidateAction
+    observacao: Optional[str] = Field(default=None)
+    creditos_concedidos: Optional[float] = Field(default=None)
+
+
+class ValidateActivityResponse(BaseModel):
+    message: str
+    novo_status: ActivityStatus
+    creditos_contabilizados: Optional[float] = None
+    motor_inferencia_executado: bool = False
+    fato_gerado: Optional[str] = None
 
 
 class ComprovanteUploadResponse(BaseModel):
