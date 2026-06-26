@@ -73,4 +73,4 @@ async def get_completion_time(
 async def get_productions_report(
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionsReportResponse:
-    return await service.get_productions_report()
+    return await service.get_productions_report(user.programa_id)
