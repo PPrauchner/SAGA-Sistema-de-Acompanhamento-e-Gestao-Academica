@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from pydantic import BaseModel
 
 from backend.app.aspects import aspect_config
 from backend.app.aspects import audit as audit_module
@@ -24,6 +25,30 @@ class _AuditRepo:
         doc_id = f"log{type(self).counter}"
         self.store[doc_id] = dict(data)
         return doc_id
+
+
+def _reject_raw_models(value: Any) -> None:
+    """Recusa qualquer BaseModel aninhado, como o SDK do Firestore em runtime real.
+
+    Um objeto Pydantic cru em `valor_entrada` faz o Firestore levantar — a falha que a
+    issue #151 descreve. Datetime é aceito pelo Firestore e não é rejeitado aqui.
+    """
+    if isinstance(value, BaseModel):
+        raise TypeError("objeto Pydantic cru não é serializável no Firestore")
+    if isinstance(value, dict):
+        for item in value.values():
+            _reject_raw_models(item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _reject_raw_models(item)
+
+
+class _FirestoreLikeAuditRepo(_AuditRepo):
+    """Repo que recusa valores não-serializáveis, como o Firestore em runtime real."""
+
+    async def create(self, data: dict[str, Any]) -> str:
+        _reject_raw_models(data)
+        return await super().create(data)
 
 
 class _StudentRepo:
@@ -114,6 +139,44 @@ async def test_audit_operation_captura_modulo_recurso_e_valor_entrada(
     assert log["valor_entrada"]["student_id"] == "s1"
     assert log["valor_entrada"]["body"] == {"situacao_registrada": "concluido"}
     assert "user" not in log["valor_entrada"]
+
+
+async def test_audit_operation_serializa_payload_pydantic_e_persiste(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regressão #151: corpo Pydantic precisa virar dict antes de persistir.
+
+    Com um repo que recusa modelos crus (como o Firestore real), o log só persiste
+    se o aspecto tiver serializado o `body` via model_dump — caso contrário, a
+    exceção que em runtime é engolida aparece e o registro não é gravado.
+    """
+    _FirestoreLikeAuditRepo.store = {}
+    _FirestoreLikeAuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _FirestoreLikeAuditRepo)
+
+    class _ValidateBody(BaseModel):
+        parecer_orientador: str
+        creditos_concedidos: float
+
+    @audit_operation
+    async def validate_activity(
+        activity_id: str,
+        body: _ValidateBody,
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        return {"id": activity_id, "message": "ok"}
+
+    payload = _ValidateBody(parecer_orientador="aprovado", creditos_concedidos=4.0)
+    await validate_activity("act1", payload, _user())
+
+    assert list(_FirestoreLikeAuditRepo.store) == ["log1"]
+    log = next(iter(_FirestoreLikeAuditRepo.store.values()))
+    assert log["resultado_status"] == "sucesso"
+    assert log["valor_entrada"]["body"] == {
+        "parecer_orientador": "aprovado",
+        "creditos_concedidos": 4.0,
+    }
+    assert not isinstance(log["valor_entrada"]["body"], BaseModel)
 
 
 async def test_audit_operation_deriva_recurso_do_id_no_resultado(
