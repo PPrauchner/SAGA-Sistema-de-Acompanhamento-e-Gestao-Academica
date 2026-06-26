@@ -19,6 +19,7 @@ class ProgramConfigBase(BaseModel):
         creditos_grupo_tecnologico_max: Máximo de créditos permitidos para o grupo tecnológico.
         creditos_total_min: Mínimo total de créditos exigidos para o programa.
         max_prorrogacoes: Número máximo de prorrogações permitidas para os alunos.
+        duracao_meses: Duração regular do programa em meses.
         duracao_prorrogacao_meses: Duração de cada prorrogação em meses.
         meses_ate_qualificacao: Número padrão de meses até a qualificação.
     """
@@ -27,6 +28,7 @@ class ProgramConfigBase(BaseModel):
     creditos_grupo_tecnologico_max: int
     creditos_total_min: int
     max_prorrogacoes: int
+    duracao_meses: int = 24
     duracao_prorrogacao_meses: int
     meses_ate_qualificacao: int
 
@@ -46,6 +48,7 @@ class ProgramConfigUpdate(BaseModel):
     creditos_grupo_tecnologico_max: int | None = None
     creditos_total_min: int | None = None
     max_prorrogacoes: int | None = None
+    duracao_meses: int | None = None
     duracao_prorrogacao_meses: int | None = None
     meses_ate_qualificacao: int | None = None
 

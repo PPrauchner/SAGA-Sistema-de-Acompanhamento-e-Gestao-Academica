@@ -35,6 +35,10 @@ class ProgramService:
         """
         return await self.repository.get_config(programa_id)
 
+    async def list_programs(self) -> list[dict[str, Any]]:
+        """Lista os programas cadastrados, com id injetado pelo repositório."""
+        return await self.repository.list_all()
+
     async def update_config(self, programa_id: str, data: ProgramConfigUpdate) -> bool:
         """Atualiza a configuração de um determinado programa.
 

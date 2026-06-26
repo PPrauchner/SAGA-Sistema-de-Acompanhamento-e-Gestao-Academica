@@ -10,12 +10,14 @@ const OrientadorDashboard = lazy(() => import("./OrientadorDashboard").then((m) 
 const CoordDashboard = lazy(() => import("./CoordDashboard").then((m) => ({ default: m.CoordDashboard })));
 
 export function Dashboard() {
-  const { currentUser } = useApp();
+  const { activeView, currentUser } = useApp();
 
   return (
     <div>
-      {currentUser?.role === "coordenacao" && <CoordDashboard />}
-      {currentUser?.role === "orientador" && <OrientadorDashboard />}
+      {currentUser?.role === "coordenacao" && activeView === "coordenador" && <CoordDashboard />}
+      {((currentUser?.role === "coordenacao" && activeView === "orientador") || currentUser?.role === "orientador") && (
+        <OrientadorDashboard />
+      )}
       {currentUser?.role === "aluno" && <AlunoDashboard />}
     </div>
   );

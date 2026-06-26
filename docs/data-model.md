@@ -221,6 +221,7 @@ o mover-direto da coordenacao e a solicitacao do orientador com aprovacao da coo
 
 | Campo | Tipo | Ref | Notas |
 |-------|------|-----|-------|
+| `id` | string | | auto-id Firestore do documento em `transfer_requests/` |
 | `student_id` | string | ->`students` | aluno transferido |
 | `orientador_origem_id` | string | ->`advisors` | orientador atual no momento da solicitacao |
 | `orientador_destino_id` | string | ->`advisors` | destino imutavel da solicitacao |
@@ -235,6 +236,32 @@ o mover-direto da coordenacao e a solicitacao do orientador com aprovacao da coo
 | `cancelled_at` / `cancelled_by` | timestamp / uid | | preenchido quando cancelada |
 | `cancel_reason` | string\|null | | motivo tecnico/usuario do cancelamento |
 | `cancelled_request_id` | string\|null | ->`transfer_requests` | mover-direto pode cancelar pendente anterior |
+
+Status aceitos:
+
+| Status | Significado |
+|--------|-------------|
+| `pendente` | solicitacao criada por orientador e aguardando decisao da coordenacao |
+| `aprovada` | transferencia efetivada; tambem usado no mover-direto da coordenacao |
+| `rejeitada` | coordenacao recusou a solicitacao e registrou `motivo` |
+| `cancelada` | orientador solicitante cancelou a solicitacao, ou a coordenacao cancelou uma pendente ao mover direto |
+
+Relacionamentos:
+
+- `transfer_requests.student_id` -> `students`
+- `transfer_requests.orientador_origem_id` -> `advisors`
+- `transfer_requests.orientador_destino_id` -> `advisors`
+- `transfer_requests.programa_id` -> `programs`
+- `transfer_requests.solicitante_id`, `approved_by`, `rejected_by`, `cancelled_by` -> `users.uid`
+- `transfer_requests.cancelled_request_id` -> `transfer_requests`
+
+Ciclo de vida:
+
+- Coordenacao pode criar uma transferencia direta com `tipo="direta_coordenacao"`; o registro ja nasce `aprovada`.
+- Orientador pode criar solicitacao com `tipo="solicitada_orientador"`; o registro nasce `pendente`.
+- Coordenacao pode aprovar (`aprovada`) ou rejeitar (`rejeitada`) solicitacao pendente.
+- Orientador solicitante pode cancelar (`cancelada`) solicitacao pendente.
+- Transferencia direta pela coordenacao cancela eventual solicitacao pendente do mesmo aluno, preenchendo `cancelled_request_id` no novo registro e `cancel_reason` no registro cancelado.
 
 > Invariante: so pode existir uma solicitacao `pendente` por aluno. A efetivacao atualiza
 > `students.orientador_id`, limpa `coorientador_id` quando o destino era coorientador atual,
@@ -553,9 +580,18 @@ erDiagram
     }
     extensions {
         string id PK
+        string tipo
+        string student_id
+        string aluno_id
+        string requester_id
+        string programa_id
         string status
-        int semestres_solicitados
+        timestamp nova_data
         timestamp prazo_novo
+        timestamp data_atual
+        timestamp prazo_atual
+        timestamp created_at
+        timestamp solicitacao
     }
     history {
         string id PK
@@ -596,20 +632,32 @@ erDiagram
 
 > Fonte **historizada canônica** da inferência. `students.situacao_inferida` é só o cache do último.
 
-### `extensions` 🔲 — sub-coleção de `students` — prorrogações
+### `extensions` 🔲 — coleção raiz — prorrogações
 
 | Campo | Tipo | Ref | Notas |
 |-------|------|-----|-------|
-| `aluno_id` | string | →`students` | |
+| `id` | string | | auto-id Firestore do documento em `extensions/` |
+| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`, `mudanca_nivel` |
+| `student_id` | string | →`students` | aluno da solicitação |
+| `aluno_id` | string | →`students` | alias de compatibilidade para `student_id` |
+| `requester_id` | string | →`users.uid` | uid de quem abriu a solicitação |
+| `programa_id` | string\|null | →`programs` | derivado do aluno |
 | `motivo` | string | | |
-| `plano_atualizado` | string | | descrição ou link |
+| `justificativa` | string | | alias de compatibilidade para `motivo` |
+| `plano_atualizado` | string\|null | | descrição ou link, quando aplicável |
 | `parecer_orientador` | string\|null | | |
-| `semestres_solicitados` | int | | default 1 |
-| `status` | string | | `pendente`\|`aprovada`\|`rejeitada` |
-| `prazo_novo` | timestamp\|null | | snapshot do novo prazo (se aprovada) — distinto de `students.prazo_final` vigente |
+| `parecer` | string\|null | | alias de compatibilidade para `parecer_orientador` |
+| `semestres_solicitados` | int\|null | | campo legado; o fluxo atual usa `nova_data` |
+| `status` | string | | `pendente`\|`em_analise`\|`aprovada`\|`rejeitada` |
+| `nova_data` | timestamp | | data solicitada pelo aluno/orientador |
+| `prazo_novo` | timestamp | | alias de compatibilidade para `nova_data`; snapshot do novo prazo pretendido |
+| `data_atual` | timestamp\|null | | prazo atual do aluno no momento da solicitação |
+| `prazo_atual` | timestamp\|null | | alias de compatibilidade para `data_atual` |
 | `aprovado_por` | string\|null | →`users.uid` | |
 | `aprovado_em` | timestamp\|null | | |
-| `criado_em` | timestamp | | |
+| `created_at` | timestamp | | data de criação |
+| `solicitacao` | timestamp | | alias de compatibilidade para `created_at` |
+| `criado_em` | timestamp\|null | | campo legado |
 
 > "Prorrogações usadas" = `calc` (contagem de `status="aprovada"`), comparado a
 > `programs.max_prorrogacoes` pelo motor. Sem contador persistido.
@@ -653,6 +701,7 @@ Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genéri
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador`\|`transferencia_coordenacao` |
+| `tipo="transferencia_orientador"` | uso | fluxo `transfer_requests`: criacao de solicitacao, aprovacao, rejeicao, cancelamento e transferencia direta pela coordenacao |
 | `titulo` / `mensagem` | string | |
 | `destinatario_id` | string | →`users.uid` (soft) |
 | `entidade_tipo` / `entidade_id` | string | ref soft polimórfica — **sem aresta** |
@@ -661,6 +710,9 @@ Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genéri
 | `programa_id` | string | →`programs` (soft) |
 
 > Índice composto: `(destinatario_id ASC, lida ASC, timestamp DESC)`.
+> Revisões de `registration_requests` não geram notificação in-app para o solicitante
+> público, pois antes da aprovação/rejeição ele ainda não possui `users.uid`; comunicação
+> ao e-mail informado deve ocorrer por mecanismo externo ao `notifications/`.
 
 ---
 

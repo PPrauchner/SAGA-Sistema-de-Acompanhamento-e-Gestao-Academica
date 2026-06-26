@@ -1,4 +1,5 @@
 """
+<<<<<<< HEAD
 Aspecto A01 — Autorização por Papel (Before advice).
 
 Responsabilidades:
@@ -17,6 +18,21 @@ Responsabilidades:
 
 from __future__ import annotations
 
+=======
+Aspecto A01 - Autorizacao e propriedade.
+
+Responsabilidades:
+- Centralizar a verificacao de papeis permitidos nos endpoints e operacoes sensiveis.
+- Validar propriedade de recursos quando o acesso depende do usuario autenticado
+  ser dono/responsavel pelo objeto solicitado.
+- Permitir desativacao via aspect_config.AUTHORIZATION_ENABLED sem alterar os endpoints.
+
+Join Point : endpoints FastAPI decorados com @requires_role ou @requires_ownership.
+Advice     : Before - valida autenticacao, papel e propriedade antes da funcao original.
+Weaving    : decoradores Python aplicados manualmente nos routers e funcoes de negocio.
+"""
+
+>>>>>>> 0161ba8854c4238232217a8a4715b9d5484d34b9
 import functools
 import inspect
 from collections.abc import Awaitable, Callable
@@ -30,11 +46,35 @@ from backend.app.core.auth import CurrentUser
 _F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
 
 
+<<<<<<< HEAD
 def _encontrar_current_user(args: tuple[Any, ...], kwargs: dict[str, Any]) -> CurrentUser | None:
     """Localiza o CurrentUser injetado pelo FastAPI entre os argumentos do endpoint."""
     for value in (*kwargs.values(), *args):
         if isinstance(value, CurrentUser):
             return value
+=======
+def _extract_current_user(args, kwargs) -> dict | None:
+    """Localiza o principal autenticado entre os argumentos do endpoint.
+
+    Dá precedência a uma instância de `CurrentUser` (a identidade verificada via
+    JWT). Sem isso, qualquer objeto auxiliar que também exponha `role`/`uid` —
+    como o `ActorContext` derivado de headers no router de plano de trabalho —
+    poderia ser confundido com o usuário autenticado, dependendo da ordem dos
+    parâmetros, e a verificação de papel passaria a ler um valor controlado pelo
+    cliente em vez do token.
+    """
+    values = list(kwargs.values()) + list(args)
+
+    for v in values:
+        if isinstance(v, CurrentUser):
+            return {"uid": v.uid, "email": v.email, "role": v.role}
+
+    for v in values:
+        if isinstance(v, dict) and "role" in v:
+            return v
+        if hasattr(v, "role") and hasattr(v, "uid"):
+            return {"uid": v.uid, "email": getattr(v, "email", None), "role": v.role}
+>>>>>>> 0161ba8854c4238232217a8a4715b9d5484d34b9
     return None
 
 
@@ -123,7 +163,12 @@ def requires_ownership(uid_resolver: Callable[[dict[str, Any]], Any]) -> Callabl
                 )
 
             return await func(*args, **kwargs)
+<<<<<<< HEAD
 
         return wrapper  # type: ignore[return-value]
 
     return decorator
+=======
+        return wrapper
+    return decorator
+>>>>>>> 0161ba8854c4238232217a8a4715b9d5484d34b9

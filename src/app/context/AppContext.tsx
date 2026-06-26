@@ -1,8 +1,10 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
 
 export type UserRole = "aluno" | "orientador" | "coordenacao";
+export type ActiveView = "aluno" | "orientador" | "coordenador";
 
 export type PageId =
   | "login" | "register" | "password-recovery" | "first-access"
@@ -13,8 +15,10 @@ export type PageId =
   | "atividades"
   | "producoes"
   | "checklist"
+  | "solicitacoes"
   | "prorrogacoes"
   | "transferencias"
+  | "registration-requests"
   | "relatorios"
   | "inferencia"
   | "auditoria"
@@ -47,8 +51,11 @@ interface AppContextType {
   loading: boolean;
   token: string | null;
   profileUnavailable: boolean;
+  activeView: ActiveView;
+  isMultiRoleAdvisor: boolean;
   retryProfile: () => Promise<void>;
   login: (email: string, senha: string) => Promise<void>;
+  setActiveView: (view: ActiveView) => void;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -60,16 +67,28 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const { currentUser: firebaseUser, profile, profileError, token, login, logout: signOut, loading, retryProfile } = useAuth();
+  const {
+    currentUser: firebaseUser,
+    profile,
+    profileError,
+    token,
+    login,
+    logout: signOut,
+    loading,
+    retryProfile,
+  } = useAuth();
+
+  const { unreadCount } = useNotifications();
+
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
-  const [notificationCount] = useState(5);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeView, setActiveViewState] = useState<ActiveView>("aluno");
 
   // O perfil vem do backend (GET /auth/me) via useAuth; mapeamos para o formato
-  // de exibição consumido pelo layout. Campos sem origem no backend ficam vazios.
+  // de exibicao consumido pelo layout. Campos sem origem no backend ficam vazios.
   const currentUser: User | null = profile
     ? {
         id: profile.uid,
@@ -78,14 +97,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
         role: profile.role,
         programa: profile.programaId,
         programa_id: profile.programaId,
+        departamento: profile.departamento ?? undefined,
+        matricula: profile.matricula ?? undefined,
         student_id: profile.studentId ?? undefined,
         advisor_id: profile.advisorId ?? undefined,
       }
     : null;
 
-  // Sessão Firebase válida, mas perfil indisponível (GET /auth/me falhou). Distinto
-  // de "deslogado": o usuário permanece na app em estado degradado, com retry. A guarda
-  // de rota vive no PrivateRoute, que suprime o redirect quando profileUnavailable é true.
+  const defaultView: ActiveView =
+    profile?.role === "coordenacao"
+      ? "coordenador"
+      : profile?.role === "orientador"
+        ? "orientador"
+        : "aluno";
+
+  const isMultiRoleAdvisor = currentUser?.role === "coordenacao" && Boolean(currentUser.advisor_id);
+
+  useEffect(() => {
+    setActiveViewState(defaultView);
+  }, [defaultView, profile?.uid]);
+
+  const setActiveView = (view: ActiveView) => {
+    if (!currentUser) return;
+
+    if (currentUser.role === "coordenacao") {
+      const canUseAdvisorView = view === "orientador" && isMultiRoleAdvisor;
+      const canUseCoordinatorView = view === "coordenador";
+
+      setActiveViewState(canUseAdvisorView || canUseCoordinatorView ? view : "coordenador");
+      return;
+    }
+
+    if (currentUser.role === "orientador") {
+      setActiveViewState("orientador");
+      return;
+    }
+
+    setActiveViewState("aluno");
+  };
+
+  // Sessao Firebase valida, mas perfil indisponivel (GET /auth/me falhou). Distinto
+  // de "deslogado": o usuario permanece na app em estado degradado, com retry. A guarda
+  // de rota vive no PrivateRoute, que suprime o redirect quando profileUnavailable e true.
   const profileUnavailable = !!firebaseUser && profileError && !profile;
 
   const toggleDarkMode = () => {
@@ -99,7 +152,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     void signOut();
     setMobileMenuOpen(false);
-    // PrivateRoute redireciona para "login" quando o perfil é limpo.
+    // PrivateRoute redireciona para "login" quando o perfil e limpo.
   };
 
   return (
@@ -110,13 +163,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         selectedStudentId,
         sidebarCollapsed,
         darkMode,
-        notificationCount,
+        notificationCount: unreadCount,
         mobileMenuOpen,
         loading,
         token,
         profileUnavailable,
+        activeView,
+        isMultiRoleAdvisor,
         retryProfile,
         login,
+        setActiveView,
         setCurrentPage,
         setSelectedStudentId,
         setSidebarCollapsed,

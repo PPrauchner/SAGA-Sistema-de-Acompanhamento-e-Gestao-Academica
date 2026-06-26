@@ -2,7 +2,7 @@
  * Hooks React para consumir a API de dashboards.
  *
  * Responsabilidades:
- * - useAlunoDashboard(studentId): carrega dados do dashboard do aluno.
+ * - useAlunoDashboard(): carrega dados do dashboard do aluno autenticado.
  * - useOrientadorDashboard(advisorId): carrega dados do dashboard do orientador.
  * - useCoordDashboard(): carrega dados do dashboard da coordenação.
  * - Cada hook gerencia estado de loading, error e data.
@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useAuth } from "./useAuth";
 import {
-  getAlunoDashboard,
+  getMeuAlunoDashboard,
   getOrientadorDashboard,
   getCoordDashboard,
   type AlunoDashboardData,
@@ -27,9 +27,7 @@ interface UseDashboardResult<T> {
   refetch: () => void;
 }
 
-export function useAlunoDashboard(
-  studentId: string | undefined,
-): UseDashboardResult<AlunoDashboardData> {
+export function useAlunoDashboard(): UseDashboardResult<AlunoDashboardData> {
   const { token } = useAuth();
   const [data, setData] = useState<AlunoDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,14 +37,14 @@ export function useAlunoDashboard(
   const refetch = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
-    if (!studentId || !token) {
+    if (!token) {
       setLoading(false);
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    getAlunoDashboard(studentId, token)
+    getMeuAlunoDashboard(token)
       .then((result) => {
         if (!cancelled) setData(result);
       })
@@ -59,7 +57,7 @@ export function useAlunoDashboard(
     return () => {
       cancelled = true;
     };
-  }, [studentId, token, refreshKey]);
+  }, [token, refreshKey]);
 
   return { data, loading, error, refetch };
 }

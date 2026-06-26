@@ -18,14 +18,12 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
-from backend.app.models.vehicle import PESO_POR_NIVEL
 from backend.app.repositories.activity_repository import ActivityRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.production_repository import ProductionRepository
+from backend.app.repositories.qualis_weights_repository import QualisWeightsRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.vehicle_repository import VehicleRepository
-
-_DEFAULT_RELEVANCIA_PESOS: dict[str, float] = dict(PESO_POR_NIVEL)
 
 
 def _to_date_str(value: Any) -> str | None:
@@ -56,6 +54,7 @@ class InferenceRepository:
         self._productions = ProductionRepository()
         self._activities = ActivityRepository()
         self._vehicles = VehicleRepository()
+        self._qualis_weights = QualisWeightsRepository()
 
     async def get_student(self, student_id: str) -> dict[str, Any] | None:
         """Lê o aluno do Firestore e normaliza campos para o contrato InferenceDataSource.
@@ -85,9 +84,9 @@ class InferenceRepository:
     async def get_program(self, programa_id: str) -> dict[str, Any] | None:
         """Lê configuração do programa e normaliza nomes de campos.
 
-        Retorna configuração com defaults se o documento não existir no Firestore.
-        relevancia_pesos usa valores fixos padrão até vehicle_levels ser carregado
-        como subcoleção (depende de VehicleRepository).
+        Retorna configuração com defaults se o documento não existir no Firestore. Os pesos
+        Qualis não vêm daqui — são versionados e resolvidos por data via
+        get_qualis_weights_versions (ADR-0003).
 
         Args:
             programa_id: ID do documento em programs/ (ex: 'prog_default').
@@ -105,7 +104,6 @@ class InferenceRepository:
                 "min_creditos_total": 24,
                 "max_prorrogacoes": 1,
                 "meses_ate_qualificacao": 12,
-                "relevancia_pesos": dict(_DEFAULT_RELEVANCIA_PESOS),
             }
         return {
             "id": programa_id,
@@ -115,9 +113,19 @@ class InferenceRepository:
             "min_creditos_total": int(data.get("creditos_total_min", 24)),
             "max_prorrogacoes": int(data.get("max_prorrogacoes", 1)),
             "meses_ate_qualificacao": int(data.get("meses_ate_qualificacao", 12)),
-            # TODO: carregar de programs/{id}/vehicle_levels/ quando VehicleRepository estiver pronto
-            "relevancia_pesos": dict(_DEFAULT_RELEVANCIA_PESOS),
         }
+
+    async def get_qualis_weights_versions(self, programa_id: str) -> list[dict[str, Any]]:
+        """Lê as versões de pesos Qualis de programs/{id}/qualis_weights/ (resolução RL05).
+
+        Args:
+            programa_id: ID do documento em programs/.
+
+        Returns:
+            Lista de versões (pesos + vigente_desde), usada pelo InferenceService para
+            resolver o peso vigente na data de publicação de cada produção.
+        """
+        return await self._qualis_weights.list_versions(programa_id)
 
     async def get_approved_activities(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna [] até ActivityRepository.list_activities estar implementado."""
@@ -165,6 +173,11 @@ class InferenceRepository:
                     "veiculo_id": veiculo_id,
                     "nivel": nivel_by_vehicle.get(veiculo_id),
                     "pontuacao_base": production.get("pontuacao_base", 0),
+                    # Resolução de peso por data (ADR-0003): a data de publicação é a
+                    # data_realizacao da atividade; status_publicacao distingue publicado
+                    # (peso travado na data) de submetido/aceito (peso vigente atual).
+                    "status_publicacao": production.get("status_publicacao"),
+                    "data_realizacao": activity.get("data_realizacao"),
                 }
             )
         return result

@@ -86,6 +86,7 @@ export function ProductionsPage() {
 
   // Na visão da coordenação cada produção pode ser de um aluno diferente; oferecer filtro.
   const isCoordenacao = role === "coordenacao";
+  const canRegisterProduction = role === "aluno";
 
   const alunos = useMemo(() => {
     const byId = new Map<string, string>();
@@ -111,7 +112,7 @@ export function ProductionsPage() {
   const pontuacaoTotal = productions.reduce((sum, p) => sum + (p.pontuacao_calculada ?? 0), 0);
 
   async function handleSubmit() {
-    if (!token || !form.veiculo_id || !form.titulo || !form.data_realizacao) return;
+    if (!canRegisterProduction || !token || !form.veiculo_id || !form.titulo || !form.data_realizacao) return;
     setSubmitting(true);
     try {
       await createProduction(token, {
@@ -139,9 +140,11 @@ export function ProductionsPage() {
           <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Produções Científicas</h1>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>{productions.length} produções registradas</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
-          <Plus size={16} /> Registrar Produção
-        </button>
+        {canRegisterProduction && (
+          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
+            <Plus size={16} /> Registrar Produção
+          </button>
+        )}
       </div>
 
       {error && (
@@ -262,7 +265,7 @@ export function ProductionsPage() {
         </div>
       )}
 
-      {showForm && (
+      {canRegisterProduction && showForm && (
         <div
           className="fixed inset-0 z-50 flex items-end md:items-center justify-center md:p-4"
           style={{ background: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)" }}

@@ -20,6 +20,7 @@ export const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
   inferencia: ["orientador", "coordenacao"],
   auditoria: ["coordenacao"],
   transferencias: ["orientador", "coordenacao"],
+  "registration-requests": ["coordenacao"],
 };
 
 export function isAuthPage(page: PageId): boolean {
@@ -35,6 +36,8 @@ interface RouteGuardState {
   loading: boolean;
   role: UserRole | null;
   profileUnavailable?: boolean;
+  profileLoading?: boolean;
+  isAuthenticated?: boolean;
 }
 
 export function getPrivateRouteRedirect({
@@ -42,6 +45,8 @@ export function getPrivateRouteRedirect({
   loading,
   role,
   profileUnavailable = false,
+  profileLoading = false,
+  isAuthenticated = false,
 }: RouteGuardState): PageId | null {
   if (loading) return null;
 
@@ -51,15 +56,19 @@ export function getPrivateRouteRedirect({
 
   const onAuthPage = isAuthPage(currentPage);
 
-  if (!role) {
+  if (!isAuthenticated) {
     return onAuthPage ? null : "login";
+  }
+
+  if (profileLoading) {
+    return onAuthPage ? "dashboard" : null;
   }
 
   if (onAuthPage) {
     return "dashboard";
   }
 
-  return getAllowedRoles(currentPage).includes(role) ? null : "dashboard";
+  return role && getAllowedRoles(currentPage).includes(role) ? null : "dashboard";
 }
 
 interface PrivateRouteProps {
@@ -68,12 +77,14 @@ interface PrivateRouteProps {
 }
 
 export function PrivateRoute({ children, loadingFallback = null }: PrivateRouteProps) {
-  const { currentPage, currentUser, loading, profileUnavailable, setCurrentPage } = useApp();
+  const { currentPage, currentUser, loading, profileUnavailable, profileLoading, isAuthenticated, setCurrentPage } = useApp();
   const redirectPage = getPrivateRouteRedirect({
     currentPage,
     loading,
     role: currentUser?.role ?? null,
     profileUnavailable,
+    profileLoading,
+    isAuthenticated,
   });
 
   useEffect(() => {

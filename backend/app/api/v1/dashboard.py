@@ -36,6 +36,21 @@ def get_dashboard_service() -> DashboardService:
     return DashboardService()
 
 
+@router.get("/dashboard/aluno/me", response_model=AlunoDashboardResponse)
+@requires_role("aluno")
+async def get_meu_aluno_dashboard(
+    user: CurrentUser = Depends(get_current_user),
+    service: DashboardService = Depends(get_dashboard_service),
+) -> AlunoDashboardResponse:
+    """Dashboard do discente autenticado.
+
+    O student_id e derivado do CurrentUser.uid no backend; o frontend nao informa
+    id de aluno e, portanto, nao consegue consultar dados de outro discente por
+    este endpoint.
+    """
+    return await service.get_meu_aluno_dashboard(user)
+
+
 @router.get("/dashboard/aluno/{student_id}", response_model=AlunoDashboardResponse)
 @requires_role("aluno", "orientador", "coordenacao")
 @check_dashboard_ownership()

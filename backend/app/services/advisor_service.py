@@ -14,6 +14,8 @@ Responsabilidades:
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import HTTPException, status
 
 from backend.app.core.auth import CurrentUser
@@ -28,23 +30,53 @@ from backend.app.repositories.advisor_repository import (
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.services.auth_service import AuthService
 
+DEFAULT_ADVISOR_LIMIT = 5
+DEFAULT_ORIENTANDOS_ATIVOS = 0
+DEFAULT_LEGACY_ADVISOR_UID = ""
+
 
 class AdvisorService:
     def __init__(self, auth_service: AuthService | None = None) -> None:
         self._advisors = AdvisorRepository()
         self._auth = auth_service
 
+    @staticmethod
+    def _normalize_advisor_response(advisor: dict[str, Any]) -> dict[str, Any]:
+        normalized = dict(advisor)
+        if normalized.get("uid") is None:
+            normalized["uid"] = DEFAULT_LEGACY_ADVISOR_UID
+        if normalized.get("lattes") is None:
+            normalized["lattes"] = None
+        if normalized.get("limite_orientandos") is None:
+            normalized["limite_orientandos"] = DEFAULT_ADVISOR_LIMIT
+        if normalized.get("orientandos_ativos") is None:
+            normalized["orientandos_ativos"] = DEFAULT_ORIENTANDOS_ATIVOS
+        return normalized
+
     async def list_advisors(self, user: CurrentUser | None = None) -> list[dict]:
         advisors = await self._advisors.get_advisors_with_student_count()
+        normalized_advisors = [
+            self._normalize_advisor_response(advisor)
+            for advisor in advisors
+        ]
+
+        if user and user.role == "coordenacao":
+            return normalized_advisors
+
+        active_advisors = [
+            advisor
+            for advisor in normalized_advisors
+            if advisor.get("uid")
+        ]
 
         if user and user.role == "orientador" and user.programa_id:
             return [
                 advisor
-                for advisor in advisors
+                for advisor in active_advisors
                 if advisor.get("programa_id") == user.programa_id
             ]
 
-        return advisors
+        return active_advisors
 
     async def get_advisor(
         self,
@@ -65,7 +97,7 @@ class AdvisorService:
             advisor_id,
         )
 
-        return advisor
+        return self._normalize_advisor_response(advisor)
 
     async def create_advisor(
         self,

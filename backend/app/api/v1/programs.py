@@ -20,6 +20,16 @@ from backend.app.aspects.history import track_history
 router = APIRouter(prefix="/programs", tags=["programs"])
 
 
+@router.get("")
+@requires_role("coordenacao", "orientador", "aluno")
+async def list_programs(
+    user: CurrentUser = Depends(get_current_user),
+    service: ProgramService = Depends(ProgramService),
+):
+    """Lista os programas cadastrados para seleção nos formulários."""
+    return await service.list_programs()
+
+
 @router.get("/config")
 @requires_role("coordenacao", "orientador", "aluno")
 async def get_config(

@@ -58,11 +58,19 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
 async def test_seed_cria_todos_os_documentos() -> None:
     created = await seed_module.seed_firestore()
 
-    assert created == {"programs": 1, "vehicle_levels": 7, "activity_types": 6, "work_plans": 1}
+    assert created == {
+        "programs": 1,
+        "vehicle_levels": 9,
+        "qualis_weights": 1,
+        "activity_types": 6,
+        "work_plans": 1,
+    }
     # programs com id explícito (não auto-id)
     assert ("programs", "prog_default") in _FakeRepository.store
     # vehicle_levels gravados como subcoleção via path
     assert ("programs/prog_default/vehicle_levels", "v_placeholder_a1") in _FakeRepository.store
+    # versão inicial (bootstrap) de pesos Qualis na subcoleção versionada
+    assert ("programs/prog_default/qualis_weights", "bootstrap") in _FakeRepository.store
     # aluno real de exemplo criado para acompanhar o plano
     assert ("students", seed_module.SEED_STUDENT_ID) in _FakeRepository.store
 
@@ -71,7 +79,13 @@ async def test_seed_e_idempotente() -> None:
     await seed_module.seed_firestore()
     again = await seed_module.seed_firestore()
 
-    assert again == {"programs": 0, "vehicle_levels": 0, "activity_types": 0, "work_plans": 0}
+    assert again == {
+        "programs": 0,
+        "vehicle_levels": 0,
+        "qualis_weights": 0,
+        "activity_types": 0,
+        "work_plans": 0,
+    }
 
 
 async def test_seed_activity_types_gravam_metadados() -> None:

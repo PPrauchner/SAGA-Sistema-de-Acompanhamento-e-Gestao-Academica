@@ -9,8 +9,8 @@ Responsabilidades:
   programs/prog_default/vehicle_levels/.
 - Mapear o documento Firestore da coleção vehicles/; o nível fica em
   programs/{id}/vehicle_levels/{veiculo_id}.
-- Declarar RelevanceLevel: os 7 níveis canônicos do Qualis Único da CAPES.
-- Declarar PESO_POR_NIVEL: a escala de pesos monotônica única consumida pela RL05,
+- Declarar RelevanceLevel: os 8 níveis A1–A8 do Qualis Único da CAPES + fallback 'SC'.
+- Declarar PESO_POR_NIVEL: a escala de pesos monotônica default consumida pela RL05,
   fonte de verdade para inference_repository, fixtures e seed_firestore.
 """
 
@@ -22,19 +22,23 @@ from pydantic import BaseModel
 
 VehicleType = Literal["evento", "revista"]
 
-RelevanceLevel = Literal["A1", "A2", "A3", "A4", "B1", "B2", "SC"]
+RelevanceLevel = Literal["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "SC"]
 
-# Escala monotônica canônica da RL05 (decisão R1/R4, issue #133): estritamente
+# Escala monotônica default da RL05 (ADR-0003, supera R1/R4): estritamente
 # decrescente — um nível superior sempre pondera mais que um inferior. 'SC'
 # (Sem Classificação) é o peso de fallback para veículo sem nível configurado.
+# Default de bootstrap: a issue #160 torna estes pesos editáveis e versionados
+# por programa (vigente_desde/alterado_por/alterado_em).
 PESO_POR_NIVEL: dict[RelevanceLevel, float] = {
     "A1": 1.0,
     "A2": 0.85,
     "A3": 0.7,
     "A4": 0.55,
-    "B1": 0.4,
-    "B2": 0.3,
-    "SC": 0.2,
+    "A5": 0.45,
+    "A6": 0.35,
+    "A7": 0.25,
+    "A8": 0.15,
+    "SC": 0.1,
 }
 
 

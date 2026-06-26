@@ -1014,7 +1014,9 @@ function AttentionStudents({
 export function OrientadorDashboard() {
   const { currentUser } = useApp();
   const { advisorId } = useAuth();
-  const { data: dashData, loading, error } = useOrientadorDashboard(advisorId ?? currentUser?.id);
+  const { data: dashData, loading, error } = useOrientadorDashboard(
+    currentUser?.advisor_id ?? advisorId ?? currentUser?.id,
+  );
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [quickAction, setQuickAction] = useState<QA>(null);
 

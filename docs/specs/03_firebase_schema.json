@@ -177,19 +177,26 @@
           "usado_pelo_motor": "Fatos: dentro_periodo_curso, tem_comprovante, tipo_ativo, nao_excede_limite_categoria, producao_bibliografica_validada"
         },
         "extensions": {
-          "descricao": "Solicitações de prorrogação de prazo",
+          "descricao": "Contrato atual usado por GET/POST /api/v1/extensions na colecao raiz extensions/.",
           "documento_id": "auto-id",
           "campos": {
-            "aluno_id": "string",
+            "id": "string (auto-id Firestore)",
+            "tipo": "string ('prazo_defesa'|'prazo_qualificacao'|'trancamento'|'mudanca_nivel')",
+            "student_id": "string (referencia a students/)",
+            "aluno_id": "string (alias de compatibilidade para student_id)",
+            "requester_id": "string (uid de quem abriu a solicitacao)",
+            "programa_id": "string | null",
             "motivo": "string",
-            "plano_atualizado": "string (descrição ou link)",
+            "justificativa": "string (alias de compatibilidade para motivo)",
             "parecer_orientador": "string | null",
-            "semestres_solicitados": "int (default: 1)",
-            "status": "string ('pendente'|'aprovada'|'rejeitada')",
-            "prazo_novo": "Timestamp | null (calculado se aprovada)",
-            "aprovado_por": "string (uid) | null",
-            "aprovado_em": "Timestamp | null",
-            "criado_em": "Timestamp"
+            "parecer": "string | null (alias de compatibilidade para parecer_orientador)",
+            "status": "string ('pendente'|'em_analise'|'aprovada'|'rejeitada')",
+            "nova_data": "Timestamp (data solicitada)",
+            "prazo_novo": "Timestamp (alias de compatibilidade para nova_data)",
+            "data_atual": "Timestamp | null",
+            "prazo_atual": "Timestamp | null (alias de compatibilidade para data_atual)",
+            "created_at": "Timestamp",
+            "solicitacao": "Timestamp (alias de compatibilidade para created_at)"
           }
         },
         "inferred_status": {
@@ -240,6 +247,7 @@
       "descricao": "Solicitacoes e efetivacoes de transferencia same-program de orientando entre orientadores.",
       "documento_id": "auto-id Firestore",
       "campos": {
+        "id": "string (auto-id Firestore do documento)",
         "student_id": "string (referencia a students/)",
         "orientador_origem_id": "string (referencia a advisors/)",
         "orientador_destino_id": "string (referencia a advisors/)",
@@ -260,6 +268,30 @@
         "cancel_reason": "string | null",
         "cancelled_request_id": "string | null (referencia a transfer_requests/)"
       },
+      "status_enum": {
+        "pendente": "Solicitacao criada por orientador e aguardando decisao da coordenacao.",
+        "aprovada": "Transferencia efetivada; tambem usada no mover-direto da coordenacao.",
+        "rejeitada": "Coordenacao recusou a solicitacao e registrou motivo.",
+        "cancelada": "Solicitacao cancelada pelo orientador solicitante ou por transferencia direta da coordenacao."
+      },
+      "relacionamentos": {
+        "student_id": "students/{id}",
+        "orientador_origem_id": "advisors/{id}",
+        "orientador_destino_id": "advisors/{id}",
+        "programa_id": "programs/{id}",
+        "solicitante_id": "users/{uid}",
+        "approved_by": "users/{uid} | null",
+        "rejected_by": "users/{uid} | null",
+        "cancelled_by": "users/{uid} | null",
+        "cancelled_request_id": "transfer_requests/{id} | null"
+      },
+      "ciclo_vida": [
+        "POST /api/v1/transfers cria solicitacao solicitada_orientador em status pendente",
+        "POST /api/v1/transfers/{id}/approve efetiva transferencia e marca status aprovada",
+        "POST /api/v1/transfers/{id}/reject marca status rejeitada e persiste motivo, rejected_at e rejected_by",
+        "POST /api/v1/transfers/{id}/cancel marca status cancelada e persiste cancelled_at e cancelled_by",
+        "POST /api/v1/transfers/direct cria registro direta_coordenacao em status aprovada e pode cancelar pendente anterior do aluno"
+      ],
       "invariantes_service": [
         "Uma unica solicitacao pendente por aluno",
         "Origem, destino e aluno pertencem ao mesmo programa",
@@ -390,6 +422,7 @@
         "timestamp": "Timestamp",
         "programa_id": "string"
       },
+      "tipo_transferencia_orientador": "Usado no fluxo transfer_requests: criacao de solicitacao, aprovacao, rejeicao, cancelamento e transferencia direta pela coordenacao.",
       "indice_firestore": "compound index: (destinatario_id ASC, lida ASC, timestamp DESC)"
     },
 

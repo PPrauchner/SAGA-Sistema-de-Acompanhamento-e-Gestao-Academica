@@ -18,6 +18,69 @@
     "backend/app/repositories/transfer_repository.py"
   ],
 
+  "entidades_persistidas": {
+    "transfer_requests": {
+      "descricao": "Solicitacoes e efetivacoes de transferencia same-program de orientando entre orientadores.",
+      "documento_id": "auto-id Firestore",
+      "campos": {
+        "id": "string (auto-id Firestore do documento)",
+        "student_id": "string (referencia a students/)",
+        "orientador_origem_id": "string (referencia a advisors/)",
+        "orientador_destino_id": "string (referencia a advisors/)",
+        "solicitante_id": "string (uid Firebase Auth)",
+        "programa_id": "string (referencia a programs/)",
+        "status": "string ('pendente'|'aprovada'|'rejeitada'|'cancelada')",
+        "tipo": "string ('direta_coordenacao'|'solicitada_orientador')",
+        "motivo": "string | null",
+        "observacao": "string | null",
+        "created_at": "Timestamp",
+        "updated_at": "Timestamp",
+        "approved_at": "Timestamp | null",
+        "approved_by": "string (uid) | null",
+        "rejected_at": "Timestamp | null",
+        "rejected_by": "string (uid) | null",
+        "cancelled_at": "Timestamp | null",
+        "cancelled_by": "string (uid) | null",
+        "cancel_reason": "string | null",
+        "cancelled_request_id": "string | null (referencia a transfer_requests/)"
+      },
+      "status_enum": {
+        "pendente": "Solicitacao criada por orientador e aguardando decisao da coordenacao.",
+        "aprovada": "Transferencia efetivada; tambem usada no mover-direto da coordenacao.",
+        "rejeitada": "Coordenacao recusou a solicitacao com motivo.",
+        "cancelada": "Solicitacao cancelada pelo orientador solicitante ou por transferencia direta da coordenacao."
+      },
+      "relacionamentos": {
+        "student_id": "students/{id}",
+        "orientador_origem_id": "advisors/{id}",
+        "orientador_destino_id": "advisors/{id}",
+        "programa_id": "programs/{id}",
+        "solicitante_id": "users/{uid}",
+        "approved_by": "users/{uid} | null",
+        "rejected_by": "users/{uid} | null",
+        "cancelled_by": "users/{uid} | null",
+        "cancelled_request_id": "transfer_requests/{id} | null"
+      },
+      "ciclo_vida": [
+        "direta_coordenacao nasce aprovada via POST /api/v1/transfers/direct",
+        "solicitada_orientador nasce pendente via POST /api/v1/transfers",
+        "coordenacao pode aprovar ou rejeitar solicitacao pendente",
+        "orientador solicitante pode cancelar solicitacao pendente",
+        "transferencia direta pode cancelar pendente anterior do mesmo aluno"
+      ]
+    },
+    "notifications.tipo.transferencia_orientador": {
+      "descricao": "Notificacao do fluxo transfer_requests.",
+      "eventos": [
+        "criacao de solicitacao de transferencia",
+        "aprovacao de solicitacao",
+        "rejeicao de solicitacao",
+        "cancelamento de solicitacao",
+        "transferencia direta pela coordenacao"
+      ]
+    }
+  },
+
   "requisitos_fundo": [
     "Coordenacao pode mover orientando diretamente para outro orientador do mesmo programa",
     "Orientador pode solicitar transferencia de orientando proprio para destino do mesmo programa, com aprovacao/rejeicao/cancelamento",
