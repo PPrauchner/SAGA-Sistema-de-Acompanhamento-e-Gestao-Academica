@@ -176,6 +176,7 @@ async def test_submit_soma_creditos_aprovados_da_categoria() -> None:
             "tipo_id": "t1",
             "status": "aprovado",
             "creditos_gerados": 8.0,
+            "creditos_concedidos": 6.0,
         },
     ]
     service = _service()
@@ -190,7 +191,7 @@ async def test_submit_soma_creditos_aprovados_da_categoria() -> None:
         _aluno(),
     )
 
-    assert _FakeInferenceService.last_kwargs["categoria_creditos_aprovados"] == 8.0
+    assert _FakeInferenceService.last_kwargs["categoria_creditos_aprovados"] == 6.0
     assert _FakeInferenceService.last_kwargs["tem_comprovante"] is False
 
 

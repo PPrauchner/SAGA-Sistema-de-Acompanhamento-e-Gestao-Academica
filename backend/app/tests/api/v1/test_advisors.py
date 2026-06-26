@@ -36,6 +36,10 @@ def _coord() -> CurrentUser:
     return CurrentUser(uid="coord1", role="coordenacao", programa_id="prog", email="coord@saga.edu")
 
 
+def _advisor_user() -> CurrentUser:
+    return CurrentUser(uid="advisor1", role="orientador", programa_id="prog", email="advisor@saga.edu")
+
+
 def _legacy_advisor() -> dict[str, Any]:
     return {
         "nome": "Orientador Legado",
@@ -64,7 +68,7 @@ def test_get_advisors_response_model_normaliza_documento_legado(client: TestClie
     assert response.json() == [
         {
             "id": "advisor1",
-            "uid": None,
+            "uid": "",
             "nome": "Orientador Legado",
             "email": "orientador@saga.edu",
             "departamento": "Computacao",
@@ -84,7 +88,39 @@ def test_get_advisor_response_model_inclui_orientandos_ativos(client: TestClient
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == "advisor1"
-    assert body["uid"] is None
+    assert body["uid"] == ""
     assert body["lattes"] is None
     assert body["limite_orientandos"] == 5
     assert body["orientandos_ativos"] == 3
+
+
+def test_get_advisors_orientador_oculta_convites_pendentes(client: TestClient) -> None:
+    app.dependency_overrides[get_current_user] = _advisor_user
+    advisors_router.service._advisors = _FakeAdvisorRepository(
+        {
+            "advisor1": {
+                "uid": "uid-advisor",
+                "nome": "Orientador Ativo",
+                "email": "ativo@saga.edu",
+                "departamento": "Computacao",
+                "programa_id": "prog",
+            },
+            "advisor2": {
+                **_legacy_advisor(),
+                "nome": "Orientador Pendente",
+                "email": "pendente@saga.edu",
+            },
+            "advisor3": {
+                "uid": "uid-outro",
+                "nome": "Orientador Outro Programa",
+                "email": "outro@saga.edu",
+                "departamento": "Computacao",
+                "programa_id": "outro",
+            },
+        },
+    )
+
+    response = client.get("/api/v1/advisors")
+
+    assert response.status_code == 200
+    assert [advisor["id"] for advisor in response.json()] == ["advisor1"]

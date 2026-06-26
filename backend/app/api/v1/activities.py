@@ -18,7 +18,7 @@ Responsabilidades:
   @trigger_alerts (notifica o aluno do resultado). Motor verifica elegibilidade (RL04) e gera
   fato producao_bibliografica_validada quando aplicável.
 """
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
@@ -72,15 +72,15 @@ def _build_notificacao_submissao(result, args, kwargs):
 
 @router.get(
     "/activities",
-    response_model=List[ActivityResponse],
+    response_model=list[ActivityResponse],
 )
 @requires_role("aluno", "orientador", "coordenacao")
 async def list_activities(
-    student_id: Optional[str] = None,
-    status: Optional[str] = None,
-    categoria: Optional[str] = None,
+    student_id: str | None = None,
+    status: str | None = None,
+    categoria: str | None = None,
     user: CurrentUser = Depends(get_current_user),
-) -> List[ActivityResponse]:
+) -> list[ActivityResponse]:
     """
     Lista atividades visíveis para o usuário autenticado.
     - Aluno: vê apenas as próprias atividades.

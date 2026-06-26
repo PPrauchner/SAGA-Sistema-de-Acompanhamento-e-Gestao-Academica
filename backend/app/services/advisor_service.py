@@ -32,6 +32,7 @@ from backend.app.services.auth_service import AuthService
 
 DEFAULT_ADVISOR_LIMIT = 5
 DEFAULT_ORIENTANDOS_ATIVOS = 0
+DEFAULT_LEGACY_ADVISOR_UID = ""
 
 
 class AdvisorService:
@@ -43,7 +44,7 @@ class AdvisorService:
     def _normalize_advisor_response(advisor: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(advisor)
         if normalized.get("uid") is None:
-            normalized["uid"] = None
+            normalized["uid"] = DEFAULT_LEGACY_ADVISOR_UID
         if normalized.get("lattes") is None:
             normalized["lattes"] = None
         if normalized.get("limite_orientandos") is None:
@@ -54,15 +55,28 @@ class AdvisorService:
 
     async def list_advisors(self, user: CurrentUser | None = None) -> list[dict]:
         advisors = await self._advisors.get_advisors_with_student_count()
+        normalized_advisors = [
+            self._normalize_advisor_response(advisor)
+            for advisor in advisors
+        ]
+
+        if user and user.role == "coordenacao":
+            return normalized_advisors
+
+        active_advisors = [
+            advisor
+            for advisor in normalized_advisors
+            if advisor.get("uid")
+        ]
 
         if user and user.role == "orientador" and user.programa_id:
             return [
-                self._normalize_advisor_response(advisor)
-                for advisor in advisors
+                advisor
+                for advisor in active_advisors
                 if advisor.get("programa_id") == user.programa_id
             ]
 
-        return [self._normalize_advisor_response(advisor) for advisor in advisors]
+        return active_advisors
 
     async def get_advisor(
         self,

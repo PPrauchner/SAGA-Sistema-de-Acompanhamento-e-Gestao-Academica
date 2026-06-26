@@ -1,3 +1,17 @@
+"""
+Aspecto A01 - Autorizacao e propriedade.
+
+Responsabilidades:
+- Centralizar a verificacao de papeis permitidos nos endpoints e operacoes sensiveis.
+- Validar propriedade de recursos quando o acesso depende do usuario autenticado
+  ser dono/responsavel pelo objeto solicitado.
+- Permitir desativacao via aspect_config.AUTHORIZATION_ENABLED sem alterar os endpoints.
+
+Join Point : endpoints FastAPI decorados com @requires_role ou @requires_ownership.
+Advice     : Before - valida autenticacao, papel e propriedade antes da funcao original.
+Weaving    : decoradores Python aplicados manualmente nos routers e funcoes de negocio.
+"""
+
 import functools
 import inspect
 import logging

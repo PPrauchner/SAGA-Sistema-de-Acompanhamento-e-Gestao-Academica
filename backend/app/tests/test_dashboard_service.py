@@ -188,7 +188,7 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
         MockSR.return_value.list_subcollection = AsyncMock(return_value=[])
         MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
         MockATR.return_value.list_all = AsyncMock(return_value=[])
-        MockPR.return_value.list_productions = AsyncMock(return_value=[
+        MockPR.return_value.list_by_ids = AsyncMock(return_value=[
             {"id": "prod_1", "nivel": "A1", "pontuacao_calculada": 4.0},
             {"id": "prod_2", "nivel": "A2", "pontuacao_calculada": 2.5},
         ])
@@ -205,6 +205,31 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
 
     MockSR.return_value.get.assert_called_once_with("stu_001")
     MockAR.return_value.list_by_student.assert_called_once_with("stu_001")
+    MockPR.return_value.list_by_ids.assert_called_once_with({"prod_1", "prod_2"})
+    assert not MockPR.return_value.list_productions.called
+
+
+@pytest.mark.asyncio
+async def test_aggregate_productions_sem_ids_nao_busca_producoes():
+    """Sem produções creditadas, retorna vazio sem chamar repositório de produção."""
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    service._production_reports.list_by_ids = AsyncMock(return_value=[])
+    service._production_reports.list_productions = AsyncMock(return_value=[])
+
+    result = await service._aggregate_productions(
+        [
+            {"id": "a1", "status": "enviado", "producao_id": "prod_1"},
+            {"id": "a2", "status": "aprovado", "producao_id": None},
+        ]
+    )
+
+    assert result.total == 0
+    assert result.pontuacao_total == 0.0
+    assert result.por_nivel == {}
+    service._production_reports.list_by_ids.assert_not_called()
+    service._production_reports.list_productions.assert_not_called()
 
 
 @pytest.mark.asyncio

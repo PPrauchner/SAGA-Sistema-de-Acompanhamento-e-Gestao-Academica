@@ -16,8 +16,10 @@ const PAGE_LABELS: Record<PageId, string> = {
   atividades: "Atividades Creditáveis",
   producoes: "Produções Científicas",
   checklist: "Checklist de Conclusão",
-  prorrogacoes: "Prorrogações",
+  solicitacoes: "Solicita��es",
+  prorrogacoes: "Solicita��es",
   transferencias: "Transferências",
+  "registration-requests": "Cadastros Pendentes",
   relatorios: "Relatórios",
   inferencia: "Inferência Acadêmica",
   auditoria: "Auditoria",
@@ -49,7 +51,7 @@ export function TopBar() {
 
   const changeView = (view: "orientador" | "coordenador") => {
     setActiveView(view);
-    if (view === "orientador" && ["orientadores", "orientador-detail", "auditoria"].includes(currentPage)) {
+    if (view === "orientador" && ["orientadores", "orientador-detail", "auditoria", "registration-requests"].includes(currentPage)) {
       setCurrentPage("dashboard");
     }
   };
