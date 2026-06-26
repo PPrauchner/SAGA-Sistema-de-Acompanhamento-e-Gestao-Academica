@@ -55,15 +55,28 @@ class AdvisorService:
 
     async def list_advisors(self, user: CurrentUser | None = None) -> list[dict]:
         advisors = await self._advisors.get_advisors_with_student_count()
+        normalized_advisors = [
+            self._normalize_advisor_response(advisor)
+            for advisor in advisors
+        ]
+
+        if user and user.role == "coordenacao":
+            return normalized_advisors
+
+        active_advisors = [
+            advisor
+            for advisor in normalized_advisors
+            if advisor.get("uid")
+        ]
 
         if user and user.role == "orientador" and user.programa_id:
             return [
-                self._normalize_advisor_response(advisor)
-                for advisor in advisors
+                advisor
+                for advisor in active_advisors
                 if advisor.get("programa_id") == user.programa_id
             ]
 
-        return [self._normalize_advisor_response(advisor) for advisor in advisors]
+        return active_advisors
 
     async def get_advisor(
         self,
