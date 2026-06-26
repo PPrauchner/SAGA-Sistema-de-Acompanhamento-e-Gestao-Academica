@@ -106,12 +106,18 @@ class ProductionLevelBreakdown(BaseModel):
 
 
 class ProductionByStudentItem(BaseModel):
-    """Produção bibliográfica aprovada de um aluno."""
+    """Produção bibliográfica aprovada de um aluno.
 
-    student_id: str
-    student_nome: str
+    Para o orientador, os alunos que não são seus orientandos vêm anonimizados
+    (anonimo=True, sem student_id/student_nome) para fins de benchmarking — as
+    métricas de produção permanecem, a identidade não (US-AN06).
+    """
+
+    student_id: str | None = None
+    student_nome: str | None = None
     total: int
     pontuacao_total: float
+    anonimo: bool = False
     por_nivel: ProductionLevelBreakdown
 
 
