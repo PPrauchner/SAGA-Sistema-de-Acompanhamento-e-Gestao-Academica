@@ -6,7 +6,6 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, status
 
-from backend.app.aspects.alerts import trigger_alerts
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
 from backend.app.core.auth import CurrentUser, get_current_user
@@ -21,27 +20,6 @@ from backend.app.services.registration_request_service import RegistrationReques
 router = APIRouter()
 
 service = RegistrationRequestService()
-
-
-def _build_review_alert(
-    result: dict[str, Any],
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-) -> dict[str, Any]:
-    approved = result.get("status") == "aprovado"
-    return {
-        "tipo": "solicitacao_cadastro_aprovada" if approved else "solicitacao_cadastro_rejeitada",
-        "titulo": "Solicitacao de cadastro aprovada" if approved else "Solicitacao de cadastro rejeitada",
-        "mensagem": (
-            "Sua solicitacao de cadastro foi aprovada. Use o convite de primeiro acesso para ativar sua conta."
-            if approved
-            else "Sua solicitacao de cadastro foi rejeitada pela coordenacao."
-        ),
-        "destinatario_id": result["email"],
-        "entidade_tipo": "registration_requests",
-        "entidade_id": result["id"],
-        "programa_id": result.get("programa_id"),
-    }
 
 
 @router.get(
@@ -79,7 +57,6 @@ async def list_registration_requests(
 )
 @requires_role("coordenacao")
 @audit_operation
-@trigger_alerts(_build_review_alert)
 async def approve_registration_request(
     request_id: str,
     body: RegistrationRequestApprove | None = None,
@@ -98,7 +75,6 @@ async def approve_registration_request(
 )
 @requires_role("coordenacao")
 @audit_operation
-@trigger_alerts(_build_review_alert)
 async def reject_registration_request(
     request_id: str,
     body: RegistrationRequestReject | None = None,

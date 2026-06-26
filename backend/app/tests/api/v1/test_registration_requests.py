@@ -8,7 +8,6 @@ from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
 from backend.app.aspects import aspect_config
-from backend.app.aspects import alerts as alerts_module
 from backend.app.api.v1 import registration_requests as router_module
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.main import app
@@ -72,17 +71,6 @@ class _DuplicateEmailService(_FakeRegistrationRequestService):
         )
 
 
-class _FakeAlertRepository:
-    docs: list[dict[str, Any]] = []
-
-    def __init__(self, collection: str) -> None:
-        self.collection = collection
-
-    async def create(self, data: dict[str, Any]) -> str:
-        self.docs.append(data)
-        return f"notification{len(self.docs)}"
-
-
 def _user(role: str = "coordenacao") -> CurrentUser:
     return CurrentUser(
         uid=f"uid-{role}",
@@ -96,10 +84,7 @@ def _user(role: str = "coordenacao") -> CurrentUser:
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     original_service = router_module.service
     _FakeRegistrationRequestService.calls = []
-    _FakeAlertRepository.docs = []
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
-    monkeypatch.setattr(aspect_config, "ALERTS_ENABLED", True)
-    monkeypatch.setattr(alerts_module, "FirebaseRepository", _FakeAlertRepository)
     router_module.service = _FakeRegistrationRequestService()
     app.dependency_overrides[get_current_user] = lambda: _user()
     yield TestClient(app)
@@ -160,7 +145,7 @@ def test_get_registration_requests_coordena_listagem(client: TestClient) -> None
     assert _FakeRegistrationRequestService.calls[0][0] == "list"
 
 
-def test_approve_registration_request_chama_service_e_dispara_a05(
+def test_approve_registration_request_chama_service(
     client: TestClient,
 ) -> None:
     response = client.patch(
@@ -173,11 +158,9 @@ def test_approve_registration_request_chama_service_e_dispara_a05(
     assert body["status"] == "aprovado"
     assert body["student_id"] == "student1"
     assert _FakeRegistrationRequestService.calls[0][0] == "approve"
-    assert _FakeAlertRepository.docs[0]["tipo"] == "solicitacao_cadastro_aprovada"
-    assert _FakeAlertRepository.docs[0]["destinatario_id"] == "aluno@saga.test"
 
 
-def test_reject_registration_request_chama_service_e_dispara_a05(
+def test_reject_registration_request_chama_service(
     client: TestClient,
 ) -> None:
     response = client.patch(
@@ -190,4 +173,3 @@ def test_reject_registration_request_chama_service_e_dispara_a05(
     assert body["status"] == "rejeitado"
     assert body["rejection_reason"] == "Dados incompletos"
     assert _FakeRegistrationRequestService.calls[0][0] == "reject"
-    assert _FakeAlertRepository.docs[0]["tipo"] == "solicitacao_cadastro_rejeitada"
