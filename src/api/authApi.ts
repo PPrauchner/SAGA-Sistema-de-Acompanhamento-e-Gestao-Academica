@@ -26,6 +26,8 @@ export interface AuthProfile {
   nome: string;
   role: UserRole;
   programaId: string;
+  departamento: string | null;
+  matricula: string | null;
   studentId: string | null;
   advisorId: string | null;
 }
@@ -37,6 +39,8 @@ interface RawProfile {
   nome: string;
   role: UserRole;
   programa_id: string;
+  departamento?: string | null;
+  matricula?: string | null;
   student_id?: string | null;
   advisor_id?: string | null;
 }
@@ -56,6 +60,8 @@ export async function getMe(token: string): Promise<AuthProfile> {
     nome: data.nome,
     role: data.role,
     programaId: data.programa_id,
+    departamento: data.departamento ?? null,
+    matricula: data.matricula ?? null,
     studentId: data.student_id ?? null,
     advisorId: data.advisor_id ?? null,
   };

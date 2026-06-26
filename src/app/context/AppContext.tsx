@@ -83,6 +83,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         role: profile.role,
         programa: profile.programaId,
         programa_id: profile.programaId,
+        departamento: profile.departamento ?? undefined,
+        matricula: profile.matricula ?? undefined,
         student_id: profile.studentId ?? undefined,
         advisor_id: profile.advisorId ?? undefined,
       }
