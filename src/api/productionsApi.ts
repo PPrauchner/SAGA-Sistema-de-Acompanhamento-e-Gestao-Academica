@@ -26,6 +26,10 @@ export interface Vehicle {
   issn?: string | null;
   nivel: RelevanceLevel;
   peso: number;
+  // Métricas descritivas (US-VQ04/VQ05) — informativas, não alimentam a RL05.
+  indice_h?: number | null;
+  percentil_scopus?: number | null;
+  jcr?: number | null;
 }
 
 export interface Production {
