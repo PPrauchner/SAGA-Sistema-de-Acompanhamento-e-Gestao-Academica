@@ -1,4 +1,4 @@
-import { apiGet } from "@/api/http";
+import { apiGet, apiPost } from "@/api/http";
 
 export type SolicitacaoStatus =
   | "pendente"
@@ -32,8 +32,19 @@ export interface Solicitacao {
   parecer?: string | null;
 }
 
+export interface CreateSolicitacaoPayload {
+  tipo: string;
+  nova_data: string;
+  motivo: string;
+  student_id?: string;
+}
+
 export const solicitacoesApi = {
   list(token: string): Promise<Solicitacao[]> {
     return apiGet<Solicitacao[]>("/extensions", token);
+  },
+
+  create(token: string, payload: CreateSolicitacaoPayload): Promise<Solicitacao> {
+    return apiPost<Solicitacao>("/extensions", payload, token);
   },
 };

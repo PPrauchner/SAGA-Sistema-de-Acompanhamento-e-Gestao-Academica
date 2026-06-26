@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Plus, Clock, CheckCircle, XCircle, AlertTriangle, FileText, Calendar } from "lucide-react";
 
 import { solicitacoesApi, type Solicitacao } from "@/api/solicitacoesApi";
@@ -19,6 +19,12 @@ const TIPO_MAP: Record<string, string> = {
   prazo_qualificacao: "Prorrogação de Qualificação",
   trancamento: "Trancamento de Matrícula",
   mudanca_nivel: "Mudança de Nível",
+};
+
+const DEFAULT_FORM = {
+  tipo: "prazo_defesa",
+  nova_data: "",
+  motivo: "",
 };
 
 function getStatus(status: string) {
@@ -64,34 +70,36 @@ export function SolicitacoesPage() {
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState("");
+  const [formData, setFormData] = useState(DEFAULT_FORM);
+  const [documentos, setDocumentos] = useState<File[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const canCreateRequest = currentUser?.role === "aluno" || currentUser?.role === "orientador";
   const isStudentRequest = currentUser?.role === "aluno";
   const isAdvisorRequest = currentUser?.role === "orientador";
   const advisorStudents: Array<{ id: string; nome: string; matricula?: string }> = [];
 
-  useEffect(() => {
-    if (!token) return;
-    const authToken = token;
-    let active = true;
-
-    async function loadSolicitacoes() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await solicitacoesApi.list(authToken);
-        if (active) setSolicitacoes(data);
-      } catch (err) {
-        if (active) setError(err instanceof Error ? err.message : "Falha ao carregar solicitações");
-      } finally {
-        if (active) setLoading(false);
-      }
+  const loadSolicitacoes = useCallback(async () => {
+    if (!token) {
+      setLoading(false);
+      return;
     }
-
-    void loadSolicitacoes();
-    return () => {
-      active = false;
-    };
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await solicitacoesApi.list(token);
+      setSolicitacoes(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao carregar solicitações");
+    } finally {
+      setLoading(false);
+    }
   }, [token]);
+
+  useEffect(() => {
+    void loadSolicitacoes();
+  }, [loadSolicitacoes]);
 
   const visibleSolicitacoes = solicitacoes.filter((solicitacao) => {
     if (currentUser?.role !== "aluno") return true;
@@ -101,7 +109,58 @@ export function SolicitacoesPage() {
 
   function openRequestForm(): void {
     setSelectedStudentId(isStudentRequest ? currentUser?.student_id ?? currentUser?.id ?? "" : "");
+    setFormData(DEFAULT_FORM);
+    setDocumentos([]);
+    setSubmitError(null);
+    setSuccessMessage(null);
     setShowForm(true);
+  }
+
+  function closeRequestForm(): void {
+    if (submitting) return;
+    setShowForm(false);
+    setSubmitError(null);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) {
+      setSubmitError("Sessão expirada. Entre novamente para enviar a solicitação.");
+      return;
+    }
+    if (isAdvisorRequest && !selectedStudentId) {
+      setSubmitError("Selecione um orientando antes de enviar a solicitação.");
+      return;
+    }
+    if (!formData.nova_data) {
+      setSubmitError("Informe a nova data solicitada.");
+      return;
+    }
+    if (!formData.motivo.trim()) {
+      setSubmitError("Informe o motivo da solicitação.");
+      return;
+    }
+
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await solicitacoesApi.create(token, {
+        tipo: formData.tipo,
+        nova_data: formData.nova_data,
+        motivo: formData.motivo.trim(),
+        ...(isAdvisorRequest ? { student_id: selectedStudentId } : {}),
+      });
+      setShowForm(false);
+      setFormData(DEFAULT_FORM);
+      setDocumentos([]);
+      setSelectedStudentId("");
+      setSuccessMessage("Solicitação enviada com sucesso.");
+      await loadSolicitacoes();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Falha ao enviar solicitação.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -117,6 +176,12 @@ export function SolicitacoesPage() {
           </button>
         )}
       </div>
+
+      {successMessage && (
+        <div className="rounded-2xl p-4 mb-6" style={{ background: "#dcfce7", color: "#166534", border: "1px solid #bbf7d0", fontSize: "13px", fontWeight: 600 }}>
+          {successMessage}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {Object.entries(STATUS_MAP).slice(0, 4).map(([key, val]) => (
@@ -236,8 +301,9 @@ export function SolicitacoesPage() {
           <div className="rounded-2xl p-6 w-full max-w-lg mx-4" style={{ background: "var(--card)" }}>
             <div className="flex justify-between items-center mb-6">
               <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>Nova Solicitação</h2>
-              <button onClick={() => setShowForm(false)} style={{ color: "var(--muted-foreground)", fontSize: "20px" }}>x</button>
+              <button onClick={closeRequestForm} disabled={submitting} style={{ color: "var(--muted-foreground)", fontSize: "20px", opacity: submitting ? 0.6 : 1 }}>x</button>
             </div>
+            <form onSubmit={handleSubmit}>
             <div className="space-y-4">
               {isStudentRequest && (
                 <div>
@@ -257,35 +323,44 @@ export function SolicitacoesPage() {
               )}
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Tipo de Solicitação</label>
-                <select className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
+                <select value={formData.tipo} onChange={(e) => setFormData((current) => ({ ...current, tipo: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
                   {Object.entries(TIPO_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Data Prazo Atual</label>
-                  <input type="date" className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
+                  <input type="date" disabled className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "13px" }} />
                 </div>
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Nova Data Solicitada</label>
-                  <input type="date" className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
+                  <input type="date" required value={formData.nova_data} onChange={(e) => setFormData((current) => ({ ...current, nova_data: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
                 </div>
               </div>
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Justificativa Detalhada</label>
-                <textarea rows={4} placeholder="Descreva detalhadamente o motivo da solicitação..." className="w-full rounded-xl px-3 py-2.5 outline-none resize-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
+                <textarea rows={4} required value={formData.motivo} onChange={(e) => setFormData((current) => ({ ...current, motivo: e.target.value }))} placeholder="Descreva detalhadamente o motivo da solicitação..." className="w-full rounded-xl px-3 py-2.5 outline-none resize-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
               </div>
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Documentos Comprobatórios</label>
-                <div className="rounded-xl p-4 text-center border-2 border-dashed cursor-pointer" style={{ borderColor: "var(--border)" }}>
-                  <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>Anexar documentos (opcional)</p>
-                </div>
+                <label className="rounded-xl p-4 text-center border-2 border-dashed cursor-pointer block" style={{ borderColor: "var(--border)" }}>
+                  <input type="file" multiple className="sr-only" onChange={(event) => setDocumentos(Array.from(event.target.files ?? []))} />
+                  <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>{documentos.length > 0 ? `${documentos.length} documento(s) selecionado(s)` : "Anexar documentos (opcional)"}</p>
+                </label>
               </div>
+              {submitError && (
+                <div className="rounded-xl p-3" style={{ background: "#fee2e2", color: "#991b1b", border: "1px solid #fecaca", fontSize: "13px" }}>
+                  {submitError}
+                </div>
+              )}
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowForm(false)} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
-              <button onClick={() => setShowForm(false)} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600 }}>Enviar Solicitação</button>
+              <button type="button" onClick={closeRequestForm} disabled={submitting} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600, opacity: submitting ? 0.6 : 1 }}>Cancelar</button>
+              <button type="submit" disabled={submitting} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: submitting ? 0.65 : 1 }}>
+                {submitting ? "Enviando..." : "Enviar Solicitação"}
+              </button>
             </div>
+            </form>
           </div>
         </div>
       )}
