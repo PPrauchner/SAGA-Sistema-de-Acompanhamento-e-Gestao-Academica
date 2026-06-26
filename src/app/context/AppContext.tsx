@@ -17,6 +17,7 @@ export type PageId =
   | "solicitacoes"
   | "prorrogacoes"
   | "transferencias"
+  | "registration-requests"
   | "relatorios"
   | "inferencia"
   | "auditoria"

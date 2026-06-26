@@ -21,6 +21,7 @@ const ActivitiesPage = lazy(() => import("./components/activities/ActivitiesPage
 const ProductionsPage = lazy(() => import("./components/productions/ProductionsPage").then((m) => ({ default: m.ProductionsPage })));
 const ChecklistPage = lazy(() => import("./components/checklist/ChecklistPage").then((m) => ({ default: m.ChecklistPage })));
 const SolicitacoesPage = lazy(() => import("./components/solicitacoes/SolicitacoesPage").then((m) => ({ default: m.SolicitacoesPage })));
+const RegistrationRequestsPage = lazy(() => import("./components/registration-requests/RegistrationRequestsPage").then((m) => ({ default: m.RegistrationRequestsPage })));
 const TransfersPage = lazy(() => import("./components/transfers/TransfersPage").then((m) => ({ default: m.TransfersPage })));
 const ReportsPage = lazy(() => import("./components/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const InferencePage = lazy(() => import("./components/inference/InferencePage").then((m) => ({ default: m.InferencePage })));
@@ -84,6 +85,7 @@ function PageRouter() {
     case "checklist": return <ChecklistPage />;
     case "solicitacoes":
     case "prorrogacoes": return <SolicitacoesPage />;
+    case "registration-requests": return <RegistrationRequestsPage />;
     case "transferencias": return <TransfersPage />;
     case "relatorios": return <ReportsPage />;
     case "inferencia": return <InferencePage />;

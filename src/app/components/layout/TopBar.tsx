@@ -19,6 +19,7 @@ const PAGE_LABELS: Record<PageId, string> = {
   solicitacoes: "Solicitações",
   prorrogacoes: "Solicitações",
   transferencias: "TransferÃªncias",
+  "registration-requests": "Cadastros Pendentes",
   relatorios: "RelatÃ³rios",
   inferencia: "InferÃªncia AcadÃªmica",
   auditoria: "Auditoria",
@@ -49,7 +50,7 @@ export function TopBar() {
 
   const changeView = (view: "orientador" | "coordenador") => {
     setActiveView(view);
-    if (view === "orientador" && ["orientadores", "orientador-detail", "auditoria"].includes(currentPage)) {
+    if (view === "orientador" && ["orientadores", "orientador-detail", "auditoria", "registration-requests"].includes(currentPage)) {
       setCurrentPage("dashboard");
     }
   };
