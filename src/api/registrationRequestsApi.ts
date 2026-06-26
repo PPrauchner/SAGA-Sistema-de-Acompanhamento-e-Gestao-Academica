@@ -1,4 +1,4 @@
-import { API_ROOT } from "@/api/http";
+import { API_ROOT, apiGet, apiPatch } from "@/api/http";
 
 const API_BASE = `${API_ROOT}/api/v1`;
 
@@ -12,6 +12,19 @@ export interface RegistrationRequestPayload {
   nome: string;
   email: string;
   advisor_id: string;
+}
+
+export interface RegistrationRequest {
+  id: string;
+  nome: string;
+  email: string;
+  advisor_id?: string | null;
+  advisor_nome?: string | null;
+  orientador_nome?: string | null;
+  orientador?: string | null;
+  created_at?: string | null;
+  solicitado_em?: string | null;
+  status?: string | null;
 }
 
 async function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -41,5 +54,17 @@ export const registrationRequestsApi = {
       method: "POST",
       body: JSON.stringify(payload),
     });
+  },
+
+  listPending(token: string): Promise<RegistrationRequest[]> {
+    return apiGet<RegistrationRequest[]>("/registration-requests", token);
+  },
+
+  approve(token: string, id: string): Promise<{ message?: string }> {
+    return apiPatch<{ message?: string }>(`/registration-requests/${id}/approve`, {}, token);
+  },
+
+  reject(token: string, id: string): Promise<{ message?: string }> {
+    return apiPatch<{ message?: string }>(`/registration-requests/${id}/reject`, {}, token);
   },
 };
