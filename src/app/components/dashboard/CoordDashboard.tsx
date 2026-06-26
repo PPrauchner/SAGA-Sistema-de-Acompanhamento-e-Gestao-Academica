@@ -3,7 +3,7 @@ import { useCoordDashboard } from "@/hooks/useDashboard";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
   BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
-  BarChart2, Filter, Bell, GraduationCap, Layers, RefreshCw,
+  BarChart2, Filter, Bell, GraduationCap, Layers,
   FileSpreadsheet,
 } from "lucide-react";
 import {
@@ -37,15 +37,6 @@ interface ExtensionRequest {
   novoPrazo: string;
   status: "pendente" | "em-analise" | "aprovada" | "negada";
   dataProtocolo: string;
-}
-
-interface PendingActivity {
-  id: string;
-  descricao: string;
-  responsavel: string;
-  tipo: "aprovacao" | "revisao" | "comunicado" | "reuniao";
-  prazo: string;
-  prioridade: "urgente" | "normal" | "baixa";
 }
 
 interface AlertItem {
@@ -120,15 +111,6 @@ const EXTENSIONS: ExtensionRequest[] = [
   { id: "e4", aluno: "Camila Ferreira Luz", nivel: "Mestrado", orientador: "Profa. Mariana Torres", motivo: "Licença maternidade", prazoPrevisto: "Jul/2025", novoPrazo: "Jan/2026", status: "aprovada", dataProtocolo: "10/04/2026" },
 ];
 
-const PENDING_ACTIVITIES: PendingActivity[] = [
-  { id: "p1", descricao: "Aprovar calendário de defesas — 2º semestre 2026", responsavel: "Coordenação", tipo: "aprovacao", prazo: "06/06/2026", prioridade: "urgente" },
-  { id: "p2", descricao: "Emitir comunicado sobre prazo de matrículas", responsavel: "Secretaria", tipo: "comunicado", prazo: "07/06/2026", prioridade: "urgente" },
-  { id: "p3", descricao: "Revisar regimento interno — Art. 24 e 25", responsavel: "Comissão de Normas", tipo: "revisao", prazo: "15/06/2026", prioridade: "normal" },
-  { id: "p4", descricao: "Reunião de colegiado — Pauta: novos orientadores", responsavel: "Todos os docentes", tipo: "reuniao", prazo: "10/06/2026", prioridade: "normal" },
-  { id: "p5", descricao: "Aprovar solicitações de bolsas CAPES pendentes (7)", responsavel: "Coordenação", tipo: "aprovacao", prazo: "12/06/2026", prioridade: "urgente" },
-  { id: "p6", descricao: "Atualizar Plataforma Sucupira — dados 2025", responsavel: "Secretaria", tipo: "revisao", prazo: "30/06/2026", prioridade: "baixa" },
-];
-
 const ALERTS: AlertItem[] = [
   { id: "a1", nivel: "critico", titulo: "Prazos vencidos sem prorrogação aprovada", descricao: "8 alunos ultrapassaram o prazo máximo de integralização sem prorrogação formalizada.", afetados: 8, data: "02/06/2026", acao: "Ver alunos" },
   { id: "a2", nivel: "critico", titulo: "Relatórios semestrais em atraso", descricao: "12 relatórios do período 2024-2 não foram entregues até a data limite.", afetados: 12, data: "01/06/2026", acao: "Notificar alunos" },
@@ -136,15 +118,6 @@ const ALERTS: AlertItem[] = [
   { id: "a4", nivel: "atencao", titulo: "Orientadores com sobrecarga", descricao: "3 orientadores estão acima do limite recomendado de 8 orientandos simultâneos.", afetados: 3, data: "30/05/2026", acao: "Redistribuir orientações" },
   { id: "a5", nivel: "info", titulo: "Avaliação CAPES — Prazo para envio de dados", descricao: "O prazo para envio dos dados da avaliação quadrienal é 30/07/2026.", afetados: 0, data: "28/05/2026" },
   { id: "a6", nivel: "info", titulo: "Novo edital de bolsas produtividade CNPq", descricao: "Edital aberto para bolsas PQ 2026. Prazo de inscrição: 15/07/2026.", afetados: 0, data: "29/05/2026" },
-];
-
-const PROGRAM_STATS = [
-  { label: "Taxa de Titulação (5 anos)", value: "78%", sub: "Acima da média nacional (71%)", trend: "up", color: "#1F8A70" },
-  { label: "Nota CAPES", value: "6", sub: "Mantida na última avaliação (2021-2024)", trend: "stable", color: "#123C7A" },
-  { label: "Índice H do Programa", value: "24", sub: "+3 em relação ao triênio anterior", trend: "up", color: "#8b5cf6" },
-  { label: "Produção Média / Aluno", value: "1,8", sub: "Artigos Qualis A1/A2 por aluno/ano", trend: "up", color: "#D4A017" },
-  { label: "Orientadores Ativos", value: "42", sub: "32 doutores · 10 colaboradores", trend: "stable", color: "#123C7A" },
-  { label: "Taxa de Evasão (12 meses)", value: "4,2%", sub: "-1,1 p.p. em relação ao ano anterior", trend: "down-good", color: "#1F8A70" },
 ];
 
 
@@ -172,19 +145,6 @@ const ALERT_CFG = {
   critico: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: <AlertTriangle size={16} /> },
   atencao: { color: "#D4A017", bg: "#fffbeb", border: "#fde68a", icon: <Bell size={16} /> },
   info: { color: "#123C7A", bg: "#eef3fc", border: "#c7d9f5", icon: <Bell size={16} /> },
-};
-
-const ACTIVITY_TIPO_CFG: Record<PendingActivity["tipo"], { color: string; bg: string; label: string }> = {
-  aprovacao: { color: "#123C7A", bg: "#eef3fc", label: "Aprovação" },
-  revisao: { color: "#8b5cf6", bg: "#f5f3ff", label: "Revisão" },
-  comunicado: { color: "#D4A017", bg: "#fffbeb", label: "Comunicado" },
-  reuniao: { color: "#1F8A70", bg: "#f0fdf4", label: "Reunião" },
-};
-
-const PRIORITY_CFG = {
-  urgente: { color: "#dc2626", label: "Urgente" },
-  normal: { color: "#D4A017", label: "Normal" },
-  baixa: { color: "#64748b", label: "Baixa" },
 };
 
 function handleExport(format: ExportFormat, section: string) {
@@ -776,53 +736,6 @@ function ExtensionRequestsSection() {
   );
 }
 
-function PendingActivitiesSection() {
-  return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Atividades Pendentes</h3>
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
-          </div>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{PENDING_ACTIVITIES.filter(a => a.prioridade === "urgente").length} urgentes · {PENDING_ACTIVITIES.length} total</p>
-        </div>
-        <ExportBar section="Atividades Pendentes" />
-      </div>
-      <div className="space-y-2">
-        {PENDING_ACTIVITIES.sort((a, b) => {
-          const order = { urgente: 0, normal: 1, baixa: 2 };
-          return order[a.prioridade] - order[b.prioridade];
-        }).map((act) => {
-          const tc = ACTIVITY_TIPO_CFG[act.tipo];
-          const pc = PRIORITY_CFG[act.prioridade];
-          return (
-            <div key={act.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: act.prioridade === "urgente" ? "var(--tint-danger-bg)" : "var(--muted)", border: `1px solid ${act.prioridade === "urgente" ? "var(--tint-danger-border)" : "var(--border)"}` }}>
-              <div className="rounded-lg p-1.5" style={{ background: tc.bg, color: tc.color, flexShrink: 0 }}>
-                <RefreshCw size={12} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p style={{ fontSize: "12px", fontWeight: 600, color: act.prioridade === "urgente" ? "var(--tint-danger-text)" : "var(--foreground)" }}>{act.descricao}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: tc.bg, color: tc.color }}>{tc.label}</span>
-                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{act.responsavel}</span>
-                </div>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p style={{ fontSize: "10px", fontWeight: 700, color: pc.color }}>{pc.label}</p>
-                <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Até {act.prazo}</p>
-              </div>
-              <button className="px-3 py-1.5 rounded-lg flex-shrink-0" style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700 }}>
-                Agir
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function AlertsCenter() {
   const [showAll, setShowAll] = useState(false);
   const visible = showAll ? ALERTS : ALERTS.slice(0, 4);
@@ -885,63 +798,6 @@ function AlertsCenter() {
     </div>
   );
 }
-
-function ProgramStatistics() {
-  return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Estatísticas do Programa</h3>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>PPGCC · Avaliação 2026 · Nota CAPES 6</p>
-        </div>
-        <ExportBar section="Estatísticas do Programa" />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {PROGRAM_STATS.map((s) => (
-          <div key={s.label} className="rounded-xl p-4" style={{ background: `${s.color}0a`, border: `1px solid ${s.color}22` }}>
-            <div className="flex items-center justify-between mb-1">
-              <p style={{ fontSize: "24px", fontWeight: 800, color: s.color }}>{s.value}</p>
-              {s.trend === "up" && <TrendingUp size={16} style={{ color: "#1F8A70" }} />}
-              {s.trend === "down-good" && <TrendingDown size={16} style={{ color: "#1F8A70" }} />}
-              {s.trend === "stable" && <div style={{ width: 16, height: 2, background: "#64748b", borderRadius: 1 }} />}
-            </div>
-            <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>{s.label}</p>
-            <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px", lineHeight: 1.4 }}>{s.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 rounded-xl p-4" style={{ background: "linear-gradient(135deg, #123C7A 0%, #1F5FAA 100%)" }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p style={{ fontSize: "13px", fontWeight: 800, color: "#fff" }}>Avaliação CAPES 2025–2028</p>
-            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.75)", marginTop: "2px" }}>Próxima avaliação — Envio de dados: 30/07/2026</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-center">
-              <p style={{ fontSize: "28px", fontWeight: 900, color: "#fff", lineHeight: 1 }}>6</p>
-              <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.7)" }}>Nota atual</p>
-            </div>
-            <ChevronRight size={18} style={{ color: "rgba(255,255,255,0.6)" }} />
-            <div className="text-center">
-              <p style={{ fontSize: "28px", fontWeight: 900, color: "#D4A017", lineHeight: 1 }}>7</p>
-              <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.7)" }}>Meta 2028</p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-3">
-          <div className="flex justify-between mb-1" style={{ fontSize: "10px", color: "rgba(255,255,255,0.7)" }}>
-            <span>Progresso em direção à nota 7</span><span>68%</span>
-          </div>
-          <div className="rounded-full overflow-hidden" style={{ height: 6, background: "rgba(255,255,255,0.2)" }}>
-            <div className="h-full rounded-full" style={{ width: "68%", background: "#D4A017" }} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 
 export function CoordDashboard() {
   const { data: dashData, loading, error } = useCoordDashboard();
@@ -1040,15 +896,8 @@ export function CoordDashboard() {
         <ValidationQueue />
         <ExtensionRequestsSection />
       </div>
-
-      {/* Pending Activities + Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <PendingActivitiesSection />
-        <AlertsCenter />
-      </div>
-
-      {/* Program Statistics */}
-      <ProgramStatistics />
+      {/* Alerts */}
+      <AlertsCenter />
 
       {/* Report Modal */}
       <ReportModal type={reportModal} onClose={() => setReportModal(null)} statusData={statusData} />
