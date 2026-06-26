@@ -1,8 +1,7 @@
-import { useState, useRef, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAlunoDashboard } from "@/hooks/useDashboard";
 import type { AlunoDashboardData } from "@/api/dashboardApi";
-import { useAuth } from "@/hooks/useAuth";
 import {
   CheckCircle2, X, Calendar, ChevronRight, AlertTriangle,
   Bell, Clock, FileText, BookOpen, GraduationCap, Shield,
@@ -148,6 +147,19 @@ function SecHead({ title, sub, right }: { title: string; sub?: string; right?: R
       {right}
     </div>
   );
+}
+
+function tasksFromDashboard(data: AlunoDashboardData | null | undefined): PendingTask[] {
+  if (!data?.tasks_proximas?.length) return TASKS;
+  return data.tasks_proximas.map((task, index) => ({
+    id: index + 1,
+    title: task.titulo,
+    deadline: task.prazo,
+    priority: "media",
+    type: "plano",
+    done: false,
+    detail: `Status: ${task.status}`,
+  }));
 }
 
 function PBadge({ p }: { p: "alta" | "media" | "baixa" }) {
@@ -1073,16 +1085,19 @@ function MobilePhasesCard() {
 
 export function AlunoDashboard() {
   const { currentUser } = useApp();
-  const { studentId } = useAuth();
-  const { data: dashData, loading, error } = useAlunoDashboard(studentId ?? currentUser?.student_id);
+  const { data: dashData, loading, error } = useAlunoDashboard();
   const [modal, setModal] = useState<ModalData>(null);
-  const [tasks, setTasks] = useState(TASKS);
+  const [tasks, setTasks] = useState<PendingTask[]>([]);
 
   const openChecklist = (item: ChecklistItem) => setModal({ type: "checklist", item });
   const openTask = (task: PendingTask) => setModal({ type: "task", task });
   const openNotif = (notif: Notif) => setModal({ type: "notif", notif });
   const openDeadline = (deadline: Deadline) => setModal({ type: "deadline", deadline });
   const handleDone = (id: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: true } : t));
+
+  useEffect(() => {
+    setTasks(tasksFromDashboard(dashData));
+  }, [dashData]);
 
   if (loading) {
     return (
@@ -1110,6 +1125,7 @@ export function AlunoDashboard() {
   const creditosMin = dashData?.creditos?.minimo_requerido ?? 24;
   const diasRestantes = dashData?.dias_restantes ?? 0;
   const producoesAprovadas = dashData?.producoes_aprovadas ?? 0;
+  const pontuacaoProducoes = dashData?.producoes?.pontuacao_total ?? 0;
 
   return (
     <div className="space-y-4 md:space-y-5">
@@ -1131,7 +1147,7 @@ export function AlunoDashboard() {
               { label: "Progresso", value: `${dashData?.progresso_plano_percentual ?? 0}%`, color: "#D4A017" },
               { label: "Dias Rest.", value: `${diasRestantes}`, color: "#fff" },
               { label: "Créditos", value: `${creditosTotal}/${creditosMin}`, color: "#fff" },
-              { label: "Produções", value: `${producoesAprovadas}`, color: "#fff" },
+              { label: "Produções", value: `${pontuacaoProducoes} pts`, color: "#fff" },
             ].map((stat) => (
               <div key={stat.label} className="flex-shrink-0 text-center" style={{ minWidth: 56 }}>
                 <p style={{ color: stat.color, fontSize: "18px", fontWeight: 800, lineHeight: 1 }}>{stat.value}</p>

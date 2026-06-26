@@ -19,7 +19,6 @@ import {
   updateStudent,
 } from "@/api/studentsApi";
 import { useApp } from "../../context/AppContext";
-import { useAuth } from "@/hooks/useAuth";
 
 const STATUS_MAP: Record<
   StudentStatus,
@@ -61,8 +60,7 @@ function progressFor(student: Student): number {
 }
 
 export function StudentsPage() {
-  const { setCurrentPage, setSelectedStudentId } = useApp();
-  const { token, role } = useAuth();
+  const { activeView, currentUser, setCurrentPage, setSelectedStudentId, token } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [search, setSearch] = useState("");
@@ -103,7 +101,12 @@ export function StudentsPage() {
     [advisors],
   );
 
-  const filtered = students.filter((student) => {
+  const visibleStudents =
+    activeView === "orientador" && currentUser?.advisor_id
+      ? students.filter((student) => student.orientador_id === currentUser.advisor_id)
+      : students;
+
+  const filtered = visibleStudents.filter((student) => {
     const normalizedSearch = search.toLowerCase();
     const matchSearch =
       student.nome.toLowerCase().includes(normalizedSearch) ||
@@ -163,9 +166,9 @@ export function StudentsPage() {
     }
   }
 
-  const regularCount = students.filter((s) => s.situacao_registrada === "regular").length;
+  const regularCount = visibleStudents.filter((s) => s.situacao_registrada === "regular").length;
   // Apenas a coordenação cria/edita alunos (spec 05_discentes). Orientador é read-only.
-  const canManage = role === "coordenacao";
+  const canManage = currentUser?.role === "coordenacao" && activeView === "coordenador";
 
   return (
     <div>
@@ -173,7 +176,7 @@ export function StudentsPage() {
         <div>
           <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Gerenciamento de Alunos</h1>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
-            {students.length} alunos cadastrados · {regularCount} regulares
+            {visibleStudents.length} alunos cadastrados · {regularCount} regulares
           </p>
         </div>
         {canManage && (
@@ -189,10 +192,10 @@ export function StudentsPage() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
         {[
-          { label: "Total", value: students.length, color: "#123C7A", bg: "#eef3fc" },
+          { label: "Total", value: visibleStudents.length, color: "#123C7A", bg: "#eef3fc" },
           { label: "Regular", value: regularCount, color: "#1F8A70", bg: "#dcfce7" },
-          { label: "Prorrogação", value: students.filter(s => s.situacao_registrada === "em_prorrogacao").length, color: "#D4A017", bg: "#fef9c3" },
-          { label: "Concluído", value: students.filter(s => s.situacao_registrada === "concluido").length, color: "#3b82f6", bg: "#dbeafe" },
+          { label: "Prorrogação", value: visibleStudents.filter(s => s.situacao_registrada === "em_prorrogacao").length, color: "#D4A017", bg: "#fef9c3" },
+          { label: "Concluído", value: visibleStudents.filter(s => s.situacao_registrada === "concluido").length, color: "#3b82f6", bg: "#dbeafe" },
         ].map((stat) => (
           <div key={stat.label} className="rounded-xl p-3 sm:p-4 flex items-center gap-2 sm:gap-3 min-w-0" style={{ background: stat.bg }}>
             <p className="flex-shrink-0" style={{ fontSize: "22px", fontWeight: 800, color: stat.color, lineHeight: 1.1 }}>{stat.value}</p>

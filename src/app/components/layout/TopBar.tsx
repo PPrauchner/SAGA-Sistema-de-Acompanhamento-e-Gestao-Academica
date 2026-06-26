@@ -26,12 +26,32 @@ const PAGE_LABELS: Record<PageId, string> = {
 };
 
 export function TopBar() {
-  const { currentUser, currentPage, setCurrentPage, darkMode, toggleDarkMode, notificationCount, logout, mobileMenuOpen, setMobileMenuOpen } = useApp();
+  const {
+    activeView,
+    currentUser,
+    currentPage,
+    isMultiRoleAdvisor,
+    setActiveView,
+    setCurrentPage,
+    darkMode,
+    toggleDarkMode,
+    notificationCount,
+    logout,
+    mobileMenuOpen,
+    setMobileMenuOpen,
+  } = useApp();
   const [searchValue, setSearchValue] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   if (!currentUser) return null;
+
+  const changeView = (view: "orientador" | "coordenador") => {
+    setActiveView(view);
+    if (view === "orientador" && ["orientadores", "orientador-detail", "auditoria"].includes(currentPage)) {
+      setCurrentPage("dashboard");
+    }
+  };
 
   return (
     <header
@@ -148,6 +168,39 @@ export function TopBar() {
         </div>
       )}
 
+      {isMultiRoleAdvisor && (
+        <div
+          className="hidden lg:flex items-center gap-2 rounded-lg px-2 py-1"
+          style={{ background: "var(--input-background)", border: "1px solid var(--border)" }}
+        >
+          <span style={{ color: "var(--muted-foreground)", fontSize: "11px", fontWeight: 600 }}>
+            Visualizando como
+          </span>
+          {([
+            ["orientador", "Orientador"],
+            ["coordenador", "Coordenador"],
+          ] as const).map(([view, label]) => {
+            const active = activeView === view;
+            return (
+              <button
+                key={view}
+                type="button"
+                onClick={() => changeView(view)}
+                className="rounded-md px-2.5 py-1 transition-colors"
+                style={{
+                  background: active ? "#123C7A" : "transparent",
+                  color: active ? "#fff" : "var(--muted-foreground)",
+                  fontSize: "12px",
+                  fontWeight: 700,
+                }}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* Notifications */}
       <button
         onClick={() => setCurrentPage("notificacoes")}
@@ -251,6 +304,38 @@ export function TopBar() {
               <p style={{ fontWeight: 600, fontSize: "13px", color: "var(--foreground)" }}>{currentUser.name}</p>
               <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{currentUser.email}</p>
             </div>
+            {isMultiRoleAdvisor && (
+              <div className="p-3 border-b" style={{ borderColor: "var(--border)" }}>
+                <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted-foreground)", marginBottom: 8 }}>
+                  Visualizando como
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {([
+                    ["orientador", "Orientador"],
+                    ["coordenador", "Coordenador"],
+                  ] as const).map(([view, label]) => {
+                    const active = activeView === view;
+                    return (
+                      <button
+                        key={view}
+                        type="button"
+                        onClick={() => changeView(view)}
+                        className="rounded-lg px-2 py-2"
+                        style={{
+                          background: active ? "#123C7A" : "var(--input-background)",
+                          border: "1px solid var(--border)",
+                          color: active ? "#fff" : "var(--foreground)",
+                          fontSize: "12px",
+                          fontWeight: 700,
+                        }}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             <div className="py-1">
               {[
                 { icon: <UserCircle size={15} />, label: "Meu Perfil", action: () => { setCurrentPage("configuracoes"); setProfileOpen(false); } },

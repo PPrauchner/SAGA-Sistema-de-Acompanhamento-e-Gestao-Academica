@@ -32,9 +32,11 @@ from backend.app.api.v1 import (
     notifications,
     productions,
     programs,
+    qualis_weights,
     reports,
     students,
     transfers,
+    users,
     vehicles,
     work_plan,
 )

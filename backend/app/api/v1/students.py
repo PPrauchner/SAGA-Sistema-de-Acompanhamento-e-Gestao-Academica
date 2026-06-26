@@ -29,6 +29,7 @@ from backend.app.models.student import (
     QualificacaoRequest,
     SituacaoRequest,
     StudentCreateRequest,
+    StudentResponse,
     StudentUpdateRequest,
 )
 from backend.app.services.student_service import StudentService
@@ -38,20 +39,20 @@ router = APIRouter()
 service = StudentService()
 
 
-@router.get("/students")
+@router.get("/students", response_model=list[StudentResponse])
 @requires_role("coordenacao", "orientador")
 async def list_students(
     user: CurrentUser = Depends(get_current_user),
-) -> list[dict]:
+) -> list[StudentResponse]:
     return await service.list_students(user)
 
 
-@router.get("/students/{student_id}")
+@router.get("/students/{student_id}", response_model=StudentResponse)
 @requires_role("coordenacao", "orientador", "aluno")
 async def get_student(
     student_id: str,
     user: CurrentUser = Depends(get_current_user),
-) -> dict:
+) -> StudentResponse:
     return await service.get_student(student_id, user)
 
 

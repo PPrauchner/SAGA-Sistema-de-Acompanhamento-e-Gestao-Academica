@@ -19,12 +19,14 @@ from backend.app.models.dashboard import (
     OrientadorDashboardResponse,
     OrientandoResumo,
     OrientandosPorStatus,
+    ProducoesResumo,
     TaskProxima,
 )
 from backend.app.repositories.activity_repository import ActivityRepository
 from backend.app.repositories.activity_type_repository import ActivityTypeRepository
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.models.work_plan import STATUS_CONCLUIDO
@@ -138,8 +140,52 @@ class DashboardService:
         self._audit_logs = FirebaseRepository("audit_logs")
         self._extensions = FirebaseRepository("extensions")
         self._productions = FirebaseRepository("productions")
+        self._production_reports = ProductionRepository()
         self._work_plan = WorkPlanRepository()
 
+    async def get_meu_aluno_dashboard(self, user: CurrentUser) -> AlunoDashboardResponse:
+        """Retorna o dashboard do aluno autenticado sem aceitar student_id do cliente."""
+        if user.role != "aluno":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dashboard do discente disponivel apenas para aluno",
+            )
+
+        students = await self._students.query(filters=[("uid", "==", user.uid)])
+        if not students:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Aluno nao encontrado para o usuario autenticado",
+            )
+        return await self.get_aluno_dashboard(students[0]["id"])
+
+    async def _aggregate_productions(self, activities: list[dict]) -> ProducoesResumo:
+        credited_ids = {
+            activity["producao_id"]
+            for activity in activities
+            if activity.get("status") == "aprovado" and activity.get("producao_id")
+        }
+        if not credited_ids:
+            return ProducoesResumo()
+
+        productions = await self._production_reports.list_productions()
+        production_by_id = {production["id"]: production for production in productions}
+        por_nivel: dict[str, int] = {}
+        pontuacao_total = 0.0
+
+        for producao_id in credited_ids:
+            production = production_by_id.get(producao_id)
+            if production is None:
+                continue
+            nivel = production.get("nivel") or production.get("nivel_veiculo") or "SC"
+            por_nivel[nivel] = por_nivel.get(nivel, 0) + 1
+            pontuacao_total += float(production.get("pontuacao_calculada", 0.0) or 0.0)
+
+        return ProducoesResumo(
+            total=sum(por_nivel.values()),
+            pontuacao_total=round(pontuacao_total, 2),
+            por_nivel=por_nivel,
+        )
 
     async def get_aluno_dashboard(self, student_id: str) -> AlunoDashboardResponse:
         """Agrega dados do dashboard do aluno a partir de dados persistidos.
@@ -177,6 +223,7 @@ class DashboardService:
             for a in activities
             if a.get("status") == "aprovado" and a.get("producao_id")
         )
+        producoes_resumo = await self._aggregate_productions(activities)
         atividades_pendentes = sum(
             1 for a in activities if a.get("status") == "enviado"
         )
@@ -250,6 +297,7 @@ class DashboardService:
             checklist_resumo=checklist,
             tasks_proximas=tasks_proximas_list,
             producoes_aprovadas=producoes_aprovadas,
+            producoes=producoes_resumo,
             atividades_pendentes_validacao=atividades_pendentes,
         )
 

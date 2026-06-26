@@ -45,6 +45,14 @@ class TaskProxima(BaseModel):
     status: str
 
 
+class ProducoesResumo(BaseModel):
+    """Resumo de producoes bibliograficas creditadas ao aluno."""
+
+    total: int = 0
+    pontuacao_total: float = 0.0
+    por_nivel: dict[str, int] = {}
+
+
 class AlunoDashboardResponse(BaseModel):
     """Resposta de GET /api/v1/dashboard/aluno/{student_id}."""
 
@@ -60,6 +68,7 @@ class AlunoDashboardResponse(BaseModel):
     checklist_resumo: ChecklistResumo = ChecklistResumo()
     tasks_proximas: list[TaskProxima] = []
     producoes_aprovadas: int = 0
+    producoes: ProducoesResumo = ProducoesResumo()
     atividades_pendentes_validacao: int = 0
 
 
