@@ -103,6 +103,7 @@ export function AdvisorsPage() {
       } else {
         const result = await createAdvisor(token, form);
         setInviteToken(result.invite_token);
+        setShowForm(false);
       }
       setForm(emptyForm);
       setEditingAdvisor(null);

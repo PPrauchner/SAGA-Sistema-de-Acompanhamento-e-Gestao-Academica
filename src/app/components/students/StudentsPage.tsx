@@ -155,6 +155,7 @@ export function StudentsPage() {
       } else {
         const result = await createStudent(token, form);
         setInviteToken(result.invite_token);
+        setShowForm(false);
       }
       setForm(emptyForm);
       setEditingStudent(null);
