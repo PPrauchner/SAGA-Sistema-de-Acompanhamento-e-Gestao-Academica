@@ -207,11 +207,24 @@ class ReportService:
             historico=historico,
         )
 
-    async def get_productions_report(self) -> ProductionsReportResponse:
-        """Agrega produção bibliográfica creditada por aluno (RL05) e por orientador."""
-        students = await self._students.list_all()
+    async def get_productions_report(self, programa_id: str) -> ProductionsReportResponse:
+        """Agrega produção bibliográfica creditada por aluno (RL05) e por orientador.
+
+        Args:
+            programa_id: Programa do solicitante; restringe alunos e produções
+                agregados ao tenant correspondente (escopo US-AN06).
+        """
+        students = [
+            student
+            for student in await self._students.list_all()
+            if student.get("programa_id") == programa_id
+        ]
         advisor_names = await self._advisor_names()
-        productions = await self._productions.list_productions()
+        productions = [
+            producao
+            for producao in await self._productions.list_productions()
+            if producao.get("programa_id") == programa_id
+        ]
         producao_por_id = {producao["id"]: producao for producao in productions}
 
         activities_por_aluno = await asyncio.gather(
