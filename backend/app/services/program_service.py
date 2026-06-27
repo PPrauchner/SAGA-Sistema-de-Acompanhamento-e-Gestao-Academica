@@ -24,6 +24,14 @@ class ProgramService:
         """
         self.repository = repository or ProgramRepository()
 
+    async def list_programs(self) -> list[dict[str, Any]]:
+        """Lista todos os programas cadastrados no sistema.
+
+        Returns:
+            Uma lista de programas, cada um com `id` e demais campos de configuração.
+        """
+        return await self.repository.list_programs()
+
     async def get_config(self, programa_id: str) -> dict[str, Any] | None:
         """Busca a configuração de um determinado programa.
 

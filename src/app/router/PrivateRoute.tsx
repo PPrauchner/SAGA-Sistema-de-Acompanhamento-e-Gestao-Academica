@@ -20,6 +20,7 @@ export const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
   inferencia: ["orientador", "coordenacao"],
   auditoria: ["coordenacao"],
   transferencias: ["orientador", "coordenacao"],
+  "registration-requests": ["coordenacao"],
 };
 
 export function isAuthPage(page: PageId): boolean {

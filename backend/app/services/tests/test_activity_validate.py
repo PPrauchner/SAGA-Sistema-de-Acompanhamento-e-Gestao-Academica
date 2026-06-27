@@ -18,6 +18,7 @@ from fastapi import HTTPException, status
 from backend.app.api.v1.activities import _build_notificacao_validacao
 from backend.app.core.auth import CurrentUser
 from backend.app.models.activity import (
+    ActivityResponse,
     ActivityStatus,
     ValidateAction,
     ValidateActivityRequest,
@@ -49,12 +50,31 @@ def _patch_inference(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _activity(**overrides: Any) -> dict[str, Any]:
-    base = {"id": "act1", "student_id": "s1", "tipo_id": "t1", "status": ActivityStatus.enviado}
+    base = {
+        "id": "act1",
+        "student_id": "s1",
+        "tipo_id": "t1",
+        "status": ActivityStatus.enviado,
+        "creditos_gerados": 4.0,
+        "creditos_concedidos": None,
+    }
     base.update(overrides)
     return base
 
 
 # --- validate_activity (aprovar) --------------------------------------------------------
+
+
+def test_activity_response_emite_campos_canonicos_de_validacao() -> None:
+    response = ActivityResponse(
+        id="act1",
+        status=ActivityStatus.aprovado,
+        aprovado_por="uid-legado",
+    )
+
+    data = response.model_dump()
+    assert data["validado_por"] == "uid-legado"
+    assert "aprovado_por" not in data
 
 
 async def test_aprovar_muda_status_e_contabiliza_pontuacao_base(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,12 +98,16 @@ async def test_aprovar_muda_status_e_contabiliza_pontuacao_base(monkeypatch: pyt
     assert _FakeInference.chamado_com == ("s1", "prog_default")
 
     _, update_data = fake_repo.update_by_id.call_args.args
-    assert update_data["status"] == ActivityStatus.aprovado
-    assert update_data["creditos_gerados"] == 4.0
-    assert update_data["aprovado_por"] == "uid-coord"
+    assert update_data["status"] == ActivityStatus.aprovado.value
+    assert update_data["validado_por"] == "uid-coord"
+    assert update_data["validado_em"] is not None
+    assert "aprovado_por" not in update_data
+    assert "aprovado_em" not in update_data
+    assert "creditos_gerados" not in update_data
+    assert "creditos_concedidos" not in update_data
 
 
-async def test_aprovar_com_creditos_concedidos_sobrescreve(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_aprovar_com_creditos_concedidos_preserva_creditos_gerados(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_repo = AsyncMock()
     fake_repo.get_by_id.return_value = _activity()
     fake_students = AsyncMock()
@@ -100,6 +124,12 @@ async def test_aprovar_com_creditos_concedidos_sobrescreve(monkeypatch: pytest.M
 
     assert resp.creditos_contabilizados == 2.5
     fake_repo.get_activity_type.assert_not_called()  # override pula o lookup do tipo
+
+    _, update_data = fake_repo.update_by_id.call_args.args
+    assert update_data["creditos_concedidos"] == 2.5
+    assert update_data["validado_por"] == "uid-coord"
+    assert "creditos_gerados" not in update_data
+    assert "aprovado_por" not in update_data
 
 
 async def test_aprovar_producao_gera_fato_para_o_motor(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -122,7 +152,7 @@ async def test_aprovar_producao_gera_fato_para_o_motor(monkeypatch: pytest.Monke
 # --- validate_activity (rejeitar / erros) -----------------------------------------------
 
 
-async def test_rejeitar_zera_creditos_e_nao_roda_motor(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_rejeitar_preserva_creditos_e_nao_roda_motor(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_repo = AsyncMock()
     fake_repo.get_by_id.return_value = _activity()
     monkeypatch.setattr(svc, "_repo", fake_repo)
@@ -141,7 +171,9 @@ async def test_rejeitar_zera_creditos_e_nao_roda_motor(monkeypatch: pytest.Monke
     assert _FakeInference.chamado_com is None
 
     _, update_data = fake_repo.update_by_id.call_args.args
-    assert update_data["creditos_gerados"] == 0.0
+    assert "creditos_gerados" not in update_data
+    assert "creditos_concedidos" not in update_data
+    assert update_data["validado_por"] == "uid-coord"
     assert update_data["observacao_coordenacao"] == "Comprovante inválido"
 
 

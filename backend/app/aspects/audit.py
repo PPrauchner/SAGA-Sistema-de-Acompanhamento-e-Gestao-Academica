@@ -34,13 +34,6 @@ SENSITIVE_FIELDS: frozenset[str] = frozenset(
 
 _REDACTED = "***"
 
-
-SENSITIVE_FIELDS: frozenset[str] = frozenset(
-    {"password", "senha", "token", "secret", "api_key", "private_key", "refresh_token"}
-)
-
-_REDACTED = "***"
-
 def _redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
     """Substitui valores de campos sensíveis por '***' em valor_entrada.
 
@@ -59,62 +52,6 @@ def _redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _serializar(value: Any) -> Any:
-    """Converte um argumento em uma forma persistível no Firestore.
-
-    Modelos Pydantic viram dict (sem campos de identidade sensíveis do usuário,
-    que já são capturados à parte); tipos nativos passam direto; o restante é
-    convertido para string para evitar valores não serializáveis.
-    """
-    if value is None or isinstance(value, (str, int, float, bool)):
-        return value
-    if isinstance(value, BaseModel):
-        return value.model_dump(mode="json")
-    if isinstance(value, dict):
-        return {str(key): _serializar(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_serializar(item) for item in value]
-    return str(value)
-
-
-def _build_valor_entrada(
-    func: Any,
-    args: tuple[Any, ...],
-    kwargs: dict[str, Any],
-) -> dict[str, Any]:
-    """Extrai os argumentos nomeados da chamada via inspect, ignorando self e o usuário."""
-    try:
-        bound = inspect.signature(func).bind_partial(*args, **kwargs)
-    except TypeError:
-        return {}
-
-    raw = {
-        name: _serializar(value)
-        for name, value in bound.arguments.items()
-        if name != "self" and not isinstance(value, CurrentUser)
-    }
-    return _redact_sensitive(raw)
-
-
-def _entity_name(func: Any) -> str | None:
-    """Deriva o nome da entidade a partir do módulo da função (ex: student_service → student)."""
-    module = inspect.getmodule(func)
-    if module is None:
-        return None
-
-    short = module.__name__.rsplit(".", 1)[-1]
-    for suffix in _ENTITY_SUFFIXES:
-        if short.endswith(suffix):
-            return short[: -len(suffix)]
-    return short
-
-
-def _build_recurso(
-    func: Any,
-    valor_entrada: dict[str, Any],
-    result: Any,
-) -> str | None:
-    """Monta o path soft do recurso afetado (ex: students/aluno_001)."""
 
 class FirebaseRepository:
     """Repositório Firestore para registros de auditoria."""
@@ -167,23 +104,6 @@ def _extrair_recurso_do_resultado(resultado: Any) -> str | None:
         return f"id/{resultado.id}"
     return None
 
-
-def _redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
-    """Substitui valores de campos sensíveis por '***' em valor_entrada.
-
-    Percorre o dict recursivamente para cobrir payloads aninhados. A denylist
-    centralizada é SENSITIVE_FIELDS; adicionar uma chave lá basta para protegê-la
-    em todos os endpoints auditados.
-    """
-    result: dict[str, Any] = {}
-    for key, value in data.items():
-        if key in SENSITIVE_FIELDS:
-            result[key] = _REDACTED
-        elif isinstance(value, dict):
-            result[key] = _redact_sensitive(value)
-        else:
-            result[key] = value
-    return result
 
 
 def _serializar_modelos(value: Any) -> Any:

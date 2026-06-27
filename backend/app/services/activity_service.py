@@ -163,7 +163,10 @@ class ActivityService:
                 continue
             tipo = types_map.get(activity.get("tipo_id"), {})
             if tipo.get("categoria") == categoria:
-                total += float(activity.get("creditos_gerados", 0))
+                creditos = activity.get("creditos_concedidos")
+                if creditos is None:
+                    creditos = activity.get("creditos_gerados", 0)
+                total += float(creditos)
         return total
 
     async def _resolve_student(self, user: CurrentUser) -> dict:
@@ -329,22 +332,25 @@ async def validate_activity(
     motor_executado = False
 
     update_data: dict = {
-        "status": novo_status,
+        "status": novo_status.value,
         "observacao_coordenacao": payload.observacao,
-        "aprovado_por": current_user.uid,
-        "aprovado_em": datetime.now(timezone.utc),
+        "validado_por": current_user.uid,
+        "validado_em": datetime.now(timezone.utc),
     }
 
     if aprovando:
         if payload.creditos_concedidos is not None:
             creditos_contabilizados = payload.creditos_concedidos
+            update_data["creditos_concedidos"] = payload.creditos_concedidos
         else:
-            tipo_id = activity.get("tipo_id", "")
-            tipo = await _repo.get_activity_type(tipo_id)
-            creditos_contabilizados = (
-                float(tipo["pontuacao_base"]) if tipo and "pontuacao_base" in tipo else 0.0
-            )
-        update_data["creditos_gerados"] = creditos_contabilizados
+            creditos_gerados = activity.get("creditos_gerados")
+            if creditos_gerados is None:
+                tipo_id = activity.get("tipo_id", "")
+                tipo = await _repo.get_activity_type(tipo_id)
+                creditos_gerados = (
+                    float(tipo["pontuacao_base"]) if tipo and "pontuacao_base" in tipo else 0.0
+                )
+            creditos_contabilizados = float(creditos_gerados)
 
         student_id: str = activity.get("student_id", "")
 
@@ -367,9 +373,6 @@ async def validate_activity(
                 )
             except Exception as exc:
                 logger.error("[S6b] Falha ao executar motor de inferência: %s", exc)
-    else:
-        update_data["creditos_gerados"] = 0.0
-
     await _repo.update_by_id(activity_id, update_data)
 
     acao_label = "aprovada" if aprovando else "rejeitada"

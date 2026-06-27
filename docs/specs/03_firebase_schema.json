@@ -177,19 +177,26 @@
           "usado_pelo_motor": "Fatos: dentro_periodo_curso, tem_comprovante, tipo_ativo, nao_excede_limite_categoria, producao_bibliografica_validada"
         },
         "extensions": {
-          "descricao": "Solicitações de prorrogação de prazo",
+          "descricao": "Contrato atual usado por GET/POST /api/v1/extensions na colecao raiz extensions/.",
           "documento_id": "auto-id",
           "campos": {
-            "aluno_id": "string",
+            "id": "string (auto-id Firestore)",
+            "tipo": "string ('prazo_defesa'|'prazo_qualificacao'|'trancamento'|'mudanca_nivel')",
+            "student_id": "string (referencia a students/)",
+            "aluno_id": "string (alias de compatibilidade para student_id)",
+            "requester_id": "string (uid de quem abriu a solicitacao)",
+            "programa_id": "string | null",
             "motivo": "string",
-            "plano_atualizado": "string (descrição ou link)",
+            "justificativa": "string (alias de compatibilidade para motivo)",
             "parecer_orientador": "string | null",
-            "semestres_solicitados": "int (default: 1)",
-            "status": "string ('pendente'|'aprovada'|'rejeitada')",
-            "prazo_novo": "Timestamp | null (calculado se aprovada)",
-            "aprovado_por": "string (uid) | null",
-            "aprovado_em": "Timestamp | null",
-            "criado_em": "Timestamp"
+            "parecer": "string | null (alias de compatibilidade para parecer_orientador)",
+            "status": "string ('pendente'|'em_analise'|'aprovada'|'rejeitada')",
+            "nova_data": "Timestamp (data solicitada)",
+            "prazo_novo": "Timestamp (alias de compatibilidade para nova_data)",
+            "data_atual": "Timestamp | null",
+            "prazo_atual": "Timestamp | null (alias de compatibilidade para data_atual)",
+            "created_at": "Timestamp",
+            "solicitacao": "Timestamp (alias de compatibilidade para created_at)"
           }
         },
         "inferred_status": {

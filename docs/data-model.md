@@ -580,9 +580,18 @@ erDiagram
     }
     extensions {
         string id PK
+        string tipo
+        string student_id
+        string aluno_id
+        string requester_id
+        string programa_id
         string status
-        int semestres_solicitados
+        timestamp nova_data
         timestamp prazo_novo
+        timestamp data_atual
+        timestamp prazo_atual
+        timestamp created_at
+        timestamp solicitacao
     }
     history {
         string id PK
@@ -623,20 +632,32 @@ erDiagram
 
 > Fonte **historizada canônica** da inferência. `students.situacao_inferida` é só o cache do último.
 
-### `extensions` 🔲 — sub-coleção de `students` — prorrogações
+### `extensions` 🔲 — coleção raiz — prorrogações
 
 | Campo | Tipo | Ref | Notas |
 |-------|------|-----|-------|
-| `aluno_id` | string | →`students` | |
+| `id` | string | | auto-id Firestore do documento em `extensions/` |
+| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`, `mudanca_nivel` |
+| `student_id` | string | →`students` | aluno da solicitação |
+| `aluno_id` | string | →`students` | alias de compatibilidade para `student_id` |
+| `requester_id` | string | →`users.uid` | uid de quem abriu a solicitação |
+| `programa_id` | string\|null | →`programs` | derivado do aluno |
 | `motivo` | string | | |
-| `plano_atualizado` | string | | descrição ou link |
+| `justificativa` | string | | alias de compatibilidade para `motivo` |
+| `plano_atualizado` | string\|null | | descrição ou link, quando aplicável |
 | `parecer_orientador` | string\|null | | |
-| `semestres_solicitados` | int | | default 1 |
-| `status` | string | | `pendente`\|`aprovada`\|`rejeitada` |
-| `prazo_novo` | timestamp\|null | | snapshot do novo prazo (se aprovada) — distinto de `students.prazo_final` vigente |
+| `parecer` | string\|null | | alias de compatibilidade para `parecer_orientador` |
+| `semestres_solicitados` | int\|null | | campo legado; o fluxo atual usa `nova_data` |
+| `status` | string | | `pendente`\|`em_analise`\|`aprovada`\|`rejeitada` |
+| `nova_data` | timestamp | | data solicitada pelo aluno/orientador |
+| `prazo_novo` | timestamp | | alias de compatibilidade para `nova_data`; snapshot do novo prazo pretendido |
+| `data_atual` | timestamp\|null | | prazo atual do aluno no momento da solicitação |
+| `prazo_atual` | timestamp\|null | | alias de compatibilidade para `data_atual` |
 | `aprovado_por` | string\|null | →`users.uid` | |
 | `aprovado_em` | timestamp\|null | | |
-| `criado_em` | timestamp | | |
+| `created_at` | timestamp | | data de criação |
+| `solicitacao` | timestamp | | alias de compatibilidade para `created_at` |
+| `criado_em` | timestamp\|null | | campo legado |
 
 > "Prorrogações usadas" = `calc` (contagem de `status="aprovada"`), comparado a
 > `programs.max_prorrogacoes` pelo motor. Sem contador persistido.
@@ -689,6 +710,9 @@ Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genéri
 | `programa_id` | string | →`programs` (soft) |
 
 > Índice composto: `(destinatario_id ASC, lida ASC, timestamp DESC)`.
+> Revisões de `registration_requests` não geram notificação in-app para o solicitante
+> público, pois antes da aprovação/rejeição ele ainda não possui `users.uid`; comunicação
+> ao e-mail informado deve ocorrer por mecanismo externo ao `notifications/`.
 
 ---
 
