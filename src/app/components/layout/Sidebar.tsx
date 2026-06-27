@@ -1,5 +1,6 @@
 import React from "react";
 import { useApp, UserRole, PageId } from "../../context/AppContext";
+import { usePendingRequests } from "@/hooks/usePendingRequests";
 import {
   LayoutDashboard, Users, UserCheck, FileText, BookOpen,
   FlaskConical, CheckSquare, Clock, BarChart3, Brain,
@@ -23,10 +24,9 @@ const NAV_ITEMS: NavItem[] = [
   { id: "atividades", label: "Atividades Creditáveis", icon: <BookOpen size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
   { id: "producoes", label: "Produções", icon: <FlaskConical size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
   { id: "checklist", label: "Checklist", icon: <CheckSquare size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
-  { id: "solicitacoes", label: "Solicita��es", icon: <Clock size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
+  { id: "solicitacoes", label: "Solicitações", icon: <Clock size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
   { id: "relatorios", label: "Relatórios", icon: <BarChart3 size={18} />, roles: ["orientador", "coordenacao"] },
   { id: "inferencia", label: "Inferência Acadêmica", icon: <Brain size={18} />, roles: ["orientador", "coordenacao"] },
-  { id: "transferencias", label: "Transferências", icon: <ArrowRightLeft size={18} />, roles: ["orientador", "coordenacao"] },
   { id: "registration-requests", label: "Cadastros Pendentes", icon: <UserCheck size={18} />, roles: ["coordenacao"] },
   { id: "auditoria", label: "Auditoria", icon: <ShieldCheck size={18} />, roles: ["coordenacao"] },
   { id: "configuracoes", label: "Configurações", icon: <Settings size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
@@ -46,6 +46,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
 
 function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
   const { activeView, currentUser, currentPage, setCurrentPage, logout, notificationCount } = useApp();
+  const { count: pendingCount } = usePendingRequests();
 
   if (!currentUser) return null;
 
