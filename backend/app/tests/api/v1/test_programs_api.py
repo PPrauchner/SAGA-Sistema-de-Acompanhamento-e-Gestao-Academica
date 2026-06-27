@@ -24,27 +24,6 @@ from backend.app.services.program_service import ProgramService
 client = TestClient(app)
 
 
-def test_list_programs_success():
-    """Deve retornar 200 e a lista de programas com id e nome."""
-    mock_service = AsyncMock()
-    mock_service.list_programs.return_value = [
-        {"id": "prog_default", "nome": "PPGCC", "creditos_total_min": 24},
-    ]
-
-    from backend.app.core.auth import CurrentUser
-    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
-        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
-    )
-    app.dependency_overrides[ProgramService] = lambda: mock_service
-
-    response = client.get("/api/v1/programs")
-
-    app.dependency_overrides = {}
-
-    assert response.status_code == 200
-    assert response.json() == [{"id": "prog_default", "nome": "PPGCC"}]
-
-
 def test_get_config_success():
     """Deve retornar 200 e os dados de configuração."""
     # Setup mock service
@@ -67,6 +46,29 @@ def test_get_config_success():
     # Assert
     assert response.status_code == 200
     assert response.json()["creditos_total_min"] == 24
+
+
+def test_list_programs_success():
+    """Deve retornar os programas cadastrados."""
+    mock_service = AsyncMock()
+    mock_service.list_programs.return_value = [
+        {"id": "prog_mestrado_cc", "nome": "Mestrado em Ciência da Computação"},
+    ]
+
+    from backend.app.core.auth import CurrentUser
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
+    )
+    app.dependency_overrides[ProgramService] = lambda: mock_service
+
+    response = client.get("/api/v1/programs")
+
+    app.dependency_overrides = {}
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": "prog_mestrado_cc", "nome": "Mestrado em Ciência da Computação"},
+    ]
 
 
 def test_update_config_success():

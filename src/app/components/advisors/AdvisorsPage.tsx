@@ -29,7 +29,7 @@ const fieldStyle = {
 };
 
 export function AdvisorsPage() {
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
@@ -45,12 +45,12 @@ export function AdvisorsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [advisorList, programList] = await Promise.all([
+      const [advisorsData, programsData] = await Promise.all([
         getAdvisors(authToken),
-        programsApi.listPrograms(authToken),
+        programsApi.getPrograms(authToken),
       ]);
-      setAdvisors(advisorList);
-      setPrograms(programList);
+      setAdvisors(advisorsData);
+      setPrograms(programsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar orientadores");
     } finally {
@@ -96,6 +96,10 @@ export function AdvisorsPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!token) return;
+    if (!editingAdvisor && !form.programa_id) {
+      setError("Selecione um programa para cadastrar o orientador");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -110,6 +114,7 @@ export function AdvisorsPage() {
       } else {
         const result = await createAdvisor(token, form);
         setInviteToken(result.invite_token);
+        setShowForm(false);
       }
       setForm(emptyForm);
       setEditingAdvisor(null);
@@ -158,6 +163,7 @@ export function AdvisorsPage() {
           {filtered.map((advisor) => {
             const usage = advisor.limite_orientandos > 0 ? advisor.orientandos_ativos / advisor.limite_orientandos : 0;
             const statusColor = usage >= 1 ? "#dc2626" : usage >= 0.8 ? "#D4A017" : "#1F8A70";
+            const isPendingInvite = !advisor.uid;
             return (
               <div key={advisor.id} className="rounded-2xl p-5 transition-all" style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                 <div className="flex items-start gap-4 mb-4">
@@ -167,7 +173,14 @@ export function AdvisorsPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>{advisor.nome}</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>{advisor.nome}</p>
+                          {role === "coordenacao" && isPendingInvite && (
+                            <span className="px-2 py-0.5 rounded-lg" style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 700 }}>
+                              Convite Pendente
+                            </span>
+                          )}
+                        </div>
                         <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{advisor.departamento}</p>
                         <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{advisor.email}</p>
                       </div>
@@ -208,7 +221,7 @@ export function AdvisorsPage() {
               <Field label="Nome Completo" className="col-span-2"><input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="E-mail"><input required disabled={Boolean(editingAdvisor)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Departamento"><input required value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
-              <Field label="Programa"><select required disabled={Boolean(editingAdvisor)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione...</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.nome}</option>)}</select></Field>
+              <Field label="Programa"><select required disabled={Boolean(editingAdvisor)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione um programa</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.nome ?? program.id}</option>)}</select></Field>
               <Field label="Limite"><input required type="number" min={1} value={form.limite_orientandos} onChange={(e) => setForm({ ...form, limite_orientandos: Number(e.target.value) })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Lattes URL" className="col-span-2"><input value={form.lattes ?? ""} onChange={(e) => setForm({ ...form, lattes: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
             </div>

@@ -105,6 +105,10 @@ def _advisor_user() -> CurrentUser:
     return CurrentUser(uid="uid-advisor", role="orientador", programa_id="prog", email="a@x.com")
 
 
+def _student_user() -> CurrentUser:
+    return CurrentUser(uid="uid-student", role="aluno", programa_id="prog", email="s@x.com")
+
+
 @pytest.fixture(autouse=True)
 def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeStudentRepository.store = {}
@@ -204,6 +208,46 @@ async def test_create_student_usa_fallback_quando_duracao_meses_ausente() -> Non
     )
 
 
+async def test_orientador_cria_aluno_no_proprio_programa() -> None:
+    service = StudentService(auth_service=_FakeAuthService())
+
+    await service.create_student(
+        StudentCreateRequest(
+            nome="Aluno do orientador",
+            email="orientando@x.com",
+            matricula="2026003",
+            orientador_id="advisor1",
+            nivel="mestrado",
+            data_ingresso=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            programa_id="prog",
+        ),
+        _advisor_user(),
+    )
+
+    assert _FakeStudentRepository.store["student1"]["programa_id"] == "prog"
+
+
+async def test_orientador_nao_cria_aluno_em_outro_programa() -> None:
+    service = StudentService(auth_service=_FakeAuthService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.create_student(
+            StudentCreateRequest(
+                nome="Aluno bloqueado",
+                email="bloqueado@x.com",
+                matricula="2026004",
+                orientador_id="advisor1",
+                nivel="mestrado",
+                data_ingresso=datetime(2026, 1, 1, tzinfo=timezone.utc),
+                programa_id="outro_programa",
+            ),
+            _advisor_user(),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert _FakeStudentRepository.store == {}
+
+
 async def test_list_students_orientador_filtra_por_auto_id_do_advisor() -> None:
     _FakeAdvisorRepository.store = {
         "advisor1": {"uid": "uid-advisor", "nome": "Orientador"},
@@ -287,6 +331,31 @@ async def test_list_advisors_orientador_filtra_por_programa() -> None:
     service = AdvisorService(auth_service=_FakeAuthService())
 
     result = await service.list_advisors(_advisor_user())
+
+    assert [advisor["id"] for advisor in result] == ["advisor1"]
+
+
+async def test_list_advisors_coordenacao_inclui_convites_pendentes() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador", "programa_id": "prog"},
+        "advisor2": {"uid": None, "nome": "Pendente", "programa_id": "prog"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.list_advisors(_coord())
+
+    assert [advisor["id"] for advisor in result] == ["advisor1", "advisor2"]
+    assert result[1]["uid"] == ""
+
+
+async def test_list_advisors_nao_coordenacao_oculta_convites_pendentes() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador", "programa_id": "prog"},
+        "advisor2": {"uid": None, "nome": "Pendente", "programa_id": "prog"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.list_advisors(_student_user())
 
     assert [advisor["id"] for advisor in result] == ["advisor1"]
 

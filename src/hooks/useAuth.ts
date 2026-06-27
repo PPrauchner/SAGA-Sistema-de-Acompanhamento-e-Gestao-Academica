@@ -54,6 +54,7 @@ interface UseAuthResult {
   logout: () => Promise<void>;
   retryProfile: () => Promise<void>;
   loading: boolean;
+  profileLoading: boolean;
 }
 
 export function useAuth(): UseAuthResult {
@@ -62,6 +63,7 @@ export function useAuth(): UseAuthResult {
   const [profileError, setProfileError] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   /**
    * Carrega o perfil via GET /auth/me com o ID token dado.
@@ -75,6 +77,7 @@ export function useAuth(): UseAuthResult {
    *   usuário permanece na app em estado degradado, com retry.
    */
   const loadProfile = useCallback(async (idToken: string): Promise<void> => {
+    setProfileLoading(true);
     try {
       setProfile(await getMe(idToken));
       setProfileError(false);
@@ -84,6 +87,8 @@ export function useAuth(): UseAuthResult {
         return;
       }
       setProfileError(true);
+    } finally {
+      setProfileLoading(false);
     }
   }, []);
 
@@ -94,15 +99,16 @@ export function useAuth(): UseAuthResult {
           const idToken = await user.getIdToken();
           setCurrentUser(user);
           setToken(idToken);
+          setLoading(false);
           await loadProfile(idToken);
         } else {
           setCurrentUser(null);
           setToken(null);
           setProfile(null);
           setProfileError(false);
+          setLoading(false);
         }
-      } finally {
-        // Garante que o gate de loading sempre resolva, mesmo se getMe falhar.
+      } catch (e) {
         setLoading(false);
       }
     });
@@ -166,5 +172,6 @@ export function useAuth(): UseAuthResult {
     logout,
     retryProfile,
     loading,
+    profileLoading,
   };
 }

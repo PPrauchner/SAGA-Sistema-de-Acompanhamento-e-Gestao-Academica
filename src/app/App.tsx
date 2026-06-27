@@ -20,7 +20,8 @@ const WorkPlanPage = lazy(() => import("./components/workplan/WorkPlanPage").the
 const ActivitiesPage = lazy(() => import("./components/activities/ActivitiesPage").then((m) => ({ default: m.ActivitiesPage })));
 const ProductionsPage = lazy(() => import("./components/productions/ProductionsPage").then((m) => ({ default: m.ProductionsPage })));
 const ChecklistPage = lazy(() => import("./components/checklist/ChecklistPage").then((m) => ({ default: m.ChecklistPage })));
-const ExtensionsPage = lazy(() => import("./components/extensions/ExtensionsPage").then((m) => ({ default: m.ExtensionsPage })));
+const SolicitacoesPage = lazy(() => import("./components/solicitacoes/SolicitacoesPage").then((m) => ({ default: m.SolicitacoesPage })));
+const RegistrationRequestsPage = lazy(() => import("./components/registration-requests/RegistrationRequestsPage").then((m) => ({ default: m.RegistrationRequestsPage })));
 const TransfersPage = lazy(() => import("./components/transfers/TransfersPage").then((m) => ({ default: m.TransfersPage })));
 const ReportsPage = lazy(() => import("./components/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const InferencePage = lazy(() => import("./components/inference/InferencePage").then((m) => ({ default: m.InferencePage })));
@@ -82,7 +83,9 @@ function PageRouter() {
     case "atividades": return <ActivitiesPage />;
     case "producoes": return <ProductionsPage />;
     case "checklist": return <ChecklistPage />;
-    case "prorrogacoes": return <ExtensionsPage />;
+    case "solicitacoes":
+    case "prorrogacoes": return <SolicitacoesPage />;
+    case "registration-requests": return <RegistrationRequestsPage />;
     case "transferencias": return <TransfersPage />;
     case "relatorios": return <ReportsPage />;
     case "inferencia": return <InferencePage />;
@@ -114,8 +117,25 @@ function FullPageLoading() {
   );
 }
 
+function PageLoadingSkeleton() {
+  return (
+    <div className="p-2 md:p-0 animate-pulse">
+      <div className="h-8 rounded w-1/4 mb-6" style={{ background: "var(--border)" }}></div>
+      <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <div className="h-6 rounded w-1/3 mb-4" style={{ background: "var(--border)" }}></div>
+        <div className="h-4 rounded w-1/2 mb-8" style={{ background: "var(--border)" }}></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl" style={{ background: "var(--border)" }}></div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AppContent() {
-  const { currentPage, profileUnavailable } = useApp();
+  const { currentPage, profileUnavailable, profileLoading } = useApp();
 
   // Sessão válida, mas perfil indisponível (GET /auth/me falhou): estado degradado
   // com retry. Precede a checagem de página de auth para não cair no login mesmo que
@@ -136,9 +156,13 @@ function AppContent() {
 
   return (
     <AppLayout>
-      <Suspense fallback={<PageLoading />}>
-        <PageRouter />
-      </Suspense>
+      {profileLoading ? (
+        <PageLoadingSkeleton />
+      ) : (
+        <Suspense fallback={<PageLoading />}>
+          <PageRouter />
+        </Suspense>
+      )}
     </AppLayout>
   );
 }

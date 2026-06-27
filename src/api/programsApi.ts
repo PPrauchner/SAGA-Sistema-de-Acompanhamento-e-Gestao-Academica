@@ -2,18 +2,22 @@
  * API client for program configurations and vehicle levels.
  */
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+import { API_URL } from "@/api/authApi";
+
+const API_BASE_URL = `${API_URL}/api/v1`;
 
 export interface Program {
   id: string;
-  nome: string;
+  nome?: string;
+  [key: string]: unknown;
 }
 
 export const programsApi = {
-  listPrograms: async (token: string): Promise<Program[]> => {
+  getPrograms: async (token: string): Promise<Program[]> => {
     const response = await fetch(`${API_BASE_URL}/programs`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
+
     if (!response.ok) throw new Error('Failed to fetch programs');
     return response.json();
   },

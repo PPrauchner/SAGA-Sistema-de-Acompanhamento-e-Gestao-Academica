@@ -22,17 +22,13 @@ router = APIRouter(prefix="/programs", tags=["programs"])
 
 
 @router.get("")
-@requires_role("coordenacao")
+@requires_role("coordenacao", "orientador", "aluno")
 async def list_programs(
     user: CurrentUser = Depends(get_current_user),
-    service: ProgramService = Depends(ProgramService)
+    service: ProgramService = Depends(ProgramService),
 ):
-    """Lista os programas cadastrados (id e nome) para seleção em formulários."""
-    programs = await service.list_programs()
-    return [
-        {"id": program["id"], "nome": program.get("nome", "")}
-        for program in programs
-    ]
+    """Lista os programas cadastrados para seleção nos formulários."""
+    return await service.list_programs()
 
 
 @router.get("/config")
