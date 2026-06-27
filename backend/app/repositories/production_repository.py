@@ -10,6 +10,8 @@ Responsabilidades:
   (titulo, veiculo_id, tipo_producao, autores, pontuacao_calculada, nivel, programa_id). O
   nivel é resolvido por junção com programs/{programa_id}/vehicle_levels/ via veiculo_id —
   productions/ não persiste nivel (data-model §3); veículos sem classificação caem no padrão SC.
+- list_productions_by_program(programa_id): mesma normalização restrita a um programa via
+  consulta filtrada no Firestore, sem ler a coleção inteira.
 
 Restrição: sem lógica de negócio — apenas leitura/escrita e mapeamento de campos. A junção com
 activities/ (quem reivindica crédito por produção) e a agregação por aluno/orientador são
@@ -70,6 +72,23 @@ class ProductionRepository(FirebaseRepository):
             if production.get("programa_id")
         }
         niveis_por_veiculo = await self._vehicle_levels(program_ids)
+        return [
+            _normalize_production(production, niveis_por_veiculo)
+            for production in productions
+        ]
+
+    async def list_productions_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        """Lista produções normalizadas de um programa via consulta filtrada no Firestore.
+
+        Args:
+            programa_id: Programa cujas produções devem ser retornadas.
+
+        Returns:
+            Produções do programa normalizadas para os relatórios, com o nivel resolvido por
+            junção com vehicle_levels/ — sem ler a coleção inteira e filtrar em memória.
+        """
+        productions = await self.query(filters=[("programa_id", "==", programa_id)])
+        niveis_por_veiculo = await self._vehicle_levels({programa_id})
         return [
             _normalize_production(production, niveis_por_veiculo)
             for production in productions
