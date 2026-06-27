@@ -3,12 +3,13 @@ Camada de serviço — gerencia as regras de negócio e o fluxo de prorrogaçõe
 """
 
 from __future__ import annotations
+
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import HTTPException, status
 from google.cloud import firestore
-from google.cloud.firestore_v1 import AsyncTransaction
 
 from backend.app.models.extension import (
     ExtensionCreateRequest,
@@ -40,6 +41,10 @@ class ExtensionService:
     def __init__(self, repository: Optional[ExtensionRepository] = None) -> None:
         self._repo = repository if repository is not None else ExtensionRepository()
 
+    # ------------------------------------------------------------------
+    # Helpers internos
+    # ------------------------------------------------------------------
+
     async def _check_limit(self, student_id: str, program_config: dict) -> None:
         max_allowed: int = program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES)
         approved_query = (
@@ -65,6 +70,10 @@ class ExtensionService:
                 detail="Ja existe uma solicitacao pendente para este aluno.",
             )
 
+    # ------------------------------------------------------------------
+    # Casos de uso
+    # ------------------------------------------------------------------
+
     async def create_extension(
         self,
         student_id: str,
@@ -73,7 +82,6 @@ class ExtensionService:
     ) -> ExtensionResponse:
         program_config = await self._repo.get_program_config()
 
-        # M3: valida semestres contra teto dinâmico do programa
         max_semestres: int = program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES)
         if payload.semestres_solicitados > max_semestres:
             raise HTTPException(
@@ -107,16 +115,13 @@ class ExtensionService:
         parecer: str,
         orientador_uid: str,
     ) -> ExtensionResponse:
-        # C5: busca student_data ANTES de referenciá-lo
         student_snap = await self._repo.student_ref(student_id).get()
         if not student_snap.exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
 
         student_data: dict = student_snap.to_dict()
-
         advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
 
-        # C5: compara contra o campo correto (orientador_uid → doc id resolvido via M1)
         if student_data.get("orientador_id") != advisor_doc_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -147,23 +152,26 @@ class ExtensionService:
         payload: DecisionRequest,
         coordinator_uid: str,
     ) -> ExtensionResponse:
-        ext_ref = self._repo.extensions_col(student_id).document(extension_id)
-        student_ref = self._repo.student_ref(student_id)
+        # Resolve referências síncronas reais para uso dentro da transação.
+        ext_ref_sync     = self._repo.extensions_col(student_id).document(extension_id).sync_ref
+        student_ref_sync = self._repo.student_ref(student_id).sync_ref
 
         program_config = await self._repo.get_program_config()
         duracao_meses: int = program_config.get("duracao_prorrogacao_meses", DEFAULT_DURACAO_MESES)
 
-        @firestore.async_transactional
-        async def _run_transaction(transaction: AsyncTransaction) -> dict:
-            ext_snap = await transaction.get(ext_ref)
-            student_snap = await transaction.get(student_ref)
+        # @firestore.transactional decora função SÍNCRONA — correto para Admin SDK.
+        # Todas as referências usadas dentro são DocumentReference síncronos.
+        @firestore.transactional
+        def _run_transaction(transaction) -> dict:
+            ext_snap     = transaction.get(ext_ref_sync)
+            student_snap = transaction.get(student_ref_sync)
 
             if not ext_snap.exists:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogacao nao encontrada.")
             if not student_snap.exists:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
 
-            ext_data: dict = ext_snap.to_dict()
+            ext_data:     dict = ext_snap.to_dict()
             student_data: dict = student_snap.to_dict()
 
             if ext_data.get("status") != ExtensionStatus.PENDENTE.value:
@@ -188,28 +196,30 @@ class ExtensionService:
                 prazo_novo = prazo_anterior + delta
 
                 ext_updates = {
-                    "status": ExtensionStatus.APROVADA.value,
+                    "status":       ExtensionStatus.APROVADA.value,
                     "aprovado_por": coordinator_uid,
-                    "aprovado_em": now,
-                    "prazo_novo": prazo_novo,
+                    "aprovado_em":  now,
+                    "prazo_novo":   prazo_novo,
                 }
                 student_updates = {
                     "situacao_registrada": "em_prorrogacao",
-                    "prazo_final": prazo_novo,
+                    "prazo_final":         prazo_novo,
                 }
 
-                transaction.update(ext_ref, ext_updates)
-                transaction.update(student_ref, student_updates)
+                # Usa referências síncronas reais — não proxies.
+                transaction.update(ext_ref_sync,     ext_updates)
+                transaction.update(student_ref_sync, student_updates)
                 ext_data.update(ext_updates)
             else:
                 ext_updates = {"status": ExtensionStatus.REJEITADA.value}
-                transaction.update(ext_ref, ext_updates)
+                transaction.update(ext_ref_sync, ext_updates)
                 ext_data.update(ext_updates)
 
             return ext_data
 
-        transaction = self._repo.transaction()
-        final_data = await _run_transaction(transaction)
+        # transaction() devolve o cliente síncrono; .transaction() abre a transação.
+        db = self._repo.transaction()
+        final_data = await asyncio.to_thread(_run_transaction, db.transaction())
 
         return _to_response(extension_id, final_data)
 
@@ -222,23 +232,31 @@ class ExtensionService:
         return [_to_response(d.id, d.to_dict()) for d in docs]
 
     async def list_pending_for_advisor(self, orientador_uid: str) -> list[ExtensionResponse]:
-        # C6: variáveis definidas antes de serem usadas; fluxo corrigido
         advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
         if advisor_doc_id is None:
             return []
 
-        students_query = (
-            self._repo._db.collection("students")
-            .where("orientador_id", "==", advisor_doc_id)
-        )
+        # _db é o cliente síncrono — executa a query em to_thread e itera
+        # de forma normal (não async for), pois stream() é síncrono.
+        def _fetch_students() -> list:
+            return list(
+                self._repo._db
+                .collection("students")
+                .where("orientador_id", "==", advisor_doc_id)
+                .stream()
+            )
+
+        student_docs = await asyncio.to_thread(_fetch_students)
 
         results: list[ExtensionResponse] = []
-        async for student_doc in students_query.stream():
-            pending = (
+        for student_doc in student_docs:
+            pending_docs = [
+                d async for d in
                 self._repo.extensions_col(student_doc.id)
                 .where("status", "==", ExtensionStatus.PENDENTE.value)
-            )
-            async for ext_doc in pending.stream():
+                .stream()
+            ]
+            for ext_doc in pending_docs:
                 results.append(_to_response(ext_doc.id, ext_doc.to_dict()))
 
         return results
@@ -249,4 +267,4 @@ class ExtensionService:
             .where("status", "==", ExtensionStatus.PENDENTE.value)
             .order_by("criado_em", direction=firestore.Query.ASCENDING)
         )
-        return [_to_response(d.id, d.to_dict()) async for d in query.stream()] 
+        return [_to_response(d.id, d.to_dict()) async for d in query.stream()]
