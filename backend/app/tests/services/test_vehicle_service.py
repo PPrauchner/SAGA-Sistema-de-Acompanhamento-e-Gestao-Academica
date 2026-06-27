@@ -7,13 +7,7 @@ Responsabilidades:
 - Garantir que list_vehicles devolve as métricas (None quando ausentes).
 """
 
-import os
 from unittest.mock import AsyncMock
-
-# Configurar variáveis de ambiente dummy para satisfazer pydantic-settings
-os.environ["FIREBASE_PROJECT_ID"] = "test-project"
-os.environ["FIREBASE_PRIVATE_KEY"] = "test-key"
-os.environ["FIREBASE_CLIENT_EMAIL"] = "test-email"
 
 import pytest
 from fastapi import HTTPException
@@ -39,7 +33,6 @@ def service():
     return svc
 
 
-@pytest.mark.anyio
 async def test_create_revista_persiste_metricas(service, user):
     """Deve gravar indice_h, percentil_scopus e jcr no doc do veículo revista."""
     service._vehicles.create.return_value = "vec_1"
@@ -63,7 +56,6 @@ async def test_create_revista_persiste_metricas(service, user):
     assert saved["jcr"] == 3.5
 
 
-@pytest.mark.anyio
 async def test_create_evento_com_jcr_rejeitado(service, user):
     """Deve recusar (422) jcr em veículo do tipo 'evento' e não gravar nada."""
     with pytest.raises(HTTPException) as exc:
@@ -76,7 +68,6 @@ async def test_create_evento_com_jcr_rejeitado(service, user):
     service._vehicles.create.assert_not_called()
 
 
-@pytest.mark.anyio
 async def test_create_evento_sem_jcr_permitido(service, user):
     """Deve aceitar evento com indice_h/percentil_scopus mas sem jcr."""
     service._vehicles.create.return_value = "vec_2"
@@ -92,7 +83,6 @@ async def test_create_evento_sem_jcr_permitido(service, user):
     assert saved["jcr"] is None
 
 
-@pytest.mark.anyio
 async def test_list_vehicles_inclui_metricas(service, user):
     """Deve devolver as métricas; ausentes viram None."""
     service._vehicles.list_all.return_value = [
