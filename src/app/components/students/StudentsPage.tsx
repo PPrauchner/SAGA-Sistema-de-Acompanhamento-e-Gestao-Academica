@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { getAdvisors, type Advisor } from "@/api/advisorsApi";
+import { programsApi, type Program } from "@/api/programsApi";
 import {
   createStudent,
   getStudents,
@@ -18,7 +19,6 @@ import {
   type StudentStatus,
   updateStudent,
 } from "@/api/studentsApi";
-import { programsApi, type Program } from "@/api/programsApi";
 import { useApp } from "../../context/AppContext";
 
 const STATUS_MAP: Record<

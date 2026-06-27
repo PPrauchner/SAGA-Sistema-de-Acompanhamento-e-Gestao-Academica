@@ -2,6 +2,7 @@
 Testes para os endpoints da API de Programas.
 
 Responsabilidades:
+- Verificar o endpoint GET de listagem de programas.
 - Verificar os endpoints GET e PUT para a configuração do programa.
 - Garantir a integração correta com o ProgramService.
 """

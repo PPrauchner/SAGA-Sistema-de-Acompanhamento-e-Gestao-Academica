@@ -73,7 +73,7 @@ export function AdvisorsPage() {
 
   function openCreateForm(): void {
     setEditingAdvisor(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, programa_id: programs[0]?.id ?? "" });
     setInviteToken(null);
     setShowForm(true);
   }

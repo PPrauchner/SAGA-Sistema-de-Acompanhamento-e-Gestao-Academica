@@ -2,6 +2,7 @@
 Router para os endpoints de configuração do programa acadêmico.
 
 Responsabilidades:
+- GET /programs: Listar programas cadastrados (id e nome) para seleção em formulários.
 - GET /config: Recuperar a configuração atual do programa.
 - PUT /config: Atualizar a configuração do programa (somente coordenação).
 - Aplicar aspectos AOP: @requires_role, @audit_operation, @track_history.
