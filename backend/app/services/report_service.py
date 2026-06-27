@@ -286,11 +286,7 @@ class ReportService:
             uid: uid do solicitante, usado para resolver o próprio registro de
                 discente (aluno) ou de orientador.
         """
-        students = [
-            student
-            for student in await self._students.list_all()
-            if student.get("programa_id") == programa_id
-        ]
+        students = await self._students.list_by_program(programa_id)
         if role == "aluno":
             students = self._scope_to_own_student(students, uid)
         advisors = await self._advisors.list_all()
@@ -298,11 +294,7 @@ class ReportService:
         own_advisor_id = (
             self._resolve_advisor_id(advisors, uid) if role == "orientador" else None
         )
-        productions = [
-            producao
-            for producao in await self._productions.list_productions()
-            if producao.get("programa_id") == programa_id
-        ]
+        productions = await self._productions.list_productions_by_program(programa_id)
         producao_por_id = {producao["id"]: producao for producao in productions}
 
         activities_por_aluno = await asyncio.gather(
