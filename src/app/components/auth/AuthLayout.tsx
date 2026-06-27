@@ -8,13 +8,9 @@ interface AuthLayoutProps {
   /** Which step indicator to highlight (1-based). undefined = no steps */
   step?: number;
   totalSteps?: number;
+  /** Disable scroll on the right panel — use only on LoginPage where content fits the viewport */
+  noScroll?: boolean;
 }
-
-const PROGRAM_STATS = [
-  { value: "450+", label: "Alunos Ativos" },
-  { value: "85", label: "Orientadores" },
-  { value: "12", label: "Programas" },
-];
 
 const SECURITY_BADGES = [
   { icon: <Shield size={13} />, label: "Conexão segura HTTPS" },
@@ -22,7 +18,7 @@ const SECURITY_BADGES = [
   { icon: <Users size={13} />, label: "Acesso por perfil" },
 ];
 
-export function AuthLayout({ children, step, totalSteps }: AuthLayoutProps) {
+export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutProps) {
   return (
     <div className="min-h-screen w-full flex" style={{ background: "#f0f4fa" }}>
 
@@ -31,7 +27,7 @@ export function AuthLayout({ children, step, totalSteps }: AuthLayoutProps) {
         className="hidden lg:flex flex-col relative overflow-hidden"
         style={{
           width: "45%",
-          minHeight: "100vh",
+          ...(noScroll ? { height: "100vh" } : { minHeight: "100vh" }),
           background: "linear-gradient(160deg, #0a1f3d 0%, #0d2d5e 35%, #123C7A 70%, #1a4f9a 100%)",
         }}
       >
@@ -53,7 +49,7 @@ export function AuthLayout({ children, step, totalSteps }: AuthLayoutProps) {
         <div className="relative z-10 flex flex-col h-full px-10 py-10">
 
           {/* Logo */}
-          <div className="flex items-center gap-3 mb-10">
+          <div className="flex items-center gap-3 mb-6">
             <div className="flex items-center justify-center rounded-2xl flex-shrink-0"
               style={{ width: 46, height: 46, background: "#D4A017", boxShadow: "0 4px 14px rgba(212,160,23,0.35)" }}>
               <GraduationCap size={24} color="#fff" />
@@ -69,40 +65,28 @@ export function AuthLayout({ children, step, totalSteps }: AuthLayoutProps) {
           {/* Main headline */}
           <div className="flex-1 flex flex-col justify-center">
             <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "12px", fontWeight: 600,
-              textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "12px" }}>
+              textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: "10px" }}>
               Bem-vindo(a) ao
             </p>
             <h1 style={{ color: "#fff", fontSize: "30px", fontWeight: 800, lineHeight: 1.25,
-              marginBottom: "10px" }}>
+              marginBottom: "8px" }}>
               Sistema de Acompanhamento<br />
               <span style={{ color: "#D4A017" }}>Acadêmico</span> da<br />
               Pós-Graduação
             </h1>
             <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "14px", lineHeight: 1.65,
-              maxWidth: 340, marginBottom: "32px" }}>
+              maxWidth: 340, marginBottom: "16px" }}>
               Gerencie alunos, orientadores e produções científicas
               com inteligência e eficiência.
             </p>
 
             {/* Illustration */}
-            <div style={{ marginBottom: "28px", opacity: 0.92 }}>
+            <div style={{ marginBottom: "16px", opacity: 0.92 }}>
               <AuthIllustration />
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-3 mb-8">
-              {PROGRAM_STATS.map((stat) => (
-                <div key={stat.label} className="rounded-2xl p-3 text-center"
-                  style={{ background: "rgba(255,255,255,0.07)", backdropFilter: "blur(6px)",
-                    border: "1px solid rgba(255,255,255,0.1)" }}>
-                  <p style={{ color: "#D4A017", fontSize: "22px", fontWeight: 800, lineHeight: 1 }}>{stat.value}</p>
-                  <p style={{ color: "rgba(255,255,255,0.55)", fontSize: "10px", marginTop: "3px" }}>{stat.label}</p>
-                </div>
-              ))}
-            </div>
-
             {/* Institution name */}
-            <div className="rounded-2xl px-4 py-3 mb-6"
+            <div className="rounded-2xl px-4 py-3 mb-3"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
               <div className="flex items-center gap-2 mb-1">
                 <BookOpen size={13} style={{ color: "#D4A017", flexShrink: 0 }} />
@@ -113,7 +97,7 @@ export function AuthLayout({ children, step, totalSteps }: AuthLayoutProps) {
                 PPGCC — Ciência da Computação
               </p>
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", marginTop: "2px" }}>
-                Universidade Federal de Xinguara
+                Universidade Federal do Pampa — Campus de Alegrete
               </p>
             </div>
           </div>
@@ -129,14 +113,18 @@ export function AuthLayout({ children, step, totalSteps }: AuthLayoutProps) {
           </div>
 
           <p style={{ color: "rgba(255,255,255,0.25)", fontSize: "10px", marginTop: "16px" }}>
-            © {new Date().getFullYear()} Universidade Federal de Xinguara — SAGA v2.4
+            © {new Date().getFullYear()} Universidade Federal do Pampa — SAGA v2.4
           </p>
         </div>
       </div>
 
       {/* ── RIGHT PANEL ────────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col items-center justify-center p-6 lg:p-10 overflow-y-auto"
-        style={{ minHeight: "100vh" }}>
+      <div
+        className="flex flex-1 flex-col items-center justify-center p-6 lg:p-10"
+        style={noScroll
+          ? { height: "100vh", overflowY: "hidden" }
+          : { minHeight: "100vh", overflowY: "auto" }
+        }>
 
         {/* Mobile-only logo */}
         <div className="flex lg:hidden items-center gap-3 mb-8">

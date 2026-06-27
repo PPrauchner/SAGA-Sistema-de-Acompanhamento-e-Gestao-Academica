@@ -55,6 +55,7 @@ interface AppContextType {
   isMultiRoleAdvisor: boolean;
   retryProfile: () => Promise<void>;
   login: (email: string, senha: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   setActiveView: (view: ActiveView) => void;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
@@ -73,6 +74,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     profileError,
     token,
     login,
+    loginWithGoogle,
     logout: signOut,
     loading,
     retryProfile,
@@ -172,6 +174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         isMultiRoleAdvisor,
         retryProfile,
         login,
+        loginWithGoogle,
         setActiveView,
         setCurrentPage,
         setSelectedStudentId,
