@@ -35,6 +35,13 @@ class _FakeStudentRepository:
     async def list_all(self) -> list[dict[str, Any]]:
         return [dict(student) for student in self._students]
 
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(student)
+            for student in self._students
+            if student.get("programa_id") == programa_id
+        ]
+
     async def list_subcollection(self, doc_id: str, subcollection: str) -> list[dict[str, Any]]:
         return [dict(snap) for snap in self._snapshots.get(doc_id, [])]
 
@@ -57,6 +64,13 @@ class _FakeProductionRepository:
 
     async def list_productions(self) -> list[dict[str, Any]]:
         return [dict(production) for production in self._productions]
+
+    async def list_productions_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(production)
+            for production in self._productions
+            if production.get("programa_id") == programa_id
+        ]
 
 
 class _FakeActivityRepository:
