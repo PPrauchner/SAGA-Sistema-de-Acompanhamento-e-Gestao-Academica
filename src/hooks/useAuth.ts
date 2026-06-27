@@ -136,9 +136,18 @@ export function useAuth(): UseAuthResult {
       setProfile(p);
       setProfileError(false);
     } catch (err) {
+      const isUnknownAccount = err instanceof ApiError && err.status < 500;
+      if (isUnknownAccount) {
+        // signInWithPopup provisiona uma identidade no pool do Firebase Auth mesmo sem
+        // conta no SAGA, e signOut não a remove. Apagamos a identidade órfã enquanto a
+        // credencial está fresca (sem reauth). Best-effort: não bloqueia o erro de negócio.
+        // Só apagamos em conta desconhecida (4xx) — em falha transitória (5xx/rede) o
+        // usuário pode ser legítimo e deletá-lo quebraria o login dele.
+        await result.user.delete().catch(() => undefined);
+      }
       await signOut(auth);
       throw new Error(
-        err instanceof ApiError && err.status < 500
+        isUnknownAccount
           ? "Conta não encontrada. Entre em contato com a coordenação do programa."
           : "Falha ao verificar sua conta. Tente novamente.",
       );
