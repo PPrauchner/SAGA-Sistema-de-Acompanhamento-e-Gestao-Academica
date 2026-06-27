@@ -49,6 +49,8 @@ interface AppContextType {
   notificationCount: number;
   mobileMenuOpen: boolean;
   loading: boolean;
+  profileLoading: boolean;
+  isAuthenticated: boolean;
   token: string | null;
   profileUnavailable: boolean;
   activeView: ActiveView;
@@ -75,6 +77,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     login,
     logout: signOut,
     loading,
+    profileLoading,
     retryProfile,
   } = useAuth();
 
@@ -166,6 +169,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         notificationCount: unreadCount,
         mobileMenuOpen,
         loading,
+        profileLoading,
+        isAuthenticated: !!firebaseUser,
         token,
         profileUnavailable,
         activeView,
