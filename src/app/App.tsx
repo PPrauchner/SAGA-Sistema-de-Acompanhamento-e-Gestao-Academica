@@ -30,8 +30,13 @@ const AuditPage = lazy(() => import("./components/audit/AuditPage").then((m) => 
 const NotificationsPage = lazy(() => import("./components/notifications/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
 const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
+import { useState } from "react";
+import { TransferModal } from "./components/transfers/TransferModal";
+
 function StudentDetailPage() {
   const { currentUser, setCurrentPage, selectedStudentId } = useApp();
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -44,7 +49,7 @@ function StudentDetailPage() {
         </button>
         {currentUser?.role === "coordenacao" && (
           <button
-            onClick={() => setCurrentPage("transferencias")}
+            onClick={() => setIsTransferModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl"
             style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
           >
@@ -69,6 +74,16 @@ function StudentDetailPage() {
           ))}
         </div>
       </div>
+      {isTransferModalOpen && (
+        <TransferModal 
+          onClose={() => setIsTransferModalOpen(false)} 
+          onSuccess={() => {
+            setIsTransferModalOpen(false);
+            alert("Transferência realizada/solicitada com sucesso!");
+          }} 
+          initialStudentId={selectedStudentId || undefined}
+        />
+      )}
     </div>
   );
 }
