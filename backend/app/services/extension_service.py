@@ -45,10 +45,23 @@ class ExtensionService:
     # Helpers internos
     # ------------------------------------------------------------------
 
-    async def _check_limit(self, student_id: str, program_config: dict) -> None:
+    async def _resolve_student_doc_id(self, uid: str) -> str:
+        """
+        C2: Resolve uid → doc id da coleção students (chaveada por auto-id).
+        Lança 404 se o aluno não existir.
+        """
+        doc_id = await self._repo.get_student_doc_id_by_uid(uid)
+        if doc_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Aluno não encontrado.",
+            )
+        return doc_id
+
+    async def _check_limit(self, student_doc_id: str, program_config: dict) -> None:
         max_allowed: int = program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES)
         approved_query = (
-            self._repo.extensions_col(student_id)
+            self._repo.extensions_col(student_doc_id)
             .where("status", "==", ExtensionStatus.APROVADA.value)
         )
         approved_docs = [d async for d in approved_query.stream()]
@@ -58,9 +71,9 @@ class ExtensionService:
                 detail=f"Limite de {max_allowed} prorrogacao(oes) aprovada(s) ja atingido.",
             )
 
-    async def _check_no_pending(self, student_id: str) -> None:
+    async def _check_no_pending(self, student_doc_id: str) -> None:
         pending_query = (
-            self._repo.extensions_col(student_id)
+            self._repo.extensions_col(student_doc_id)
             .where("status", "==", ExtensionStatus.PENDENTE.value)
         )
         pending_docs = [d async for d in pending_query.stream()]
@@ -80,6 +93,10 @@ class ExtensionService:
         payload: ExtensionCreateRequest,
         requesting_uid: str,
     ) -> ExtensionResponse:
+        # C2: student_id recebido é uid; resolve para doc id real antes de
+        # qualquer operação no Firestore.
+        student_doc_id = await self._resolve_student_doc_id(student_id)
+
         program_config = await self._repo.get_program_config()
 
         max_semestres: int = program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES)
@@ -89,8 +106,8 @@ class ExtensionService:
                 detail=f"semestres_solicitados excede o máximo permitido pelo programa ({max_semestres}).",
             )
 
-        await self._check_no_pending(student_id)
-        await self._check_limit(student_id, program_config)
+        await self._check_no_pending(student_doc_id)
+        await self._check_limit(student_doc_id, program_config)
 
         doc_data = ExtensionDocument(
             aluno_id=requesting_uid,
@@ -103,7 +120,7 @@ class ExtensionService:
 
         doc_data["status"] = doc_data["status"].value
 
-        new_ref = self._repo.extensions_col(student_id).document()
+        new_ref = self._repo.extensions_col(student_doc_id).document()
         await new_ref.set(doc_data)
 
         return _to_response(new_ref.id, doc_data)
@@ -115,7 +132,10 @@ class ExtensionService:
         parecer: str,
         orientador_uid: str,
     ) -> ExtensionResponse:
-        student_snap = await self._repo.student_ref(student_id).get()
+        # C2: resolve uid → doc id antes de usar qualquer path no Firestore.
+        student_doc_id = await self._resolve_student_doc_id(student_id)
+
+        student_snap = await self._repo.student_ref(student_doc_id).get()
         if not student_snap.exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
 
@@ -128,7 +148,7 @@ class ExtensionService:
                 detail="Voce nao e o orientador deste discente.",
             )
 
-        ext_ref = self._repo.extensions_col(student_id).document(extension_id)
+        ext_ref = self._repo.extensions_col(student_doc_id).document(extension_id)
         ext_snap = await ext_ref.get()
         if not ext_snap.exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogacao nao encontrada.")
@@ -152,9 +172,12 @@ class ExtensionService:
         payload: DecisionRequest,
         coordinator_uid: str,
     ) -> ExtensionResponse:
+        # C2: resolve uid → doc id antes de montar referências síncronas.
+        student_doc_id = await self._resolve_student_doc_id(student_id)
+
         # Resolve referências síncronas reais para uso dentro da transação.
-        ext_ref_sync     = self._repo.extensions_col(student_id).document(extension_id).sync_ref
-        student_ref_sync = self._repo.student_ref(student_id).sync_ref
+        ext_ref_sync     = self._repo.extensions_col(student_doc_id).document(extension_id).sync_ref
+        student_ref_sync = self._repo.student_ref(student_doc_id).sync_ref
 
         program_config = await self._repo.get_program_config()
         duracao_meses: int = program_config.get("duracao_prorrogacao_meses", DEFAULT_DURACAO_MESES)
@@ -224,8 +247,11 @@ class ExtensionService:
         return _to_response(extension_id, final_data)
 
     async def list_by_student(self, student_id: str) -> list[ExtensionResponse]:
+        # C2: resolve uid → doc id para acessar o path correto no Firestore.
+        student_doc_id = await self._resolve_student_doc_id(student_id)
+
         docs = [
-            d async for d in self._repo.extensions_col(student_id)
+            d async for d in self._repo.extensions_col(student_doc_id)
             .order_by("criado_em", direction=firestore.Query.DESCENDING)
             .stream()
         ]
@@ -250,6 +276,7 @@ class ExtensionService:
 
         results: list[ExtensionResponse] = []
         for student_doc in student_docs:
+            # student_doc.id já é o doc id real — sem necessidade de resolução.
             pending_docs = [
                 d async for d in
                 self._repo.extensions_col(student_doc.id)
