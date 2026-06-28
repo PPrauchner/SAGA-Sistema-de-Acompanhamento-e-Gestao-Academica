@@ -1,19 +1,4 @@
-"""
-Configuração de teste para a camada de API (routers).
-
-Injeta credenciais Firebase dummy nas variáveis de ambiente antes de
-backend.app.core.config ser importado, permitindo instanciar Settings sem um
-.env real. O AuthService e a dependência get_current_user são substituídos nos
-testes, então nenhum acesso real ao Firebase ocorre.
-"""
-
-import os
-
-os.environ.setdefault("FIREBASE_PROJECT_ID", "test-project")
-os.environ.setdefault("FIREBASE_PRIVATE_KEY", "test-key")
-os.environ.setdefault("FIREBASE_CLIENT_EMAIL", "test@test-project.iam.gserviceaccount.com")
-
-# backend/app/api/v1/tests/conftest.py
+from __future__ import annotations
 
 """
 Fixtures de infraestrutura para a suite de testes do módulo extensions.
@@ -28,13 +13,16 @@ Estratégia de isolamento:
   garantir que o ambiente está limpo antes de qualquer coleta.
 """
 
-from __future__ import annotations
-
+import os
 import sys
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+os.environ.setdefault("FIREBASE_PROJECT_ID", "test-project")
+os.environ.setdefault("FIREBASE_PRIVATE_KEY", "test-key")
+os.environ.setdefault("FIREBASE_CLIENT_EMAIL", "test@test-project.iam.gserviceaccount.com")
 
 
 def _stub_firebase_modules() -> None:
@@ -63,16 +51,11 @@ def _stub_firebase_modules() -> None:
     sys.modules.setdefault("firebase_admin.firestore", firebase_firestore)
 
 
-# Executado na importação do conftest, antes de qualquer coleta.
 _stub_firebase_modules()
 
 
 @pytest.fixture(autouse=True)
 def patch_firestore_client():
-    """
-    Patcha get_firestore_client para retornar um mock em todos os testes.
-    Impede que audit_operation tente conexão real com Firebase (D3).
-    """
     mock_db = MagicMock()
     mock_collection = MagicMock()
     mock_db.collection.return_value = mock_collection
@@ -84,7 +67,6 @@ def patch_firestore_client():
 
 @pytest.fixture(autouse=True)
 def patch_firebase_init():
-    """Neutraliza init_firebase e shutdown_firebase no lifespan da app."""
     with patch("backend.app.core.firebase.init_firebase"), \
          patch("backend.app.core.firebase.shutdown_firebase"):
         yield
