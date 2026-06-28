@@ -61,6 +61,13 @@ function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavig
     onNavigate?.();
   };
 
+  const visibleItemsWithBadge = visibleItems.map(item => {
+    if (item.id === "solicitacoes") {
+      return { ...item, badge: pendingCount };
+    }
+    return item;
+  });
+
   return (
     <>
       {/* User info */}
@@ -105,7 +112,7 @@ function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavig
             Menu Principal
           </p>
         )}
-        {visibleItems.map((item) => {
+        {visibleItemsWithBadge.map((item) => {
           const isActive = currentPage === item.id;
           return (
             <button
@@ -146,6 +153,14 @@ function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavig
                       style={{ background: "#D4A017", color: "#fff", fontSize: "10px", fontWeight: 700, minWidth: 18, height: 18, padding: "0 4px" }}
                     >
                       {notificationCount}
+                    </span>
+                  )}
+                  {item.id === "solicitacoes" && item.badge && item.badge > 0 && (
+                    <span
+                      className="rounded-full flex items-center justify-center"
+                      style={{ background: "#e74c3c", color: "#fff", fontSize: "10px", fontWeight: 700, minWidth: 18, height: 18, padding: "0 4px" }}
+                    >
+                      {item.badge}
                     </span>
                   )}
                 </>
