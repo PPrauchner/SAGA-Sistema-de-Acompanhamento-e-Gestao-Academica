@@ -151,3 +151,70 @@ async def disparar_alerta_prazo(
         )
     except Exception as exc:
         logger.error("[A05] Falha ao gravar alerta de prazo: %s", exc)
+
+        # backend/app/aspects/alerts.py  — acrescentar ao final do arquivo
+
+def _build_notification_payload(
+    result: Any,
+    args: tuple,
+    kwargs: dict,
+) -> dict | None:
+    """Builder A05 para o domínio de Prorrogações (extensions).
+
+    Usado como argumento de @trigger_alerts nos join points:
+      - POST   /api/v1/extensions          (create_extension)
+      - PATCH  /api/v1/extensions/.../approve (decide_extension)
+
+    Regras de negócio:
+      - Criação  (status PENDENTE)  → avisa o orientador que há nova solicitação.
+      - Aprovação/Indeferimento     → avisa o aluno sobre a decisão.
+      - Qualquer outro status       → sem notificação (retorna None).
+
+    O destinatário é extraído do próprio ExtensionResponse para não
+    realizar lookups adicionais no Firestore dentro do advice.
+    """
+    try:
+        status = getattr(result, "status", None)
+        if status is None:
+            return None
+
+        status_value = status.value if hasattr(status, "value") else str(status)
+
+        if status_value == "pendente":
+            destinatario_id = getattr(result, "orientador_id", None)
+            if not destinatario_id:
+                return None
+            student_id = getattr(result, "student_id", "")
+            return {
+                "tipo": "nova_prorrogacao",
+                "titulo": "Nova solicitação de prorrogação",
+                "mensagem": (
+                    "Um aluno submeteu uma solicitação de prorrogação de prazo "
+                    "aguardando seu parecer técnico."
+                ),
+                "destinatario_id": destinatario_id,
+                "entidade_tipo": "extensions",
+                "entidade_id": getattr(result, "id", ""),
+                "student_id": student_id,
+            }
+
+        if status_value in ("aprovada", "reprovada", "indeferida"):
+            destinatario_id = getattr(result, "student_id", None)
+            if not destinatario_id:
+                return None
+            decisao = "deferida" if status_value == "aprovada" else "indeferida"
+            return {
+                "tipo": "decisao_prorrogacao",
+                "titulo": "Decisão sobre sua prorrogação",
+                "mensagem": (
+                    f"Sua solicitação de prorrogação foi {decisao} pela coordenação."
+                ),
+                "destinatario_id": destinatario_id,
+                "entidade_tipo": "extensions",
+                "entidade_id": getattr(result, "id", ""),
+            }
+
+    except Exception as exc:  # pragma: no cover
+        logger.error("[A05] _build_notification_payload: erro inesperado: %s", exc)
+
+    return None
