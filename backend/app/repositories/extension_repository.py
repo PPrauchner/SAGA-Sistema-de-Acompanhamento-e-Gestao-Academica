@@ -7,13 +7,14 @@ Não herda FirebaseRepository porque gerencia duas coleções raiz distintas
 (students/ e config/) além das subcoleções de extensions.
 
 Contrato exigido por ExtensionService:
-  extensions_col(student_id)      → _ExtensionsCol  (proxy de subcoleção)
-  student_ref(student_id)         → _StudentRef      (proxy de documento)
-  get_program_config()            → dict             (async)
-  get_advisor_doc_id_by_uid(uid)  → Optional[str]   (async)
-  transaction()                   → google.cloud.firestore.Client
-  collection_group_extensions()   → _CollectionGroupProxy
-  _db                             → google.cloud.firestore.Client
+  extensions_col(student_id)          → _ExtensionsCol  (proxy de subcoleção)
+  student_ref(student_id)             → _StudentRef      (proxy de documento)
+  get_program_config()                → dict             (async)
+  get_advisor_doc_id_by_uid(uid)      → Optional[str]   (async)
+  get_student_doc_id_by_uid(uid)      → Optional[str]   (async)   ← C2
+  transaction()                       → google.cloud.firestore.Client
+  collection_group_extensions()       → _CollectionGroupProxy
+  _db                                 → google.cloud.firestore.Client
 """
 
 from __future__ import annotations
@@ -39,7 +40,7 @@ _DOC_PROGRAM:    str = "program"
 
 class _ExtensionsCol:
     """
-    Proxy para students/{student_id}/extensions.
+    Proxy para students/{student_doc_id}/extensions.
 
     O service encadeia chamadas como:
         self._repo.extensions_col(sid).where(...).stream()   → async for
@@ -48,8 +49,8 @@ class _ExtensionsCol:
         self._repo.extensions_col(sid).order_by(...).stream()
     """
 
-    def __init__(self, student_id: str) -> None:
-        self._student_id = student_id
+    def __init__(self, student_doc_id: str) -> None:
+        self._student_doc_id = student_doc_id
         self._filters: list[tuple[str, str, Any]] = []
         self._order:   Optional[tuple[str, Any]]  = None
 
@@ -57,20 +58,20 @@ class _ExtensionsCol:
         return (
             get_firestore_client()
             .collection(_COL_STUDENTS)
-            .document(self._student_id)
+            .document(self._student_doc_id)
             .collection(_COL_EXTENSIONS)
         )
 
     # -- fluent API -----------------------------------------------------------
 
     def where(self, field: str, op: str, value: Any) -> "_ExtensionsCol":
-        clone = _ExtensionsCol(self._student_id)
+        clone = _ExtensionsCol(self._student_doc_id)
         clone._filters = self._filters + [(field, op, value)]
         clone._order   = self._order
         return clone
 
     def order_by(self, field: str, direction: Any = None) -> "_ExtensionsCol":
-        clone = _ExtensionsCol(self._student_id)
+        clone = _ExtensionsCol(self._student_doc_id)
         clone._filters = list(self._filters)
         clone._order   = (field, direction)
         return clone
@@ -109,6 +110,7 @@ class _DocRef:
         await ref.get()                 → _Snapshot
         await ref.set(data)
         await ref.update(data)
+        ref.sync_ref                    → DocumentReference síncrono real (C2)
     """
 
     def __init__(self, col_ref_factory, doc_id: Optional[str]) -> None:
@@ -124,6 +126,11 @@ class _DocRef:
 
     def _ref(self):
         return self._col_ref_factory().document(self._doc_id)
+
+    # C2: expõe o DocumentReference síncrono real para uso em transações
+    @property
+    def sync_ref(self):
+        return self._ref()
 
     async def get(self) -> "_Snapshot":
         snap = await asyncio.to_thread(self._ref().get)
@@ -180,23 +187,23 @@ class _SyncStreamAsAsyncIter:
 
 class _StudentRef:
     """
-    Proxy para students/{student_id}.
+    Proxy para students/{student_doc_id}.
 
     O service usa:
-        await self._repo.student_ref(sid).get()  → _Snapshot
+        await self._repo.student_ref(doc_id).get()  → _Snapshot
     O service também passa o ref diretamente para transaction.get(ref)
     → neste caso, devolvemos o DocumentReference síncrono real via .sync_ref.
     """
 
-    def __init__(self, student_id: str) -> None:
-        self._student_id = student_id
+    def __init__(self, student_doc_id: str) -> None:
+        self._student_doc_id = student_doc_id
 
     @property
     def sync_ref(self):
         return (
             get_firestore_client()
             .collection(_COL_STUDENTS)
-            .document(self._student_id)
+            .document(self._student_doc_id)
         )
 
     async def get(self) -> _Snapshot:
@@ -270,21 +277,19 @@ class ExtensionRepository:
 
     # -- API exigida pelo service --------------------------------------------
 
-    def extensions_col(self, student_id: str) -> _ExtensionsCol:
-        """Proxy de students/{student_id}/extensions com API fluente async."""
-        return _ExtensionsCol(student_id)
+    def extensions_col(self, student_doc_id: str) -> _ExtensionsCol:
+        """Proxy de students/{student_doc_id}/extensions com API fluente async."""
+        return _ExtensionsCol(student_doc_id)
 
-    def student_ref(self, student_id: str) -> _StudentRef:
-        """Proxy de students/{student_id} com .get() async e .sync_ref síncrono."""
-        return _StudentRef(student_id)
+    def student_ref(self, student_doc_id: str) -> _StudentRef:
+        """Proxy de students/{student_doc_id} com .get() async e .sync_ref síncrono."""
+        return _StudentRef(student_doc_id)
 
     def transaction(self):
         """
         Devolve o cliente Firestore síncrono.
 
-        process_decision no service usa @firestore.async_transactional —
-        ver nota em extension_service.py: essa seção precisa ser convertida
-        para @firestore.transactional + asyncio.to_thread.
+        process_decision no service usa @firestore.transactional + asyncio.to_thread.
         """
         return get_firestore_client()
 
@@ -319,6 +324,28 @@ class ExtensionRepository:
             docs = list(
                 get_firestore_client()
                 .collection(_COL_USERS)
+                .where("uid", "==", uid)
+                .limit(1)
+                .stream()
+            )
+            return docs[0].id if docs else None
+
+        return await asyncio.to_thread(_query)
+
+    async def get_student_doc_id_by_uid(self, uid: str) -> Optional[str]:
+        """
+        C2: Resolve uid de autenticação → doc id em students/.
+
+        A coleção students é chaveada por auto-id; uid é apenas um campo
+        dentro do documento. Este método faz a resolução necessária antes
+        de qualquer operação que precise do path students/{doc_id}/...
+
+        Retorna None se não encontrado.
+        """
+        def _query():
+            docs = list(
+                get_firestore_client()
+                .collection(_COL_STUDENTS)
                 .where("uid", "==", uid)
                 .limit(1)
                 .stream()
