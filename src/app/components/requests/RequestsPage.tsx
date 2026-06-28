@@ -4,12 +4,15 @@ import { useApp } from "@/app/context/AppContext";
 import { requestsApi, RequestItem } from "@/api/requestsApi";
 import * as activitiesApi from "@/api/activitiesApi";
 import { coordinationTransfersApi } from "@/api/coordinationTransfersApi";
+import { approveTransferRequest, rejectTransferRequest } from "@/api/transfersApi";
+import { TransferModal } from "../transfers/TransferModal";
 
 const TYPE_LABELS: Record<string, string> = {
   atividade: "Atividade Creditável",
   prorrogacao: "Prorrogação",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",
+  producao: "Validação de Produção",
 };
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string; icon: JSX.Element }> = {
@@ -29,6 +32,7 @@ export function RequestsPage() {
   const [filterTipo, setFilterTipo] = useState<string>("");
   const [filterStatus, setFilterStatus] = useState<string>("");
   const [filterPeriodo, setFilterPeriodo] = useState<string>("");
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
   const loadData = async () => {
     if (!token) return;
@@ -52,14 +56,31 @@ export function RequestsPage() {
     try {
       if (req.tipo === "atividade") {
         if (currentUser?.role === "orientador") {
-          await activitiesApi.emitirParecer(token, req.id, "Deferido");
+          await activitiesApi.emitirParecer(token, req.id, action === "approve" ? "Deferido" : "Indeferido");
         } else if (currentUser?.role === "coordenacao") {
-          await activitiesApi.validarAtividade(token, req.id, { acao: "aprovar", observacao: "" });
+          await activitiesApi.validarAtividade(token, req.id, { acao: action === "approve" ? "aprovar" : "rejeitar", observacao: "" });
         }
       } else if (req.tipo === "transferencia_coordenacao") {
         if (action === "approve") {
           await coordinationTransfersApi.accept(req.id, token);
+        } else {
+          alert("Rejeição de transferência de coordenação ainda não implementada.");
+          return;
         }
+      } else if (req.tipo === "transferencia") {
+        if (action === "approve") {
+          await approveTransferRequest(token, req.id);
+        } else {
+          const motivo = prompt("Motivo da rejeição:");
+          if (motivo !== null) {
+            await rejectTransferRequest(token, req.id, motivo);
+          } else {
+            return;
+          }
+        }
+      } else {
+        alert(`Ação de ${action} para ${TYPE_LABELS[req.tipo] || req.tipo} em desenvolvimento/API pendente.`);
+        return;
       }
       await loadData();
     } catch (err: any) {
@@ -99,6 +120,13 @@ export function RequestsPage() {
             Acompanhe e despache as solicitações pendentes sob sua responsabilidade.
           </p>
         </div>
+        <button
+          onClick={() => setIsTransferModalOpen(true)}
+          className="px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+          style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
+        >
+          Nova Transferência
+        </button>
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -207,6 +235,7 @@ export function RequestsPage() {
                     <XCircle size={15} />
                   </button>
                   <button
+                    onClick={() => alert(`Detalhes da solicitação ${req.id}:\n\n` + JSON.stringify(req.payload_original, null, 2))}
                     className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
                     title="Ver Detalhes"
                   >
@@ -224,6 +253,10 @@ export function RequestsPage() {
           </div>
         )}
       </div>
+
+      {isTransferModalOpen && (
+        <TransferModal onClose={() => setIsTransferModalOpen(false)} onSuccess={() => { setIsTransferModalOpen(false); loadData(); }} />
+      )}
     </div>
   );
 }
