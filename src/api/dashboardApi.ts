@@ -70,7 +70,7 @@ export interface OrientandosPorStatus {
   regular: number;
   em_risco: number;
   qualificado: number;
-  fase_defesa: number;
+  em_fase_de_defesa: number;
   em_prorrogacao: number;
 }
 
@@ -88,7 +88,7 @@ export interface AlunosPorStatus {
   em_risco: number;
   em_prorrogacao: number;
   qualificado: number;
-  fase_defesa: number;
+  em_fase_de_defesa: number;
 }
 
 export interface AuditoriaRecenteItem {
