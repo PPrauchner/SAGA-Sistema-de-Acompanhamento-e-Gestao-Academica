@@ -191,7 +191,7 @@ async def _build_notification_payload(
 
             # Bug 1 corrigido: orientador_id não existe em ExtensionResponse → lookup
             from backend.app.repositories.student_repository import StudentRepository
-            student_data = await StudentRepository().get(aluno_id)
+            student_data = await StudentRepository().get_by_uid(aluno_id)
             if not student_data:
                 logger.warning("[A05] Aluno não encontrado para aluno_id=%s; notificação pendente suprimida.", aluno_id)
                 return None
