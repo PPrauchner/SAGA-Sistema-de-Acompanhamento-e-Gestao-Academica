@@ -454,13 +454,12 @@ export function FirstAccessPage() {
         </div>
       )}
 
-      {step === 1 && (
+      {step <= 3 && (
         <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", marginTop: "20px" }}>
-          Já configurou sua conta?{" "}
           <button type="button" onClick={() => setCurrentPage("login")}
             style={{ color: "#123C7A", fontWeight: 700, background: "none", border: "none" }}
             className="hover:underline">
-            Fazer login
+            ← Voltar ao Login
           </button>
         </p>
       )}

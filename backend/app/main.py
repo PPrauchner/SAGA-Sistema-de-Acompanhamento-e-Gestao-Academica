@@ -33,7 +33,9 @@ from backend.app.api.v1 import (
     productions,
     programs,
     qualis_weights,
+    registration_requests,
     reports,
+    requests,
     students,
     transfers,
     users,
@@ -93,6 +95,11 @@ app.include_router(
 )
 app.include_router(programs.router, prefix=_PREFIX, tags=["programs"])
 app.include_router(qualis_weights.router, prefix=_PREFIX, tags=["qualis-weights"])
+app.include_router(
+    registration_requests.router,
+    prefix=_PREFIX,
+    tags=["registration-requests"],
+)
 app.include_router(inference.router, prefix=_PREFIX, tags=["inference"])
 app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
 app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
@@ -100,4 +107,5 @@ app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
 app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
 app.include_router(transfers.router, prefix=_PREFIX, tags=["transfers"])
 app.include_router(users.router, prefix=_PREFIX, tags=["users"])
+app.include_router(requests.router, prefix=_PREFIX, tags=["requests"])
 app.include_router(transfer_cross_router)

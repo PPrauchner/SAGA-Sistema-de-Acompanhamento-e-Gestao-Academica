@@ -19,6 +19,14 @@ class ProgramRepository(FirebaseRepository):
         """Inicializa o ProgramRepository."""
         super().__init__("programs")
 
+    async def list_programs(self) -> list[dict[str, Any]]:
+        """Lista todos os programas cadastrados na coleção 'programs'.
+
+        Returns:
+            Uma lista de programas, cada um incluindo o campo `id` do documento.
+        """
+        return await self.list_all()
+
     async def get_config(self, programa_id: str) -> dict[str, Any] | None:
         """Busca a configuração de um determinado programa.
 

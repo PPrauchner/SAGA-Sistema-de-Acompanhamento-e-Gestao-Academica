@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useApp } from "../../context/AppContext";
-import { useAuth } from "../../../hooks/useAuth";
-import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Phone, Building, Plus, CheckCircle2, XCircle, Edit, ArrowRightLeft, Send, Ban } from "lucide-react";
+import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Building, Plus, CheckCircle2, XCircle, Edit, ArrowRightLeft, Send, Ban } from "lucide-react";
 import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
 import { getAdvisors, type Advisor } from "../../../api/advisorsApi";
 import { coordinationTransfersApi, type CoordinationTransfer } from "../../../api/coordinationTransfersApi";
+import { getVehicles, type Vehicle } from "../../../api/productionsApi";
+import { usersApi } from "../../../api/usersApi";
 import { toast } from "sonner";
 import { QualisWeightsSection } from "./QualisWeightsSection";
 
@@ -45,6 +46,11 @@ export interface VehicleLevel {
   peso: number;
 }
 
+// Exibe métricas descritivas opcionais; valor ausente (null/undefined) vira "—".
+// Usa checagem de null para não tratar 0 como vazio (percentil/índice podem ser 0).
+const formatMetric = (value: number | null | undefined): string | number =>
+  value == null ? "—" : value;
+
 const BASE_TABS = [
   { id: "perfil", label: "Perfil", icon: <User size={16} /> },
   { id: "notificacoes", label: "Notificações", icon: <Bell size={16} /> },
@@ -54,16 +60,19 @@ const BASE_TABS = [
 ];
 
 export function SettingsPage() {
-  const { currentUser, darkMode, toggleDarkMode } = useApp();
-  const { token } = useAuth();
+  const { currentUser, darkMode, toggleDarkMode, token, retryProfile } = useApp();
   const [activeTab, setActiveTab] = useState("perfil");
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [profileName, setProfileName] = useState("");
+  const [profileDepartment, setProfileDepartment] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   // Program Config State
   const [programConfig, setProgramConfig] = useState<ProgramConfig | null>(null);
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
   const [vehicleLevels, setVehicleLevels] = useState<VehicleLevel[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [transfers, setTransfers] = useState<CoordinationTransfer[]>([]);
   const [selectedSuccessorUid, setSelectedSuccessorUid] = useState("");
@@ -74,6 +83,12 @@ export function SettingsPage() {
   
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [currentVehicle, setCurrentVehicle] = useState<VehicleLevel | null>(null);
+
+  useEffect(() => {
+    setProfileName(currentUser?.name ?? "");
+    setProfileDepartment(currentUser?.departamento ?? "");
+    setProfileError(null);
+  }, [currentUser?.name, currentUser?.departamento]);
 
   useEffect(() => {
     if (activeTab === "programa" && currentUser?.role === "coordenacao") {
@@ -91,14 +106,16 @@ export function SettingsPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const [config, types, vLevels] = await Promise.all([
+      const [config, types, vLevels, vehicleList] = await Promise.all([
         programsApi.getProgramConfig(token),
         activityTypesApi.getActivityTypes(token),
-        programsApi.getVehicleLevels(token)
+        programsApi.getVehicleLevels(token),
+        getVehicles(token)
       ]);
       setProgramConfig(config);
       setActivityTypes(types);
       setVehicleLevels(vLevels);
+      setVehicles(vehicleList);
     } catch (error) {
       toast.error("Erro ao carregar dados do programa");
     } finally {
@@ -268,6 +285,31 @@ export function SettingsPage() {
     }
   };
 
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token || !currentUser) return;
+
+    setLoading(true);
+    setSaved(false);
+    setProfileError(null);
+    try {
+      const payload = currentUser.role === "orientador"
+        ? { nome: profileName, departamento: profileDepartment }
+        : { nome: profileName };
+
+      await usersApi.updateProfile(token, payload);
+      await retryProfile();
+      setSaved(true);
+      toast.success("Perfil atualizado");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      setProfileError("Erro ao salvar perfil. Tente novamente.");
+      toast.error("Erro ao salvar perfil");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = () => {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -350,39 +392,79 @@ export function SettingsPage() {
                 </div>
               </div>
 
-              {/* Form fields */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
-                {[
-                  { label: "Nome Completo", value: currentUser?.name || "", icon: <User size={14} /> },
-                  { label: "E-mail Institucional", value: currentUser?.email || "", icon: <Mail size={14} /> },
-                  { label: "Telefone", value: "(11) 99999-0000", icon: <Phone size={14} /> },
-                  { label: "Departamento", value: currentUser?.departamento || "", icon: <Building size={14} /> },
-                  { label: "Programa", value: currentUser?.programa || "", icon: <Building size={14} /> },
-                  ...(currentUser?.matricula ? [{ label: "Matrícula", value: currentUser.matricula, icon: <Key size={14} /> }] : []),
-                ].map((field) => (
-                  <div key={field.label}>
-                    <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>{field.label}</label>
-                    <div className="relative">
-                      <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
-                        {field.icon}
-                      </div>
-                      <input
-                        defaultValue={field.value}
-                        className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none"
-                        style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px", color: "var(--foreground)" }}
-                        onFocus={(e) => { e.currentTarget.style.borderColor = "#123C7A"; }}
-                        onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {profileError && (
+                <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px" }}>
+                  {profileError}
+                </div>
+              )}
 
-              <div className="mt-6 flex gap-3">
-                <button onClick={handleSave} className="flex items-center gap-2 rounded-xl px-5 py-2.5" style={{ background: saved ? "#1F8A70" : "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px", transition: "background 0.3s" }}>
-                  <Save size={15} /> {saved ? "Salvo!" : "Salvar Alterações"}
-                </button>
-              </div>
+              <form onSubmit={handleSaveProfile}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-6">
+                  <ProfileField label="Nome Completo" icon={<User size={14} />}>
+                    <input
+                      required
+                      value={profileName}
+                      onChange={(e) => setProfileName(e.target.value)}
+                      className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none"
+                      style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px", color: "var(--foreground)" }}
+                      onFocus={(e) => { e.currentTarget.style.borderColor = "#123C7A"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                    />
+                  </ProfileField>
+
+                  <ProfileField label="E-mail Institucional" icon={<Mail size={14} />}>
+                    <input
+                      readOnly
+                      value={currentUser?.email ?? ""}
+                      className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none"
+                      style={{ border: "1px solid var(--border)", background: "var(--muted)", fontSize: "13px", color: "var(--muted-foreground)" }}
+                    />
+                  </ProfileField>
+
+                  <ProfileField label="Departamento" icon={<Building size={14} />}>
+                    <input
+                      readOnly={currentUser?.role !== "orientador"}
+                      value={profileDepartment}
+                      onChange={(e) => setProfileDepartment(e.target.value)}
+                      className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none"
+                      style={{
+                        border: "1px solid var(--border)",
+                        background: currentUser?.role === "orientador" ? "var(--input-background)" : "var(--muted)",
+                        fontSize: "13px",
+                        color: currentUser?.role === "orientador" ? "var(--foreground)" : "var(--muted-foreground)",
+                      }}
+                      onFocus={(e) => { if (currentUser?.role === "orientador") e.currentTarget.style.borderColor = "#123C7A"; }}
+                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                    />
+                  </ProfileField>
+
+                  <ProfileField label="Programa" icon={<Building size={14} />}>
+                    <input
+                      readOnly
+                      value={currentUser?.programa ?? ""}
+                      className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none"
+                      style={{ border: "1px solid var(--border)", background: "var(--muted)", fontSize: "13px", color: "var(--muted-foreground)" }}
+                    />
+                  </ProfileField>
+
+                  {currentUser?.matricula && (
+                    <ProfileField label="Matrícula" icon={<Key size={14} />}>
+                      <input
+                        readOnly
+                        value={currentUser.matricula}
+                        className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none"
+                        style={{ border: "1px solid var(--border)", background: "var(--muted)", fontSize: "13px", color: "var(--muted-foreground)" }}
+                      />
+                    </ProfileField>
+                  )}
+                </div>
+
+                <div className="mt-6 flex gap-3">
+                  <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-xl px-5 py-2.5" style={{ background: saved ? "#1F8A70" : "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px", transition: "background 0.3s", opacity: loading ? 0.7 : 1 }}>
+                    <Save size={15} /> {saved ? "Salvo!" : "Salvar Alterações"}
+                  </button>
+                </div>
+              </form>
             </div>
           )}
 
@@ -715,11 +797,20 @@ export function SettingsPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {vehicleLevels.map((level) => (
+                  {vehicleLevels.map((level) => {
+                    const vehicle = vehicles.find((v) => v.id === level.id);
+                    return (
                     <div key={level.id} className="flex items-center justify-between p-3 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
                       <div>
-                        <p className="text-sm font-bold">{level.nivel}</p>
-                        <p className="text-xs opacity-60">Peso Multiplicador: {level.peso}</p>
+                        <p className="text-sm font-bold">{vehicle?.nome ?? level.nivel}</p>
+                        <p className="text-xs opacity-60">
+                          Nível {level.nivel} · Peso {level.peso}
+                          {vehicle && ` · ${vehicle.tipo === "revista" ? "Revista" : "Evento"}`}
+                        </p>
+                        <p className="text-xs opacity-60">
+                          Índice H: {formatMetric(vehicle?.indice_h)} · Percentil Scopus: {formatMetric(vehicle?.percentil_scopus)}
+                          {vehicle?.tipo === "revista" && ` · JCR: ${formatMetric(vehicle?.jcr)}`}
+                        </p>
                       </div>
                       <div className="flex items-center gap-3">
                         <button type="button" onClick={() => openEditVehicleModal(level)} title="Editar Peso">
@@ -727,7 +818,8 @@ export function SettingsPage() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {vehicleLevels.length === 0 && (
                     <p className="text-sm opacity-60">Nenhum nível de veículo configurado.</p>
                   )}
@@ -821,6 +913,20 @@ export function SettingsPage() {
         </div>
       )}
 
+    </div>
+  );
+}
+
+function ProfileField({ label, icon, children }: { label: string; icon: JSX.Element; children: JSX.Element }) {
+  return (
+    <div>
+      <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>{label}</label>
+      <div className="relative">
+        <div className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }}>
+          {icon}
+        </div>
+        {children}
+      </div>
     </div>
   );
 }

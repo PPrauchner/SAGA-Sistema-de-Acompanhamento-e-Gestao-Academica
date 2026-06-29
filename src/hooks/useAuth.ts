@@ -26,8 +26,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  GoogleAuthProvider,
   onIdTokenChanged,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   type User as FirebaseUser,
 } from "firebase/auth";
@@ -48,9 +50,11 @@ interface UseAuthResult {
   advisorId: string | null;
   token: string | null;
   login: (email: string, senha: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   retryProfile: () => Promise<void>;
   loading: boolean;
+  profileLoading: boolean;
 }
 
 export function useAuth(): UseAuthResult {
@@ -59,6 +63,7 @@ export function useAuth(): UseAuthResult {
   const [profileError, setProfileError] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
 
   /**
    * Carrega o perfil via GET /auth/me com o ID token dado.
@@ -72,6 +77,7 @@ export function useAuth(): UseAuthResult {
    *   usuário permanece na app em estado degradado, com retry.
    */
   const loadProfile = useCallback(async (idToken: string): Promise<void> => {
+    setProfileLoading(true);
     try {
       setProfile(await getMe(idToken));
       setProfileError(false);
@@ -81,6 +87,8 @@ export function useAuth(): UseAuthResult {
         return;
       }
       setProfileError(true);
+    } finally {
+      setProfileLoading(false);
     }
   }, []);
 
@@ -91,15 +99,16 @@ export function useAuth(): UseAuthResult {
           const idToken = await user.getIdToken();
           setCurrentUser(user);
           setToken(idToken);
+          setLoading(false);
           await loadProfile(idToken);
         } else {
           setCurrentUser(null);
           setToken(null);
           setProfile(null);
           setProfileError(false);
+          setLoading(false);
         }
-      } finally {
-        // Garante que o gate de loading sempre resolva, mesmo se getMe falhar.
+      } catch (e) {
         setLoading(false);
       }
     });
@@ -109,6 +118,40 @@ export function useAuth(): UseAuthResult {
   const login = useCallback(async (email: string, senha: string): Promise<void> => {
     // onIdTokenChanged dispara em seguida e carrega o perfil.
     await signInWithEmailAndPassword(auth, email, senha);
+  }, []);
+
+  /**
+   * Autentica via Google e verifica se o email pertence a uma conta ativa no SAGA.
+   *
+   * Se o usuário não existir no SAGA (claims ausentes → GET /auth/me retorna 4xx),
+   * encerra a sessão e lança um erro com mensagem de negócio para exibição na UI.
+   * O onIdTokenChanged também dispara após signInWithPopup e pode chamar loadProfile
+   * em paralelo — ambos são idempotentes neste cenário.
+   */
+  const loginWithGoogle = useCallback(async (): Promise<void> => {
+    const result = await signInWithPopup(auth, new GoogleAuthProvider());
+    const idToken = await result.user.getIdToken();
+    try {
+      const p = await getMe(idToken);
+      setProfile(p);
+      setProfileError(false);
+    } catch (err) {
+      const isUnknownAccount = err instanceof ApiError && err.status < 500;
+      if (isUnknownAccount) {
+        // signInWithPopup provisiona uma identidade no pool do Firebase Auth mesmo sem
+        // conta no SAGA, e signOut não a remove. Apagamos a identidade órfã enquanto a
+        // credencial está fresca (sem reauth). Best-effort: não bloqueia o erro de negócio.
+        // Só apagamos em conta desconhecida (4xx) — em falha transitória (5xx/rede) o
+        // usuário pode ser legítimo e deletá-lo quebraria o login dele.
+        await result.user.delete().catch(() => undefined);
+      }
+      await signOut(auth);
+      throw new Error(
+        isUnknownAccount
+          ? "Conta não encontrada. Entre em contato com a coordenação do programa."
+          : "Falha ao verificar sua conta. Tente novamente.",
+      );
+    }
   }, []);
 
   const logout = useCallback(async (): Promise<void> => {
@@ -134,8 +177,10 @@ export function useAuth(): UseAuthResult {
     advisorId: profile?.advisorId ?? null,
     token,
     login,
+    loginWithGoogle,
     logout,
     retryProfile,
     loading,
+    profileLoading,
   };
 }

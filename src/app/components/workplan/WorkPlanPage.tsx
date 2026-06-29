@@ -78,6 +78,9 @@ export function WorkPlanPage() {
   }
 
   useEffect(() => {
+    // Aguarda o token resolver antes de chamar a API: sem ele o header
+    // Authorization nao e enviado e o backend rejeita na validacao (422).
+    if (!token) return;
     void load();
   }, [targetStudentId, token]);
 

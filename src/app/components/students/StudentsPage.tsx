@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { getAdvisors, type Advisor } from "@/api/advisorsApi";
+import { programsApi, type Program } from "@/api/programsApi";
 import {
   createStudent,
   getStudents,
@@ -63,6 +64,7 @@ export function StudentsPage() {
   const { activeView, currentUser, setCurrentPage, setSelectedStudentId, token } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
   const [filterNivel, setFilterNivel] = useState("todos");
   const [filterStatus, setFilterStatus] = useState("todos");
@@ -79,12 +81,14 @@ export function StudentsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [studentsData, advisorsData] = await Promise.all([
+      const [studentsData, advisorsData, programsData] = await Promise.all([
         getStudents(authToken),
         getAdvisors(authToken).catch(() => []),
+        programsApi.getPrograms(authToken),
       ]);
       setStudents(studentsData);
       setAdvisors(advisorsData);
+      setPrograms(programsData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar alunos");
     } finally {
@@ -118,7 +122,10 @@ export function StudentsPage() {
 
   function openCreateForm(): void {
     setEditingStudent(null);
-    setForm(emptyForm);
+    setForm({
+      ...emptyForm,
+      programa_id: currentUser?.role === "orientador" ? currentUser.programa_id ?? "" : "",
+    });
     setInviteToken(null);
     setShowForm(true);
   }
@@ -142,6 +149,10 @@ export function StudentsPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!token) return;
+    if (!editingStudent && !form.programa_id) {
+      setError("Selecione um programa para cadastrar o aluno");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -155,6 +166,7 @@ export function StudentsPage() {
       } else {
         const result = await createStudent(token, form);
         setInviteToken(result.invite_token);
+        setShowForm(false);
       }
       setForm(emptyForm);
       setEditingStudent(null);
@@ -167,8 +179,14 @@ export function StudentsPage() {
   }
 
   const regularCount = visibleStudents.filter((s) => s.situacao_registrada === "regular").length;
-  // Apenas a coordenação cria/edita alunos (spec 05_discentes). Orientador é read-only.
-  const canManage = currentUser?.role === "coordenacao" && activeView === "coordenador";
+  const canEdit = currentUser?.role === "coordenacao" && activeView === "coordenador";
+  const canCreate =
+    canEdit ||
+    (currentUser?.role === "orientador" && activeView === "orientador");
+  const availablePrograms =
+    currentUser?.role === "orientador"
+      ? programs.filter((program) => program.id === currentUser.programa_id)
+      : programs;
 
   return (
     <div>
@@ -179,7 +197,7 @@ export function StudentsPage() {
             {visibleStudents.length} alunos cadastrados · {regularCount} regulares
           </p>
         </div>
-        {canManage && (
+        {canCreate && (
           <button onClick={openCreateForm} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
             <Plus size={16} />
             Novo Aluno
@@ -259,7 +277,7 @@ export function StudentsPage() {
                     <td className="px-4 py-3"><p style={{ fontSize: "12px", color: "var(--foreground)" }}>{advisor?.nome ?? student.orientador_id}</p><p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{student.programa_id}</p></td>
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="rounded-full overflow-hidden" style={{ width: 60, height: 6, background: "var(--muted)" }}><div className="h-full rounded-full" style={{ width: `${progress}%`, background: progress > 70 ? "#1F8A70" : progress > 40 ? "#D4A017" : "#dc2626" }} /></div><span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>{progress}%</span></div></td>
                     <td className="px-4 py-3"><span className="flex items-center gap-1 px-2 py-1 rounded-lg w-fit" style={{ background: st.bg, color: st.color, fontSize: "11px", fontWeight: 600 }}>{st.icon} {st.label}</span></td>
-                    <td className="px-4 py-3"><div className="flex items-center gap-1"><button onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }} className="p-1.5 rounded-lg" style={{ color: "#123C7A" }} title="Ver detalhes"><Eye size={15} /></button>{canManage && <button onClick={() => openEditForm(student)} className="p-1.5 rounded-lg" style={{ color: "#1F8A70" }} title="Editar"><Edit3 size={15} /></button>}</div></td>
+                    <td className="px-4 py-3"><div className="flex items-center gap-1"><button onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }} className="p-1.5 rounded-lg" style={{ color: "#123C7A" }} title="Ver detalhes"><Eye size={15} /></button>{canEdit && <button onClick={() => openEditForm(student)} className="p-1.5 rounded-lg" style={{ color: "#1F8A70" }} title="Editar"><Edit3 size={15} /></button>}</div></td>
                   </tr>
                 );
               })}
@@ -303,7 +321,7 @@ export function StudentsPage() {
               <Field label="E-mail"><input required disabled={Boolean(editingStudent)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Matrícula"><input required disabled={Boolean(editingStudent)} value={form.matricula} onChange={(e) => setForm({ ...form, matricula: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Orientador" className="col-span-2"><select required value={form.orientador_id} onChange={(e) => setForm({ ...form, orientador_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione...</option>{advisors.map((advisor) => <option key={advisor.id} value={advisor.id}>{advisor.nome}</option>)}</select></Field>
-              <Field label="Programa"><input required disabled={Boolean(editingStudent)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              <Field label="Programa"><select required disabled={Boolean(editingStudent) || currentUser?.role === "orientador"} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione um programa</option>{availablePrograms.map((program) => <option key={program.id} value={program.id}>{program.nome ?? program.id}</option>)}</select></Field>
               <Field label="Ingresso"><input required disabled={Boolean(editingStudent)} type="date" value={form.data_ingresso} onChange={(e) => setForm({ ...form, data_ingresso: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Nível"><select disabled={Boolean(editingStudent)} value={form.nivel} onChange={(e) => setForm({ ...form, nivel: e.target.value as StudentCreatePayload["nivel"] })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="mestrado">Mestrado</option><option value="doutorado">Doutorado</option></select></Field>
             </div>

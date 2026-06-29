@@ -132,7 +132,7 @@ class AuthService:
         Raises:
             HTTPException: 409 se o e-mail já possui conta ativa no Firebase Auth.
         """
-        if self._email_ja_tem_conta(data.email):
+        if await self._email_ja_tem_conta(data.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="E-mail já possui conta ativa",
@@ -207,11 +207,13 @@ class AuthService:
         """
         invite = self._validar_convite(await self._invites.get(token))
 
-        user_record = self._auth.create_user(email=invite["email"], password=senha)
+        user_record = await asyncio.to_thread(
+            self._auth.create_user, email=invite["email"], password=senha
+        )
         uid = user_record.uid
 
         claims = {"role": invite["role"], "programa_id": invite["programa_id"]}
-        self._auth.set_custom_user_claims(uid, claims)
+        await asyncio.to_thread(self._auth.set_custom_user_claims, uid, claims)
 
         agora = datetime.now(timezone.utc)
         user_data = {
@@ -279,10 +281,10 @@ class AuthService:
             advisor_id=doc.get("advisor_id"),
         )
 
-    def _email_ja_tem_conta(self, email: str) -> bool:
+    async def _email_ja_tem_conta(self, email: str) -> bool:
         """Verifica no Firebase Auth se já existe conta para o e-mail."""
         try:
-            self._auth.get_user_by_email(email)
+            await asyncio.to_thread(self._auth.get_user_by_email, email)
         except firebase_auth.UserNotFoundError:
             return False
         return True

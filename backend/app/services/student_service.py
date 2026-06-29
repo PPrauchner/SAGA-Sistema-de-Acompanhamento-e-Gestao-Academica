@@ -137,6 +137,12 @@ class StudentService:
         data: StudentCreateRequest,
         user: CurrentUser,
     ) -> dict:
+        if user.role == "orientador" and data.programa_id != user.programa_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Orientador só pode criar aluno no próprio programa",
+            )
+
         duracao_meses = await self._get_program_duration_months(data.programa_id)
         student_id = await self._students.create(
             {

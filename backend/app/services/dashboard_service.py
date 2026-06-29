@@ -168,7 +168,7 @@ class DashboardService:
         if not credited_ids:
             return ProducoesResumo()
 
-        productions = await self._production_reports.list_productions()
+        productions = await self._production_reports.list_by_ids(credited_ids)
         production_by_id = {production["id"]: production for production in productions}
         por_nivel: dict[str, int] = {}
         pontuacao_total = 0.0

@@ -30,7 +30,6 @@ class CoordinationTransferRepository(FirebaseRepository):
     async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
         return await self.query(
             filters=[("programa_id", "==", programa_id)],
-            order_by="created_at",
         )
 
     async def list_pending_for_successor(self, successor_uid: str) -> list[dict[str, Any]]:
@@ -39,7 +38,6 @@ class CoordinationTransferRepository(FirebaseRepository):
                 ("successor_uid", "==", successor_uid),
                 ("status", "==", "pendente"),
             ],
-            order_by="created_at",
         )
 
     async def update_status(

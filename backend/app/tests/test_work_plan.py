@@ -24,6 +24,9 @@ def fake_db():
     with patch(
         "backend.app.repositories.work_plan_repository.get_firestore_client",
         return_value=fake,
+    ), patch(
+        "backend.app.aspects.alerts.get_firestore_client",
+        return_value=fake,
     ):
         yield fake
 
