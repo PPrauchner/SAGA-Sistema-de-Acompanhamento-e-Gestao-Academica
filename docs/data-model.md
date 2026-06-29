@@ -143,6 +143,12 @@ erDiagram
   **coordenador**, ou **coordenador + orientador** (mesmo `uid`, acumula). Aluno nunca acumula.
 - `role` é **valor único** = papel de maior privilégio. A capacidade de **orientar** vem da
   **existência do doc `advisors`**, não de `role`. Coordenação engloba as permissões de orientador.
+  O *toggle* "Orientador | Coordenador" é filtro de visão no **frontend**, não fronteira de
+  segurança ([ADR-0002](./adr/0002-papel-unico-com-toggle-de-visao.md)).
+- O papel `adm` ([ADR-0001](./adr/0001-papel-adm-global.md)) é um **superusuário global**, fora
+  de qualquer programa: é o **único papel com `programa_id` nulo**. Cria/edita/desativa
+  coordenadores (operação cross-programa); criado via script/backend, nunca por convite. Não
+  orienta nem cursa, então não tem `students`/`advisors`.
 - **Invariante** (garantida no service, não pelo banco): existe doc `advisors` ⟺ o usuário
   pode orientar. Criar/ativar orientador cria o `advisors`; revogar remove. Não há
   `role="orientador"` sem `advisors`.
@@ -156,8 +162,8 @@ erDiagram
 | `uid` | string | PK | uid do Firebase Auth |
 | `email` | string | | normalizado (trim + minúsculas) |
 | `nome` | string | | |
-| `role` | string | | enum `aluno`\|`orientador`\|`coordenacao` (papel de maior privilégio) |
-| `programa_id` | string | →`programs` (soft) | |
+| `role` | string | | enum `aluno`\|`orientador`\|`coordenacao`\|`adm` (papel de maior privilégio; `adm` é superusuário global — ADR-0001) |
+| `programa_id` | string\|null | →`programs` (soft) | **null apenas para `adm`** (global, fora de programa); não-nulo para os demais |
 | `ativo` | bool | | |
 | `primeiro_acesso_completo` | bool | | persistido; **não exposto** em `UserResponse` |
 | `criado_em` / `atualizado_em` | timestamp | | |
@@ -168,7 +174,7 @@ erDiagram
 |-------|------|-----|-------|
 | `token` | string | PK | UUID do convite |
 | `email` | string | | |
-| `role` | string | | `aluno`\|`orientador` (coordenação não é criada por convite) |
+| `role` | string | | `aluno`\|`orientador` (coordenação e `adm` não são criados por convite) |
 | `nome` | string | | **incluído** (código grava; origem do `users.nome`) — ausente na spec 03 |
 | `programa_id` | string | →`programs` (soft) | |
 | `usado` | bool | | |
@@ -535,22 +541,47 @@ erDiagram
 | `programa_id` | string | →`programs` (soft) |
 | `criado_em` | timestamp | |
 
-### `vehicle_levels` 🔲 — sub-coleção de `programs` — chave: `veiculo_id`
+### `vehicle_levels` ✅ — sub-coleção de `programs` — chave: `veiculo_id`
 
-Config de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode existir antes de ser classificado).
+Classificação de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode existir antes
+de ser classificado). Guarda o **nível Qualis do veículo no programa**; o peso autoritativo da RL05
+vem de [`qualis_weights`](#qualis_weights--sub-coleção-de-programs--chave-auto-id), resolvido por
+data de publicação ([ADR-0003](./adr/0003-pesos-qualis-versionados-por-programa.md)).
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `veiculo_id` | string (PK = id do veículo) | |
-| `nivel` | string | `A1`\|`A2`\|`A3`\|`A4`\|`B1`\|`B2`\|`SC` (Qualis Único; `SC` = Sem Classificação) |
-| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.55, B1=0.4, B2=0.3, SC=0.2 (escala monotônica) |
+| `nivel` | string | `A1`–`A8` \| `SC` (Qualis Único A1–A8 + fallback `SC` = Sem Classificação) |
+| `peso` | float | snapshot **denormalizado** do peso default (`PESO_POR_NIVEL`) na classificação — só para exibição na listagem de veículos; **não** é a fonte do score |
 | `atualizado_em` / `atualizado_por` | timestamp / uid | |
 
-> **Sem nível configurado:** RL05 usa **peso default `SC` = 0.2** (fallback). Reclassificar recalcula o score.
->
-> **Escala monotônica (decisão R4, issue #133):** estritamente decrescente — um nível superior
-> sempre pondera mais que um inferior. Substitui os pesos não-monotônicos herdados do PR #111
-> (`A4=0.7`, `B1=B2=0.5`). Fonte de verdade no código: `backend/app/models/vehicle.py`.
+> **Escala A1–A8 + fallback (ADR-0003, supera R1/R4):** pesos default em
+> `backend/app/models/vehicle.py` → `PESO_POR_NIVEL`
+> (A1=1.0, A2=0.85, A3=0.7, A4=0.55, A5=0.45, A6=0.35, A7=0.25, A8=0.15, SC=0.1),
+> estritamente decrescente. Esses valores são apenas o **bootstrap**: o peso efetivo da RL05 é o
+> **vigente por programa na data de publicação**, lido de `qualis_weights` (não desta coleção).
+> **Sem nível configurado:** o veículo assume `SC` (fallback).
+
+### `qualis_weights` ✅ — sub-coleção de `programs` — chave: `auto-id`
+
+Pesos Qualis **versionados por programa** ([ADR-0003](./adr/0003-pesos-qualis-versionados-por-programa.md)).
+Cada coordenador define, no seu programa, o peso de cada nível da escala `A1`–`A8` + `SC`. Cada
+alteração cria uma **nova versão** (nunca sobrescreve): a própria coleção é o histórico de mudanças.
+A RL05 usa o peso **vigente na data de publicação** da produção; produção ainda não publicada
+(`submetido`/`aceito`) usa o vigente atual (provisório) até ser publicada.
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| `pesos` | map | nível → peso; deve cobrir **exatamente** `A1`–`A8` + `SC`; pesos não-negativos |
+| `vigente_desde` | timestamp | momento a partir do qual a versão vale (base da resolução por data) |
+| `alterado_por` | string | →`users.uid` (coordenação que criou a versão) |
+| `alterado_em` | timestamp | |
+
+> Resolução (`QualisWeightsService` / `inference_service`): seleciona a versão de maior
+> `vigente_desde ≤ data_referência`; sem versão aplicável, cai no default `PESO_POR_NIVEL`. O
+> `inference_engine` permanece isolado — recebe o peso já resolvido como fato
+> `relevancia_peso(Nivel, Peso)`. O `seed_firestore` grava uma versão bootstrap a partir de
+> `PESO_POR_NIVEL`.
 
 ---
 
