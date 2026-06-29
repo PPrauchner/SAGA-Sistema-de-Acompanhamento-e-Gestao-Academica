@@ -48,3 +48,10 @@ class StudentRepository(FirebaseRepository):
     async def list_all(self) -> list[dict[str, Any]]:
         """Lista alunos normalizando situacao_registrada legada (rename fase_defesa)."""
         return [_normalize_situacao_registrada(student) for student in await super().list_all()]
+    
+    async def get_by_uid(self, uid: str) -> dict[str, Any] | None:
+        """Busca aluno pelo campo uid (Firebase Auth), não pelo doc_id."""
+        results = await self.query(filters=[("uid", "==", uid)])
+        if not results:
+            return None
+        return _normalize_situacao_registrada(results[0])
