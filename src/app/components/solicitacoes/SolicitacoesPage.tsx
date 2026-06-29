@@ -3,6 +3,7 @@ import { Plus, Clock, CheckCircle, XCircle, AlertTriangle, FileText, Calendar } 
 
 import { solicitacoesApi, type Solicitacao } from "@/api/solicitacoesApi";
 import { getStudents, type Student } from "@/api/studentsApi";
+import { validateReasonableDate } from "@/lib/dateValidation";
 import { useApp } from "../../context/AppContext";
 
 const STATUS_MAP = {
@@ -75,6 +76,7 @@ export function SolicitacoesPage() {
   const [documentos, setDocumentos] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [advisorStudents, setAdvisorStudents] = useState<Student[]>([]);
   const canCreateRequest = currentUser?.role === "aluno" || currentUser?.role === "orientador";
@@ -133,6 +135,7 @@ export function SolicitacoesPage() {
     setFormData(DEFAULT_FORM);
     setDocumentos([]);
     setSubmitError(null);
+    setDateError(null);
     setSuccessMessage(null);
     setShowForm(true);
   }
@@ -141,6 +144,7 @@ export function SolicitacoesPage() {
     if (submitting) return;
     setShowForm(false);
     setSubmitError(null);
+    setDateError(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -155,6 +159,11 @@ export function SolicitacoesPage() {
     }
     if (!formData.nova_data) {
       setSubmitError("Informe a nova data solicitada.");
+      return;
+    }
+    const dataInvalida = validateReasonableDate(formData.nova_data, { allowFuture: true });
+    if (dataInvalida) {
+      setDateError(dataInvalida);
       return;
     }
     if (!formData.motivo.trim()) {
@@ -355,7 +364,8 @@ export function SolicitacoesPage() {
                 </div>
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Nova Data Solicitada</label>
-                  <input type="date" required value={formData.nova_data} onChange={(e) => setFormData((current) => ({ ...current, nova_data: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
+                  <input type="date" required value={formData.nova_data} onChange={(e) => { setFormData((current) => ({ ...current, nova_data: e.target.value })); if (dateError) setDateError(null); }} onBlur={(e) => setDateError(validateReasonableDate(e.target.value, { allowFuture: true }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: `1px solid ${dateError ? "#dc2626" : "var(--border)"}`, background: "var(--input-background)", fontSize: "13px" }} />
+                  {dateError && <p style={{ fontSize: "11px", color: "#dc2626", marginTop: "6px" }}>{dateError}</p>}
                 </div>
               </div>
               <div>

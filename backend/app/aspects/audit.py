@@ -20,6 +20,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
+from pydantic import BaseModel
+
 from backend.app.aspects import aspect_config
 from backend.app.core.firebase import get_firestore_client
 
@@ -104,6 +106,21 @@ def _extrair_recurso_do_resultado(resultado: Any) -> str | None:
 
 
 
+def _serializar_modelos(value: Any) -> Any:
+    """Converte BaseModels (inclusive aninhados) em dict, deixando o resto intacto.
+
+    Diferente de `_serializar`, não força `str()` em datetimes/objetos — apenas
+    desfaz modelos Pydantic, que o Firestore não aceita crus (regressão #151).
+    """
+    if isinstance(value, BaseModel):
+        return value.model_dump(mode="json")
+    if isinstance(value, dict):
+        return {key: _serializar_modelos(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serializar_modelos(item) for item in value]
+    return value
+
+
 def _extrair_valor_entrada(
     sig: inspect.Signature,
     bound: inspect.BoundArguments,
@@ -114,7 +131,7 @@ def _extrair_valor_entrada(
             continue
         if hasattr(valor, "role") and hasattr(valor, "uid"):
             continue
-        resultado[nome] = valor
+        resultado[nome] = _serializar_modelos(valor)
     # Redação A02 (portada da development): nunca persistir segredos no audit_log.
     return _redact_sensitive(resultado)
 

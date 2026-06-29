@@ -7,9 +7,9 @@ from fastapi import HTTPException
 
 from backend.app.core.auth import CurrentUser
 from backend.app.models.activity_type import (
-    ActivityTypeCreateRequest,
+    ActivityTypeCreate,
     ActivityTypeToggleRequest,
-    ActivityTypeUpdateRequest,
+    ActivityTypeUpdate,
 )
 from backend.app.services import activity_type_service as activity_type_module
 from backend.app.services.activity_type_service import ActivityTypeService
@@ -19,17 +19,17 @@ class _FakeActivityTypeRepository:
     store: dict[str, dict[str, Any]] = {}
     counter = 0
 
-    async def create(self, data: dict[str, Any]) -> str:
+    async def create_type(self, data: dict[str, Any]) -> str:
         type(self).counter += 1
         doc_id = f"type{type(self).counter}"
         type(self).store[doc_id] = dict(data)
         return doc_id
 
-    async def get(self, doc_id: str) -> dict[str, Any] | None:
+    async def get_type(self, doc_id: str) -> dict[str, Any] | None:
         data = type(self).store.get(doc_id)
         return dict(data) if data else None
 
-    async def update(self, doc_id: str, data: dict[str, Any]) -> None:
+    async def update_type(self, doc_id: str, data: dict[str, Any]) -> None:
         if not data:
             # Espelha o google-cloud-firestore real: update({}) levanta ValueError.
             raise ValueError("Cannot update with an empty document.")
@@ -56,7 +56,7 @@ async def test_create_type_usa_auto_id_e_marca_ativo_por_padrao() -> None:
     service = ActivityTypeService()
 
     result = await service.create_type(
-        ActivityTypeCreateRequest(
+        ActivityTypeCreate(
             nome="Publicação em periódico",
             categoria="especifico",
             pontuacao_base=10.0,
@@ -90,7 +90,7 @@ async def test_update_type_atualiza_apenas_campos_informados() -> None:
 
     result = await service.update_type(
         "type1",
-        ActivityTypeUpdateRequest(pontuacao_base=6.0),
+        ActivityTypeUpdate(pontuacao_base=6.0),
         _coord(),
     )
 
@@ -107,7 +107,7 @@ async def test_update_type_so_com_observacao_nao_chama_update_vazio() -> None:
 
     result = await service.update_type(
         "type1",
-        ActivityTypeUpdateRequest(observacao="Apenas justificando, sem alterar campos"),
+        ActivityTypeUpdate(observacao="Apenas justificando, sem alterar campos"),
         _coord(),
     )
 
@@ -121,7 +121,7 @@ async def test_update_type_inexistente_lanca_404() -> None:
     with pytest.raises(HTTPException) as exc_info:
         await service.update_type(
             "inexistente",
-            ActivityTypeUpdateRequest(pontuacao_base=1.0),
+            ActivityTypeUpdate(pontuacao_base=1.0),
             _coord(),
         )
 

@@ -35,6 +35,7 @@ from backend.app.api.v1 import (
     qualis_weights,
     registration_requests,
     reports,
+    requests,
     students,
     transfers,
     users,

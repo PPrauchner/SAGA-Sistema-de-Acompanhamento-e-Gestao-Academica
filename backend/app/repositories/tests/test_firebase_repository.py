@@ -16,7 +16,8 @@ from backend.app.repositories.firebase_repository import FirebaseRepository
 
 
 class _FakeSnapshot:
-    def __init__(self, data: dict[str, Any] | None) -> None:
+    def __init__(self, doc_id: str, data: dict[str, Any] | None) -> None:
+        self.id = doc_id
         self._data = data
 
     @property
@@ -33,7 +34,7 @@ class _FakeDocument:
         self._id = doc_id
 
     def get(self) -> _FakeSnapshot:
-        return _FakeSnapshot(self._store.get(self._id))
+        return _FakeSnapshot(self._id, self._store.get(self._id))
 
     def set(self, data: dict[str, Any]) -> None:
         self._store[self._id] = dict(data)
@@ -67,7 +68,7 @@ def repo(monkeypatch: pytest.MonkeyPatch) -> FirebaseRepository:
 
 async def test_set_then_get_retorna_dados(repo: FirebaseRepository) -> None:
     await repo.set("tok1", {"email": "a@b.com", "usado": False})
-    assert await repo.get("tok1") == {"email": "a@b.com", "usado": False}
+    assert await repo.get("tok1") == {"id": "tok1", "email": "a@b.com", "usado": False}
 
 
 async def test_get_inexistente_retorna_none(repo: FirebaseRepository) -> None:
@@ -77,4 +78,4 @@ async def test_get_inexistente_retorna_none(repo: FirebaseRepository) -> None:
 async def test_update_altera_apenas_campos_informados(repo: FirebaseRepository) -> None:
     await repo.set("tok1", {"email": "a@b.com", "usado": False})
     await repo.update("tok1", {"usado": True})
-    assert await repo.get("tok1") == {"email": "a@b.com", "usado": True}
+    assert await repo.get("tok1") == {"id": "tok1", "email": "a@b.com", "usado": True}

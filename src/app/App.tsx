@@ -21,16 +21,22 @@ const ActivitiesPage = lazy(() => import("./components/activities/ActivitiesPage
 const ProductionsPage = lazy(() => import("./components/productions/ProductionsPage").then((m) => ({ default: m.ProductionsPage })));
 const ChecklistPage = lazy(() => import("./components/checklist/ChecklistPage").then((m) => ({ default: m.ChecklistPage })));
 const SolicitacoesPage = lazy(() => import("./components/solicitacoes/SolicitacoesPage").then((m) => ({ default: m.SolicitacoesPage })));
+const RequestsPage = lazy(() => import("./components/requests/RequestsPage").then((m) => ({ default: m.RequestsPage })));
 const RegistrationRequestsPage = lazy(() => import("./components/registration-requests/RegistrationRequestsPage").then((m) => ({ default: m.RegistrationRequestsPage })));
-const TransfersPage = lazy(() => import("./components/transfers/TransfersPage").then((m) => ({ default: m.TransfersPage })));
+
 const ReportsPage = lazy(() => import("./components/reports/ReportsPage").then((m) => ({ default: m.ReportsPage })));
 const InferencePage = lazy(() => import("./components/inference/InferencePage").then((m) => ({ default: m.InferencePage })));
 const AuditPage = lazy(() => import("./components/audit/AuditPage").then((m) => ({ default: m.AuditPage })));
 const NotificationsPage = lazy(() => import("./components/notifications/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
 const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
+import { useState } from "react";
+import { TransferModal } from "./components/transfers/TransferModal";
+
 function StudentDetailPage() {
   const { currentUser, setCurrentPage, selectedStudentId } = useApp();
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -43,7 +49,7 @@ function StudentDetailPage() {
         </button>
         {currentUser?.role === "coordenacao" && (
           <button
-            onClick={() => setCurrentPage("transferencias")}
+            onClick={() => setIsTransferModalOpen(true)}
             className="flex items-center gap-2 px-4 py-2 rounded-xl"
             style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
           >
@@ -68,6 +74,16 @@ function StudentDetailPage() {
           ))}
         </div>
       </div>
+      {isTransferModalOpen && (
+        <TransferModal 
+          onClose={() => setIsTransferModalOpen(false)} 
+          onSuccess={() => {
+            setIsTransferModalOpen(false);
+            alert("Transferência realizada/solicitada com sucesso!");
+          }} 
+          initialStudentId={selectedStudentId || undefined}
+        />
+      )}
     </div>
   );
 }
@@ -83,10 +99,9 @@ function PageRouter() {
     case "atividades": return <ActivitiesPage />;
     case "producoes": return <ProductionsPage />;
     case "checklist": return <ChecklistPage />;
-    case "solicitacoes":
+    case "solicitacoes": return <RequestsPage />;
     case "prorrogacoes": return <SolicitacoesPage />;
     case "registration-requests": return <RegistrationRequestsPage />;
-    case "transferencias": return <TransfersPage />;
     case "relatorios": return <ReportsPage />;
     case "inferencia": return <InferencePage />;
     case "auditoria": return <AuditPage />;

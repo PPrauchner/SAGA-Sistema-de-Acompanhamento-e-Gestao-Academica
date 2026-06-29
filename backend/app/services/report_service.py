@@ -22,6 +22,8 @@ import asyncio
 from datetime import date, datetime
 from typing import Any
 
+from fastapi import HTTPException, status
+
 from backend.app.models.report import (
     AdvisorGroupItem,
     CompletionTimeItem,
@@ -85,6 +87,68 @@ class ReportService:
         self._advisors = advisors or AdvisorRepository()
         self._productions = productions or ProductionRepository()
         self._activities = activities or ActivityRepository()
+
+    @staticmethod
+    def _scope_to_own_student(
+        students: list[dict[str, Any]], uid: str
+    ) -> list[dict[str, Any]]:
+        """Restringe a lista ao registro de discente do próprio solicitante (US-AN06).
+
+        Args:
+            students: Alunos já filtrados pelo programa do solicitante.
+            uid: uid do discente solicitante.
+
+        Returns:
+            Lista contendo apenas o próprio aluno.
+
+        Raises:
+            HTTPException: 403 se o solicitante não tiver registro de discente no
+                programa — acesso fora do escopo.
+        """
+        own = [student for student in students if student.get("uid") == uid]
+        if not own:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Acesso negado: discente sem registro no programa",
+            )
+        return own
+
+    @staticmethod
+    def _resolve_advisor_id(advisors: list[dict[str, Any]], uid: str) -> str:
+        """Resolve o id do registro de orientador do solicitante (US-AN06).
+
+        Args:
+            advisors: Orientadores cadastrados.
+            uid: uid do orientador solicitante.
+
+        Returns:
+            id do documento em advisors/ do solicitante.
+
+        Raises:
+            HTTPException: 403 se o solicitante não tiver registro de orientador —
+                acesso fora do escopo.
+        """
+        for advisor in advisors:
+            if advisor.get("uid") == uid:
+                return advisor["id"]
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acesso negado: orientador sem registro no programa",
+        )
+
+    @staticmethod
+    def _mostra_agregado_orientador(
+        role: str, orientador_id: str, own_advisor_id: str | None
+    ) -> bool:
+        """Decide se o agregado de um orientador aparece no relatório (US-AN06).
+
+        Discente não vê agregados; orientador vê só o próprio; coordenação vê todos.
+        """
+        if role == "aluno":
+            return False
+        if role == "orientador":
+            return orientador_id == own_advisor_id
+        return True
 
     async def _advisor_names(self) -> dict[str, str]:
         """Mapa orientador_id → nome para enriquecer os relatórios."""
@@ -207,11 +271,30 @@ class ReportService:
             historico=historico,
         )
 
-    async def get_productions_report(self) -> ProductionsReportResponse:
-        """Agrega produção bibliográfica creditada por aluno (RL05) e por orientador."""
-        students = await self._students.list_all()
-        advisor_names = await self._advisor_names()
-        productions = await self._productions.list_productions()
+    async def get_productions_report(
+        self, programa_id: str, role: str, uid: str
+    ) -> ProductionsReportResponse:
+        """Agrega produção bibliográfica creditada por aluno (RL05) e por orientador.
+
+        Args:
+            programa_id: Programa do solicitante; restringe alunos e produções
+                agregados ao tenant correspondente (escopo US-AN06).
+            role: Papel do solicitante; define o escopo dos dados retornados —
+                discente vê apenas o próprio registro; orientador vê os próprios
+                orientandos identificados e o restante do programa anonimizado;
+                coordenação vê tudo (US-AN06).
+            uid: uid do solicitante, usado para resolver o próprio registro de
+                discente (aluno) ou de orientador.
+        """
+        students = await self._students.list_by_program(programa_id)
+        if role == "aluno":
+            students = self._scope_to_own_student(students, uid)
+        advisors = await self._advisors.list_all()
+        advisor_names = {advisor["id"]: advisor.get("nome", "") for advisor in advisors}
+        own_advisor_id = (
+            self._resolve_advisor_id(advisors, uid) if role == "orientador" else None
+        )
+        productions = await self._productions.list_productions_by_program(programa_id)
         producao_por_id = {producao["id"]: producao for producao in productions}
 
         activities_por_aluno = await asyncio.gather(
@@ -240,10 +323,17 @@ class ReportService:
                 pontuacao_total += producao.get("pontuacao_calculada", 0.0)
 
             if credit_ids:
+                # Orientador vê seus orientandos identificados; os demais alunos do
+                # programa entram anonimizados para benchmarking (US-AN06).
+                anonimo = (
+                    role == "orientador"
+                    and student.get("orientador_id") != own_advisor_id
+                )
                 por_aluno.append(
                     ProductionByStudentItem(
-                        student_id=student["id"],
-                        student_nome=student.get("nome", ""),
+                        student_id=None if anonimo else student["id"],
+                        student_nome=None if anonimo else student.get("nome", ""),
+                        anonimo=anonimo,
                         total=len(credit_ids),
                         pontuacao_total=round(pontuacao_total, 2),
                         por_nivel=ProductionLevelBreakdown(**niveis),
@@ -259,11 +349,14 @@ class ReportService:
                 acc["total"] += len(credit_ids)
                 acc["pontuacao"] += pontuacao_total
 
+        # Discente não vê agregados por orientador; orientador vê só o próprio;
+        # coordenação vê todos (US-AN06).
         por_orientador = [
             ProductionByAdvisorItem(
                 advisor_id=orientador_id,
                 advisor_nome=advisor_names.get(orientador_id, ""),
                 total=int(acc["total"]),
+                pontuacao_total=round(acc["pontuacao"], 2),
                 pontuacao_media_orientandos=(
                     round(acc["pontuacao"] / acc["orientandos"], 2)
                     if acc["orientandos"]
@@ -271,6 +364,7 @@ class ReportService:
                 ),
             )
             for orientador_id, acc in agg_orientador.items()
+            if self._mostra_agregado_orientador(role, orientador_id, own_advisor_id)
         ]
 
         return ProductionsReportResponse(

@@ -5,6 +5,7 @@ import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
 import { getAdvisors, type Advisor } from "../../../api/advisorsApi";
 import { coordinationTransfersApi, type CoordinationTransfer } from "../../../api/coordinationTransfersApi";
+import { getVehicles, type Vehicle } from "../../../api/productionsApi";
 import { usersApi } from "../../../api/usersApi";
 import { toast } from "sonner";
 import { QualisWeightsSection } from "./QualisWeightsSection";
@@ -45,6 +46,11 @@ export interface VehicleLevel {
   peso: number;
 }
 
+// Exibe métricas descritivas opcionais; valor ausente (null/undefined) vira "—".
+// Usa checagem de null para não tratar 0 como vazio (percentil/índice podem ser 0).
+const formatMetric = (value: number | null | undefined): string | number =>
+  value == null ? "—" : value;
+
 const BASE_TABS = [
   { id: "perfil", label: "Perfil", icon: <User size={16} /> },
   { id: "notificacoes", label: "Notificações", icon: <Bell size={16} /> },
@@ -66,6 +72,7 @@ export function SettingsPage() {
   const [programConfig, setProgramConfig] = useState<ProgramConfig | null>(null);
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
   const [vehicleLevels, setVehicleLevels] = useState<VehicleLevel[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [transfers, setTransfers] = useState<CoordinationTransfer[]>([]);
   const [selectedSuccessorUid, setSelectedSuccessorUid] = useState("");
@@ -99,14 +106,16 @@ export function SettingsPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const [config, types, vLevels] = await Promise.all([
+      const [config, types, vLevels, vehicleList] = await Promise.all([
         programsApi.getProgramConfig(token),
         activityTypesApi.getActivityTypes(token),
-        programsApi.getVehicleLevels(token)
+        programsApi.getVehicleLevels(token),
+        getVehicles(token)
       ]);
       setProgramConfig(config);
       setActivityTypes(types);
       setVehicleLevels(vLevels);
+      setVehicles(vehicleList);
     } catch (error) {
       toast.error("Erro ao carregar dados do programa");
     } finally {
@@ -788,11 +797,20 @@ export function SettingsPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {vehicleLevels.map((level) => (
+                  {vehicleLevels.map((level) => {
+                    const vehicle = vehicles.find((v) => v.id === level.id);
+                    return (
                     <div key={level.id} className="flex items-center justify-between p-3 rounded-xl bg-[var(--muted)] border border-[var(--border)]">
                       <div>
-                        <p className="text-sm font-bold">{level.nivel}</p>
-                        <p className="text-xs opacity-60">Peso Multiplicador: {level.peso}</p>
+                        <p className="text-sm font-bold">{vehicle?.nome ?? level.nivel}</p>
+                        <p className="text-xs opacity-60">
+                          Nível {level.nivel} · Peso {level.peso}
+                          {vehicle && ` · ${vehicle.tipo === "revista" ? "Revista" : "Evento"}`}
+                        </p>
+                        <p className="text-xs opacity-60">
+                          Índice H: {formatMetric(vehicle?.indice_h)} · Percentil Scopus: {formatMetric(vehicle?.percentil_scopus)}
+                          {vehicle?.tipo === "revista" && ` · JCR: ${formatMetric(vehicle?.jcr)}`}
+                        </p>
                       </div>
                       <div className="flex items-center gap-3">
                         <button type="button" onClick={() => openEditVehicleModal(level)} title="Editar Peso">
@@ -800,7 +818,8 @@ export function SettingsPage() {
                         </button>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                   {vehicleLevels.length === 0 && (
                     <p className="text-sm opacity-60">Nenhum nível de veículo configurado.</p>
                   )}
