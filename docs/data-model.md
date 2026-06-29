@@ -197,7 +197,7 @@ erDiagram
 | `qualificacao_data` | timestamp\|null | | |
 | `criado_em` / `atualizado_em` / `atualizado_por` | timestamp / uid | | |
 
-¹ `regular`\|`em_prorrogacao`\|`em_risco`\|`qualificado`\|`fase_defesa`\|`concluido`\|`desligado`.
+¹ `regular`\|`em_prorrogacao`\|`em_risco`\|`qualificado`\|`em_fase_de_defesa`\|`concluido`\|`desligado`.
 `situacao_registrada` (humano + transição automática) e `situacao_inferida` (motor) usam o mesmo enum;
 a **divergência entre as duas é sinal de atenção**.
 
