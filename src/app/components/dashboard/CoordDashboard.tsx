@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { useCoordDashboard } from "@/hooks/useDashboard";
+import { useProductionsByMonth } from "@/hooks/useProductionsByMonth";
+import type { ProductionByMonthItem } from "@/api/reportsApi";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
   BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
@@ -71,20 +73,20 @@ const ORIENTADOR_DATA = [
   { name: "Diego N.", orientandos: 6, producoes: 8, defesas: 1, risco: 2 },
 ];
 
-const PRODUCAO_DATA = [
-  { mes: "Jan", A1: 3, A2: 5, B1: 8, livros: 1, conf: 4 },
-  { mes: "Fev", A1: 2, A2: 4, B1: 6, livros: 0, conf: 3 },
-  { mes: "Mar", A1: 5, A2: 6, B1: 9, livros: 1, conf: 6 },
-  { mes: "Abr", A1: 4, A2: 7, B1: 11, livros: 2, conf: 5 },
-  { mes: "Mai", A1: 6, A2: 5, B1: 10, livros: 0, conf: 7 },
-  { mes: "Jun", A1: 8, A2: 9, B1: 13, livros: 1, conf: 9 },
-  { mes: "Jul", A1: 5, A2: 6, B1: 8, livros: 0, conf: 5 },
-  { mes: "Ago", A1: 7, A2: 8, B1: 12, livros: 2, conf: 8 },
-  { mes: "Set", A1: 9, A2: 10, B1: 15, livros: 1, conf: 10 },
-  { mes: "Out", A1: 11, A2: 12, B1: 17, livros: 3, conf: 11 },
-  { mes: "Nov", A1: 8, A2: 9, B1: 14, livros: 1, conf: 9 },
-  { mes: "Dez", A1: 6, A2: 7, B1: 11, livros: 0, conf: 7 },
-];
+interface ProducaoChartPoint { mes: string; total: number; }
+
+const MESES_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+// Converte a série do backend ({ mes: "2025-01", total }) em pontos do gráfico, com o mês
+// formatado como rótulo curto "mmm/aa" (ano incluído para distinguir meses de anos distintos).
+function toProducaoChartData(items: ProductionByMonthItem[] | null): ProducaoChartPoint[] {
+  if (!items) return [];
+  return items.map((item) => {
+    const [ano, mes] = item.mes.split("-");
+    const label = MESES_PT[Number(mes) - 1] ? `${MESES_PT[Number(mes) - 1]}/${ano.slice(2)}` : item.mes;
+    return { mes: label, total: item.total };
+  });
+}
 
 const INTEGRALIZACAO_DATA = [
   { ano: "2018", mestrado: 26, doutorado: 50, metaMestrado: 24, metaDoutorado: 48 },
@@ -254,7 +256,7 @@ function SectionHeader({ title, sub, section, onReport, isMock }: {
 }
 
 
-function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose: () => void; statusData: StatusDataProp[] }) {
+function ReportModal({ type, onClose, statusData, producaoData }: { type: ReportType; onClose: () => void; statusData: StatusDataProp[]; producaoData: ProducaoChartPoint[] }) {
   if (!type) return null;
 
   const configs: Record<Exclude<ReportType, null>, { title: string; sub: string; content: React.ReactNode }> = {
@@ -330,45 +332,24 @@ function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose:
     },
     producao: {
       title: "Relatório — Produção Científica",
-      sub: "Artigos, livros e conferências por mês em 2026",
+      sub: "Produções validadas por mês (últimos 12 meses)",
       content: (
         <div className="space-y-4">
           <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={PRODUCAO_DATA}>
+            <AreaChart data={producaoData}>
               <defs>
-                <linearGradient id="gA1" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#123C7A" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#123C7A" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gA2" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="gProd" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#1F8A70" stopOpacity={0.3} />
                   <stop offset="95%" stopColor="#1F8A70" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="mes" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-              <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
               <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              <Area type="monotone" dataKey="A1" name="Qualis A1" stroke="#123C7A" fill="url(#gA1)" strokeWidth={2} isAnimationActive={false} />
-              <Area type="monotone" dataKey="A2" name="Qualis A2" stroke="#1F8A70" fill="url(#gA2)" strokeWidth={2} isAnimationActive={false} />
-              <Area type="monotone" dataKey="conf" name="Conferências" stroke="#D4A017" fill="none" strokeWidth={1.5} strokeDasharray="4 4" isAnimationActive={false} />
+              <Area type="monotone" dataKey="total" name="Produções validadas" stroke="#1F8A70" fill="url(#gProd)" strokeWidth={2} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {[
-              { label: "Total A1", value: 74, color: "#123C7A" },
-              { label: "Total A2", value: 88, color: "#1F8A70" },
-              { label: "Conferências", value: 84, color: "#D4A017" },
-              { label: "B1", value: 124, color: "#8b5cf6" },
-              { label: "Livros", value: 12, color: "#f97316" },
-              { label: "Média/Aluno", value: "1,8", color: "#123C7A" },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: `${s.color}0d`, border: `1px solid ${s.color}22` }}>
-                <p style={{ fontSize: "20px", fontWeight: 800, color: s.color }}>{s.value}</p>
-                <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>{s.label}</p>
-              </div>
-            ))}
-          </div>
         </div>
       ),
     },
@@ -502,32 +483,26 @@ function OrientadorPerfChart({ onReport }: { onReport: () => void }) {
   );
 }
 
-function ProducaoChart({ onReport }: { onReport: () => void }) {
+function ProducaoChart({ onReport, data }: { onReport: () => void; data: ProducaoChartPoint[] }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Produção Científica" sub="Qualis A1, A2 e conferências — 2026" section="Produção Científica" onReport={onReport} isMock />
+      <SectionHeader title="Produção Científica" sub="Produções validadas por mês" section="Produção Científica" onReport={onReport} />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 300 }}>
       <ResponsiveContainer width="100%" height={190}>
-        <AreaChart data={PRODUCAO_DATA} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+        <AreaChart data={data} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
           <defs key="pr-defs">
-            <linearGradient key="pr-g1" id="pGA1" x1="0" y1="0" x2="0" y2="1">
-              <stop key="s1a" offset="5%" stopColor="#123C7A" stopOpacity={0.25} />
-              <stop key="s1b" offset="95%" stopColor="#123C7A" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient key="pr-g2" id="pGA2" x1="0" y1="0" x2="0" y2="1">
-              <stop key="s2a" offset="5%" stopColor="#1F8A70" stopOpacity={0.25} />
-              <stop key="s2b" offset="95%" stopColor="#1F8A70" stopOpacity={0} />
+            <linearGradient key="pr-g" id="pGProd" x1="0" y1="0" x2="0" y2="1">
+              <stop key="sa" offset="5%" stopColor="#1F8A70" stopOpacity={0.25} />
+              <stop key="sb" offset="95%" stopColor="#1F8A70" stopOpacity={0} />
             </linearGradient>
           </defs>
           <CartesianGrid key="pr-grid" strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis key="pr-x" dataKey="mes" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-          <YAxis key="pr-y" width={28} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+          <YAxis key="pr-y" width={28} allowDecimals={false} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
           <Tooltip key="pr-tip" contentStyle={{ borderRadius: 8, fontSize: 11 }} />
           <Legend key="pr-leg" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-          <Area key="pr-a1" type="monotone" dataKey="A1" name="Qualis A1" stroke="#123C7A" fill="url(#pGA1)" strokeWidth={2} isAnimationActive={false} />
-          <Area key="pr-a2" type="monotone" dataKey="A2" name="Qualis A2" stroke="#1F8A70" fill="url(#pGA2)" strokeWidth={2} isAnimationActive={false} />
-          <Area key="pr-a3" type="monotone" dataKey="conf" name="Conferências" stroke="#D4A017" fill="none" strokeWidth={1.5} strokeDasharray="4 4" isAnimationActive={false} />
+          <Area key="pr-a" type="monotone" dataKey="total" name="Produções validadas" stroke="#1F8A70" fill="url(#pGProd)" strokeWidth={2} isAnimationActive={false} />
         </AreaChart>
       </ResponsiveContainer>
       </div>
@@ -801,6 +776,8 @@ function AlertsCenter() {
 
 export function CoordDashboard() {
   const { data: dashData, loading, error } = useCoordDashboard();
+  const { data: producaoRaw } = useProductionsByMonth(12);
+  const producaoData = toProducaoChartData(producaoRaw);
   const [reportModal, setReportModal] = useState<ReportType>(null);
 
   if (loading) {
@@ -887,7 +864,7 @@ export function CoordDashboard() {
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ProducaoChart onReport={() => setReportModal("producao")} />
+        <ProducaoChart onReport={() => setReportModal("producao")} data={producaoData} />
         <IntegralizacaoChart onReport={() => setReportModal("integralizacao")} />
       </div>
 
@@ -900,7 +877,7 @@ export function CoordDashboard() {
       <AlertsCenter />
 
       {/* Report Modal */}
-      <ReportModal type={reportModal} onClose={() => setReportModal(null)} statusData={statusData} />
+      <ReportModal type={reportModal} onClose={() => setReportModal(null)} statusData={statusData} producaoData={producaoData} />
     </div>
   );
 }
