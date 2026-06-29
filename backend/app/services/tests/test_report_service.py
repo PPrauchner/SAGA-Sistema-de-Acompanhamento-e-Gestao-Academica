@@ -517,16 +517,33 @@ async def test_productions_by_month_conta_producao_no_validado_em_mais_antigo() 
     assert sum(item.total for item in result) == 1
 
 
-async def test_productions_by_month_ignora_aprovada_sem_validado_em() -> None:
+async def test_productions_by_month_ignora_aprovada_sem_data_de_validacao() -> None:
     service = _build_service(
         students=[{"id": "s1", "programa_id": _PROG}],
         productions=[{"id": "p1", "programa_id": _PROG}],
-        activities={"s1": [{"producao_id": "p1", "status": "aprovado"}]},  # sem validado_em
+        activities={"s1": [{"producao_id": "p1", "status": "aprovado"}]},  # sem validado_em/aprovado_em
     )
 
     result = await service.get_productions_by_month(_PROG)
 
     assert sum(item.total for item in result) == 0
+
+
+async def test_productions_by_month_usa_aprovado_em_como_fallback() -> None:
+    mes_atual, hoje = _month_offset(0)
+    # Dado legado: só o campo aprovado_em preenchido (sem validado_em), como nos
+    # registros antigos que ActivityResponse normaliza para validado_em.
+    service = _build_service(
+        students=[{"id": "s1", "programa_id": _PROG}],
+        productions=[{"id": "p1", "programa_id": _PROG}],
+        activities={"s1": [{"producao_id": "p1", "status": "aprovado", "aprovado_em": hoje.isoformat()}]},
+    )
+
+    result = await service.get_productions_by_month(_PROG)
+
+    por_mes = {item.mes: item.total for item in result}
+    assert por_mes[mes_atual] == 1
+    assert sum(item.total for item in result) == 1
 
 
 async def test_productions_by_month_ignora_nao_aprovada_e_producao_orfa() -> None:
