@@ -88,7 +88,7 @@
         "nivel": "string ('mestrado'|'doutorado')",
         "data_ingresso": "Timestamp",
         "prazo_final": "Timestamp",
-        "situacao_registrada": "string ('regular'|'em_prorrogacao'|'em_risco'|'qualificado'|'fase_defesa'|'concluido'|'desligado')",
+        "situacao_registrada": "string ('regular'|'em_prorrogacao'|'em_risco'|'qualificado'|'em_fase_de_defesa'|'concluido'|'desligado')",
         "situacao_inferida": "string (mesmo enum — atualizado pelo InferenceService)",
         "proficiencia_comprovada": "boolean (default: false)",
         "proficiencia_data": "Timestamp | null",

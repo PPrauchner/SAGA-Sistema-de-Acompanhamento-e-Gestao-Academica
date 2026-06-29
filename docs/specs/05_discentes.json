@@ -240,7 +240,7 @@
       "papeis_autorizados": ["coordenacao"],
       "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history"],
       "request_body": {
-        "situacao_registrada": "string ('regular'|'em_prorrogacao'|'qualificado'|'fase_defesa'|'concluido'|'desligado')",
+        "situacao_registrada": "string ('regular'|'em_prorrogacao'|'qualificado'|'em_fase_de_defesa'|'concluido'|'desligado')",
         "observacao": "string | null"
       },
       "response_200": {"message": "Situação atualizada", "historico_criado": true}
