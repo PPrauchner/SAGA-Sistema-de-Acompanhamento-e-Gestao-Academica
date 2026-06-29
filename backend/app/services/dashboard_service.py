@@ -87,7 +87,7 @@ _STATUS_FIELD_MAP: dict[str, str] = {
     "regular": "regular",
     "em_risco": "em_risco",
     "qualificado": "qualificado",
-    "em_fase_de_defesa": "fase_defesa",
+    "em_fase_de_defesa": "em_fase_de_defesa",
     "em_prorrogacao": "em_prorrogacao",
 }
 
