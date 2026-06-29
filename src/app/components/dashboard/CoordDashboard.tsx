@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { useCoordDashboard } from "@/hooks/useDashboard";
 import { useProductionsByMonth } from "@/hooks/useProductionsByMonth";
+import { usePendingExtensions } from "@/hooks/usePendingExtensions";
 import type { ProductionByMonthItem } from "@/api/reportsApi";
+import type { Solicitacao } from "@/api/solicitacoesApi";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
   BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
@@ -27,18 +29,6 @@ interface ValidationItem {
   prazo: string;
   urgencia: "alta" | "media" | "baixa";
   data: string;
-}
-
-interface ExtensionRequest {
-  id: string;
-  aluno: string;
-  nivel: "Mestrado" | "Doutorado";
-  orientador: string;
-  motivo: string;
-  prazoPrevisto: string;
-  novoPrazo: string;
-  status: "pendente" | "em-analise" | "aprovada" | "negada";
-  dataProtocolo: string;
 }
 
 interface AlertItem {
@@ -106,13 +96,6 @@ const VALIDATIONS: ValidationItem[] = [
   { id: "v6", tipo: "plano", aluno: "Patrícia Lima Farias", orientador: "Prof. Rafael Costa", descricao: "Revisão do Cronograma — Prorrogação", prazo: "20/06/2026", urgencia: "baixa", data: "31/05/2026" },
 ];
 
-const EXTENSIONS: ExtensionRequest[] = [
-  { id: "e1", aluno: "Marcos Vinícius Oliveira", nivel: "Mestrado", orientador: "Profa. Carla Mendes", motivo: "Problemas de saúde documentados", prazoPrevisto: "Dez/2024", novoPrazo: "Jun/2025", status: "em-analise", dataProtocolo: "20/05/2026" },
-  { id: "e2", aluno: "Patrícia Lima Farias", nivel: "Doutorado", orientador: "Prof. Rafael Costa", motivo: "Coleta de dados comprometida por pandemia", prazoPrevisto: "Mar/2025", novoPrazo: "Set/2025", status: "pendente", dataProtocolo: "25/05/2026" },
-  { id: "e3", aluno: "Diego Almeida Ramos", nivel: "Doutorado", orientador: "Prof. Diego Neri", motivo: "Mudança de escopo aprovada pelo orientador", prazoPrevisto: "Jun/2025", novoPrazo: "Dez/2025", status: "pendente", dataProtocolo: "28/05/2026" },
-  { id: "e4", aluno: "Camila Ferreira Luz", nivel: "Mestrado", orientador: "Profa. Mariana Torres", motivo: "Licença maternidade", prazoPrevisto: "Jul/2025", novoPrazo: "Jan/2026", status: "aprovada", dataProtocolo: "10/04/2026" },
-];
-
 const ALERTS: AlertItem[] = [
   { id: "a1", nivel: "critico", titulo: "Prazos vencidos sem prorrogação aprovada", descricao: "8 alunos ultrapassaram o prazo máximo de integralização sem prorrogação formalizada.", afetados: 8, data: "02/06/2026", acao: "Ver alunos" },
   { id: "a2", nivel: "critico", titulo: "Relatórios semestrais em atraso", descricao: "12 relatórios do período 2024-2 não foram entregues até a data limite.", afetados: 12, data: "01/06/2026", acao: "Notificar alunos" },
@@ -136,12 +119,22 @@ const TIPO_CFG: Record<ValidationItem["tipo"], { label: string; color: string; i
   atividade: { label: "Atividade", color: "#D4A017", icon: <BookOpen size={13} /> },
 };
 
-const EXT_STATUS_CFG = {
+// Chaveado pelos status do backend (ExtensionResponse.status); 'rejeitada' é exibido como "Negada".
+const EXT_STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
   pendente: { label: "Pendente", color: "#D4A017", bg: "#fffbeb" },
-  "em-analise": { label: "Em Análise", color: "#123C7A", bg: "#eef3fc" },
+  em_analise: { label: "Em Análise", color: "#123C7A", bg: "#eef3fc" },
   aprovada: { label: "Aprovada", color: "#1F8A70", bg: "#f0fdf4" },
-  negada: { label: "Negada", color: "#dc2626", bg: "#fef2f2" },
+  rejeitada: { label: "Negada", color: "#dc2626", bg: "#fef2f2" },
 };
+
+// Formata data ISO (date "AAAA-MM-DD" ou datetime) em "DD/MM/AAAA", sem deslocar por fuso.
+function formatDataBR(value?: string | null): string {
+  if (!value) return "—";
+  const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("pt-BR");
+}
 
 const ALERT_CFG = {
   critico: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: <AlertTriangle size={16} /> },
@@ -637,76 +630,68 @@ function ValidationQueue() {
   );
 }
 
-function ExtensionRequestsSection() {
-  const [filterStatus, setFilterStatus] = useState<ExtensionRequest["status"] | "todos">("todos");
-  const filtered = EXTENSIONS.filter((e) => filterStatus === "todos" || e.status === filterStatus);
+function ExtensionRequestsSection({ extensions, loading, error }: { extensions: Solicitacao[]; loading: boolean; error: string | null }) {
+  const total = extensions.length;
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
-          </div>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{EXTENSIONS.filter(e => e.status === "pendente" || e.status === "em-analise").length} pendentes de decisão</p>
+          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{loading ? "Carregando…" : `${total} pendente${total !== 1 ? "s" : ""} de decisão`}</p>
         </div>
         <ExportBar section="Prorrogações" />
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
-        {(["todos", "pendente", "em-analise", "aprovada", "negada"] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className="px-2.5 py-1 rounded-lg transition-all"
-            style={{
-              fontSize: "10px", fontWeight: 600,
-              background: filterStatus === s ? "var(--primary)" : "var(--muted)",
-              color: filterStatus === s ? "var(--primary-foreground)" : "var(--muted-foreground)",
-              border: `1px solid ${filterStatus === s ? "var(--primary)" : "var(--border)"}`,
-            }}
-          >
-            {s === "todos" ? "Todos" : EXT_STATUS_CFG[s].label}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        {filtered.map((ext) => {
-          const sc = EXT_STATUS_CFG[ext.status];
-          return (
-            <div key={ext.id} className="rounded-xl p-4" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{ext.aluno}</span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: ext.nivel === "Doutorado" ? "var(--tint-blue-bg)" : "var(--tint-violet-bg)", color: ext.nivel === "Doutorado" ? "var(--tint-blue-text)" : "var(--tint-violet-text)", border: `1px solid ${ext.nivel === "Doutorado" ? "var(--tint-blue-border)" : "var(--tint-violet-border)"}` }}>
-                      {ext.nivel}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar prorrogações: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando prorrogações…</p>
+      ) : total === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhuma prorrogação pendente.</p>
+      ) : (
+        <div className="space-y-3">
+          {extensions.map((ext) => {
+            const status = String(ext.status);
+            const sc = EXT_STATUS_CFG[status] ?? { label: status, color: "var(--muted-foreground)", bg: "var(--muted)" };
+            const nome = ext.aluno_nome || ext.aluno || "—";
+            const isDoutorado = (ext.nivel || "").toLowerCase() === "doutorado";
+            const podeDecidir = status === "pendente" || status === "em_analise";
+            return (
+              <div key={ext.id} className="rounded-xl p-4" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{nome}</span>
+                      <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: isDoutorado ? "var(--tint-blue-bg)" : "var(--tint-violet-bg)", color: isDoutorado ? "var(--tint-blue-text)" : "var(--tint-violet-text)", border: `1px solid ${isDoutorado ? "var(--tint-blue-border)" : "var(--tint-violet-border)"}` }}>
+                        {isDoutorado ? "Doutorado" : "Mestrado"}
+                      </span>
+                      <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
+                    </div>
+                    {ext.matricula && (
+                      <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>Matrícula: {ext.matricula}</p>
+                    )}
                   </div>
-                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>Orient.: {ext.orientador}</p>
+                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Protocolo: {formatDataBR(ext.created_at || ext.solicitacao)}</span>
                 </div>
-                <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Protocolo: {ext.dataProtocolo}</span>
-              </div>
-              <p style={{ fontSize: "12px", color: "var(--foreground)", marginBottom: "8px" }}><span style={{ color: "var(--muted-foreground)" }}>Motivo: </span>{ext.motivo}</p>
-              <div className="flex items-center gap-4" style={{ fontSize: "11px" }}>
-                <span><span style={{ color: "var(--muted-foreground)" }}>Prazo atual: </span><span style={{ fontWeight: 700, color: "var(--tint-danger-text)" }}>{ext.prazoPrevisto}</span></span>
-                <ChevronRight size={12} style={{ color: "var(--muted-foreground)" }} />
-                <span><span style={{ color: "var(--muted-foreground)" }}>Novo prazo: </span><span style={{ fontWeight: 700, color: "var(--tint-teal-text)" }}>{ext.novoPrazo}</span></span>
-              </div>
-              {(ext.status === "pendente" || ext.status === "em-analise") && (
-                <div className="flex gap-2 mt-3">
-                  <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-teal-text)", color: "#fff", fontSize: "11px", fontWeight: 700 }}>Aprovar</button>
-                  <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--tint-danger-border)" }}>Negar</button>
-                  <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--border)" }}>Solicitar Docs</button>
+                <p style={{ fontSize: "12px", color: "var(--foreground)", marginBottom: "8px" }}><span style={{ color: "var(--muted-foreground)" }}>Motivo: </span>{ext.motivo || ext.justificativa || "—"}</p>
+                <div className="flex items-center gap-4" style={{ fontSize: "11px" }}>
+                  <span><span style={{ color: "var(--muted-foreground)" }}>Prazo atual: </span><span style={{ fontWeight: 700, color: "var(--tint-danger-text)" }}>{formatDataBR(ext.prazo_atual || ext.data_atual)}</span></span>
+                  <ChevronRight size={12} style={{ color: "var(--muted-foreground)" }} />
+                  <span><span style={{ color: "var(--muted-foreground)" }}>Novo prazo: </span><span style={{ fontWeight: 700, color: "var(--tint-teal-text)" }}>{formatDataBR(ext.nova_data || ext.prazo_novo)}</span></span>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                {podeDecidir && (
+                  <div className="flex gap-2 mt-3">
+                    <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-teal-text)", color: "#fff", fontSize: "11px", fontWeight: 700 }}>Aprovar</button>
+                    <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--tint-danger-border)" }}>Negar</button>
+                    <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--border)" }}>Solicitar Docs</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -778,6 +763,8 @@ export function CoordDashboard() {
   const { data: dashData, loading, error } = useCoordDashboard();
   const { data: producaoRaw } = useProductionsByMonth(12);
   const producaoData = toProducaoChartData(producaoRaw);
+  const { data: pendingExtensions, loading: extLoading, error: extError } = usePendingExtensions();
+  const extensions = pendingExtensions ?? [];
   const [reportModal, setReportModal] = useState<ReportType>(null);
 
   if (loading) {
@@ -835,7 +822,7 @@ export function CoordDashboard() {
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {[
               { v: dashData?.atividades_aguardando_validacao ?? VALIDATIONS.length, l: "Na fila", color: "#D4A017" },
-              { v: dashData?.prorrogacoes_pendentes ?? EXTENSIONS.filter(e => e.status !== "aprovada" && e.status !== "negada").length, l: "Prorrogações", color: "#f97316" },
+              { v: dashData?.prorrogacoes_pendentes ?? extensions.length, l: "Prorrogações", color: "#f97316" },
             ].map((s) => (
               <div key={s.l} className="text-center rounded-xl px-3 py-2 sm:px-4 sm:py-2.5" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <p style={{ fontSize: "clamp(16px,4vw,22px)", fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.v}</p>
@@ -871,7 +858,7 @@ export function CoordDashboard() {
       {/* Validation Queue + Extension Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <ValidationQueue />
-        <ExtensionRequestsSection />
+        <ExtensionRequestsSection extensions={extensions} loading={extLoading} error={extError} />
       </div>
       {/* Alerts */}
       <AlertsCenter />
