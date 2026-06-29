@@ -52,6 +52,8 @@ interface AppContextType {
   profileLoading: boolean;
   isAuthenticated: boolean;
   token: string | null;
+  isAuthenticated: boolean;
+  profileLoading: boolean;
   profileUnavailable: boolean;
   activeView: ActiveView;
   isMultiRoleAdvisor: boolean;
@@ -146,6 +148,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // de rota vive no PrivateRoute, que suprime o redirect quando profileUnavailable e true.
   const profileUnavailable = !!firebaseUser && profileError && !profile;
 
+  // Sessao Firebase ativa: o PrivateRoute redireciona da pagina de login para o dashboard
+  // assim que existe sessao, mostrando o skeleton enquanto profileLoading e true.
+  const isAuthenticated = !!firebaseUser;
+
   const toggleDarkMode = () => {
     setDarkMode((d) => {
       const next = !d;
@@ -174,6 +180,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         profileLoading,
         isAuthenticated: !!firebaseUser,
         token,
+        isAuthenticated,
+        profileLoading,
         profileUnavailable,
         activeView,
         isMultiRoleAdvisor,
