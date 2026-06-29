@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, ExternalLink, BookOpen, FileText, X, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { validateReasonableDate } from "@/lib/dateValidation";
 import {
   getProductions,
   getVehicles,
@@ -64,6 +65,7 @@ export function ProductionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
 
   const [filterTipo, setFilterTipo] = useState("todos");
   const [filterNivel, setFilterNivel] = useState("todos");
@@ -113,6 +115,11 @@ export function ProductionsPage() {
 
   async function handleSubmit() {
     if (!canRegisterProduction || !token || !form.veiculo_id || !form.titulo || !form.data_realizacao) return;
+    const dataInvalida = validateReasonableDate(form.data_realizacao, { allowFuture: false });
+    if (dataInvalida) {
+      setDateError(dataInvalida);
+      return;
+    }
     setSubmitting(true);
     try {
       await createProduction(token, {
@@ -124,6 +131,7 @@ export function ProductionsPage() {
         data_realizacao: new Date(form.data_realizacao).toISOString(),
       });
       setForm(emptyForm);
+      setDateError(null);
       setShowForm(false);
       reload();
     } catch (e) {
@@ -141,7 +149,7 @@ export function ProductionsPage() {
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>{productions.length} produções registradas</p>
         </div>
         {canRegisterProduction && (
-          <button onClick={() => setShowForm(true)} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
+          <button onClick={() => { setDateError(null); setShowForm(true); }} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
             <Plus size={16} /> Registrar Produção
           </button>
         )}
@@ -350,7 +358,7 @@ export function ProductionsPage() {
 
               {/* Data / DOI */}
               <div className="grid grid-cols-2 gap-4">
-                <FInput label="DATA DE REALIZAÇÃO *" type="date" value={form.data_realizacao} onChange={(v) => setForm({ ...form, data_realizacao: v })} />
+                <FInput label="DATA DE REALIZAÇÃO *" type="date" value={form.data_realizacao} onChange={(v) => { setForm({ ...form, data_realizacao: v }); if (dateError) setDateError(null); }} onBlur={(v) => setDateError(validateReasonableDate(v, { allowFuture: false }))} error={dateError} />
                 <FInput label="DOI (OPCIONAL)" value={form.doi} onChange={(v) => setForm({ ...form, doi: v })} placeholder="10.xxxx/xxxxx" />
               </div>
             </div>
@@ -378,7 +386,7 @@ export function ProductionsPage() {
   );
 }
 
-function FInput({ label, value, onChange, placeholder, type = "text" }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+function FInput({ label, value, onChange, placeholder, type = "text", onBlur, error }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string; onBlur?: (v: string) => void; error?: string | null }) {
   return (
     <div>
       <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", display: "block", marginBottom: 6 }}>{label}</label>
@@ -388,10 +396,14 @@ function FInput({ label, value, onChange, placeholder, type = "text" }: { label:
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full rounded-xl px-3 py-2.5 outline-none"
-        style={{ border: "1px solid var(--border)", background: "var(--muted)", fontSize: 12, color: "var(--foreground)" }}
+        style={{ border: `1px solid ${error ? "#dc2626" : "var(--border)"}`, background: "var(--muted)", fontSize: 12, color: "var(--foreground)" }}
         onFocus={(e) => (e.currentTarget.style.borderColor = "#123C7A")}
-        onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = error ? "#dc2626" : "var(--border)";
+          onBlur?.(e.target.value);
+        }}
       />
+      {error && <p style={{ fontSize: 11, color: "#dc2626", marginTop: 6 }}>{error}</p>}
     </div>
   );
 }
