@@ -403,8 +403,9 @@ class ReportService:
 
         Uma produção é validada quando tem ≥1 atividade aprovada que a credita; ela é
         contada uma única vez, no mês da `validado_em` mais antiga entre essas atividades
-        (o momento em que a produção passou a ser validada). Atividades aprovadas sem
-        `validado_em` não posicionam a produção em nenhum mês e são ignoradas.
+        (o momento em que a produção passou a ser validada). O campo legado `aprovado_em`
+        serve de fallback (mesma normalização de ActivityResponse). Atividades aprovadas
+        sem nenhuma das duas datas não posicionam a produção em mês algum e são ignoradas.
 
         Args:
             programa_id: Programa cujas produções devem ser contabilizadas (escopo tenant).
@@ -428,7 +429,11 @@ class ReportService:
                 producao_id = atividade.get("producao_id")
                 if atividade.get("status") != "aprovado" or producao_id not in producao_ids:
                     continue
-                validado = _to_date(atividade.get("validado_em"))
+                # validado_em pode estar gravado no campo legado aprovado_em (mesmo
+                # fallback que ActivityResponse aplica ao normalizar dados antigos).
+                validado = _to_date(
+                    atividade.get("validado_em") or atividade.get("aprovado_em")
+                )
                 if validado is None:
                     continue
                 atual = validado_em_por_producao.get(producao_id)
