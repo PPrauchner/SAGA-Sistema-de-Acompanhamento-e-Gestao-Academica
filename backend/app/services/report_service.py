@@ -29,6 +29,7 @@ from backend.app.models.report import (
     CompletionTimeItem,
     CompletionTimeResponse,
     ProductionByAdvisorItem,
+    ProductionByMonthItem,
     ProductionByStudentItem,
     ProductionLevelBreakdown,
     ProductionsReportResponse,
@@ -71,6 +72,28 @@ def _dias_restantes(prazo_final: Any) -> int | None:
     if prazo is None:
         return None
     return (prazo - date.today()).days
+
+
+def _month_window(meses: int) -> dict[str, int]:
+    """Janela das chaves 'YYYY-MM' dos últimos `meses` meses, do mais antigo ao atual.
+
+    Args:
+        meses: Quantidade de meses da janela, incluindo o mês corrente.
+
+    Returns:
+        Dict ordenado mês ('YYYY-MM') → 0, do mais antigo ao mais recente, pronto para
+        ser preenchido com as contagens (meses sem produção permanecem em zero).
+    """
+    today = date.today()
+    year, month = today.year, today.month
+    keys: list[str] = []
+    for _ in range(meses):
+        keys.append(f"{year:04d}-{month:02d}")
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    return {key: 0 for key in reversed(keys)}
 
 
 class ReportService:
@@ -372,3 +395,52 @@ class ReportService:
             por_aluno=por_aluno,
             por_orientador=por_orientador,
         )
+
+    async def get_productions_by_month(
+        self, programa_id: str, meses: int = 12
+    ) -> list[ProductionByMonthItem]:
+        """Série mensal da contagem de produções validadas nos últimos `meses` meses.
+
+        Uma produção é validada quando tem ≥1 atividade aprovada que a credita; ela é
+        contada uma única vez, no mês da `validado_em` mais antiga entre essas atividades
+        (o momento em que a produção passou a ser validada). Atividades aprovadas sem
+        `validado_em` não posicionam a produção em nenhum mês e são ignoradas.
+
+        Args:
+            programa_id: Programa cujas produções devem ser contabilizadas (escopo tenant).
+            meses: Tamanho da janela em meses, incluindo o mês corrente.
+
+        Returns:
+            Lista de pontos mensais do mais antigo ao mais recente; meses sem produção
+            validada aparecem com total zero.
+        """
+        students = await self._students.list_by_program(programa_id)
+        productions = await self._productions.list_productions_by_program(programa_id)
+        producao_ids = {producao["id"] for producao in productions}
+
+        activities_por_aluno = await asyncio.gather(
+            *[self._activities.list_by_student(student["id"]) for student in students]
+        )
+
+        validado_em_por_producao: dict[str, date] = {}
+        for atividades in activities_por_aluno:
+            for atividade in atividades:
+                producao_id = atividade.get("producao_id")
+                if atividade.get("status") != "aprovado" or producao_id not in producao_ids:
+                    continue
+                validado = _to_date(atividade.get("validado_em"))
+                if validado is None:
+                    continue
+                atual = validado_em_por_producao.get(producao_id)
+                if atual is None or validado < atual:
+                    validado_em_por_producao[producao_id] = validado
+
+        buckets = _month_window(meses)
+        for validado in validado_em_por_producao.values():
+            mes = f"{validado.year:04d}-{validado.month:02d}"
+            if mes in buckets:
+                buckets[mes] += 1
+
+        return [
+            ProductionByMonthItem(mes=mes, total=total) for mes, total in buckets.items()
+        ]
