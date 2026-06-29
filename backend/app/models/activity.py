@@ -11,6 +11,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from backend.app.models.validators import DataEventoRealizacao
+
 
 class ActivityStatus(str, Enum):
     rascunho = "rascunho"
@@ -30,7 +32,7 @@ class ValidateAction(str, Enum):
 class ActivityCreateRequest(BaseModel):
     tipo_id: str
     descricao: str
-    data_realizacao: datetime
+    data_realizacao: DataEventoRealizacao
     comprovante_url: str | None = None
     status: ActivityCreateStatus = "enviado"
 

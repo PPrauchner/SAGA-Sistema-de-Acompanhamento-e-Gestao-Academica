@@ -16,10 +16,11 @@ Responsabilidades:
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel
+
+from backend.app.models.validators import DataEventoRealizacao
 
 # tipo_producao descreve apenas a NATUREZA da produção; a situação de publicação
 # (publicado/submetido/aceito) vive exclusivamente em status_publicacao.
@@ -38,7 +39,7 @@ class ProductionCreate(BaseModel):
     # uids de alunos cadastrados e/ou strings livres (autores externos). O autor que registra
     # é sempre incluído pelo service; cada uid cadastrado recebe uma activity dedicada.
     autores: list[str] = []
-    data_realizacao: datetime
+    data_realizacao: DataEventoRealizacao
     comprovante_url: str | None = None
 
 
