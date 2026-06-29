@@ -395,7 +395,7 @@
         "student_id": "string",
         "programa_id": "string",
         "timestamp": "string (ISO8601)",
-        "situacao_inferida": "string: 'regular' | 'em_risco' | 'qualificado' | 'fase_defesa'",
+        "situacao_inferida": "string: 'regular' | 'em_risco' | 'qualificado' | 'em_fase_de_defesa'",
         "apto_defesa": "boolean",
         "creditos_validos": "boolean",
         "em_risco": "boolean",
