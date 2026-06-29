@@ -1044,7 +1044,7 @@ export function OrientadorDashboard() {
     total: dashData?.total_orientandos ?? 0,
     emRisco: dashData?.orientandos_por_status?.em_risco ?? 0,
     qualificados: dashData?.orientandos_por_status?.qualificado ?? 0,
-    defesa: dashData?.orientandos_por_status?.fase_defesa ?? 0,
+    defesa: dashData?.orientandos_por_status?.em_fase_de_defesa ?? 0,
     prorrogacao: dashData?.orientandos_por_status?.em_prorrogacao ?? 0,
     pendentes: dashData?.atividades_aguardando_parecer ?? 0,
   };
