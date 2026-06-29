@@ -7,12 +7,14 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from backend.app.models.validators import DataFutura
+
 ExtensionStatus = Literal["pendente", "em_analise", "aprovada", "rejeitada"]
 
 
 class ExtensionCreateRequest(BaseModel):
     tipo: str = "prazo_defesa"
-    nova_data: date
+    nova_data: DataFutura
     motivo: str = Field(..., min_length=1)
     student_id: str | None = None
 
