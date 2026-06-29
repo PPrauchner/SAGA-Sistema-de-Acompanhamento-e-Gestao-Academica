@@ -15,6 +15,7 @@ import pytest
 from fastapi import HTTPException
 from firebase_admin import auth as firebase_auth
 from firebase_admin import firestore
+from pydantic import ValidationError
 
 from backend.app.aspects.authorization import requires_role
 from backend.app.core.auth import CurrentUser
@@ -274,3 +275,10 @@ async def test_update_profile_orientador_sem_advisor_404() -> None:
             ProfileUpdateRequest(nome="Orient", departamento="Química"), _user("o3", "orientador")
         )
     assert exc.value.status_code == 404
+
+
+@pytest.mark.parametrize("campo", ["email", "programa_id", "matricula"])
+def test_profile_update_rejeita_campo_nao_editavel(campo: str) -> None:
+    """Campo não editável no corpo é rejeitado por extra='forbid' (422 na API)."""
+    with pytest.raises(ValidationError):
+        ProfileUpdateRequest(nome="Novo", **{campo: "x"})
