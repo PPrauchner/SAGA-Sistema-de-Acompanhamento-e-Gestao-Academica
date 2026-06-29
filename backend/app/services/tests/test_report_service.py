@@ -478,3 +478,105 @@ async def test_productions_orientador_sem_registro_retorna_403() -> None:
         await service.get_productions_report(_PROG, "orientador", "ua_fantasma")
 
     assert exc_info.value.status_code == 403
+
+
+# -- productions-by-month -------------------------------------------------------------
+
+
+def _month_offset(n: int) -> tuple[str, date]:
+    """Chave 'YYYY-MM' e uma data (dia 1) `n` meses atrás de hoje, para testes da janela."""
+    today = date.today()
+    year, month = today.year, today.month - n
+    while month <= 0:
+        month += 12
+        year -= 1
+    return f"{year:04d}-{month:02d}", date(year, month, 1)
+
+
+async def test_productions_by_month_conta_producao_no_validado_em_mais_antigo() -> None:
+    mes_atual, hoje = _month_offset(0)
+    mes_antigo, antes = _month_offset(2)
+    # Mesma produção creditada a dois alunos, validada em meses distintos (co-autoria).
+    service = _build_service(
+        students=[
+            {"id": "s1", "programa_id": _PROG},
+            {"id": "s2", "programa_id": _PROG},
+        ],
+        productions=[{"id": "p1", "programa_id": _PROG}],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado", "validado_em": hoje.isoformat()}],
+            "s2": [{"producao_id": "p1", "status": "aprovado", "validado_em": antes.isoformat()}],
+        },
+    )
+
+    result = await service.get_productions_by_month(_PROG, meses=12)
+
+    por_mes = {item.mes: item.total for item in result}
+    assert por_mes[mes_antigo] == 1  # contada uma vez, no mês mais antigo
+    assert por_mes[mes_atual] == 0  # não recontada no mês mais recente
+    assert sum(item.total for item in result) == 1
+
+
+async def test_productions_by_month_ignora_aprovada_sem_validado_em() -> None:
+    service = _build_service(
+        students=[{"id": "s1", "programa_id": _PROG}],
+        productions=[{"id": "p1", "programa_id": _PROG}],
+        activities={"s1": [{"producao_id": "p1", "status": "aprovado"}]},  # sem validado_em
+    )
+
+    result = await service.get_productions_by_month(_PROG)
+
+    assert sum(item.total for item in result) == 0
+
+
+async def test_productions_by_month_ignora_nao_aprovada_e_producao_orfa() -> None:
+    _, hoje = _month_offset(0)
+    service = _build_service(
+        students=[{"id": "s1", "programa_id": _PROG}],
+        productions=[{"id": "p1", "programa_id": _PROG}],
+        activities={
+            "s1": [
+                {"producao_id": "p1", "status": "enviado", "validado_em": hoje.isoformat()},
+                {"producao_id": "p_fantasma", "status": "aprovado", "validado_em": hoje.isoformat()},
+            ]
+        },
+    )
+
+    result = await service.get_productions_by_month(_PROG)
+
+    assert sum(item.total for item in result) == 0
+
+
+async def test_productions_by_month_validacao_fora_da_janela_nao_conta() -> None:
+    mes_fora, fora = _month_offset(13)  # além dos 12 meses da janela
+    service = _build_service(
+        students=[{"id": "s1", "programa_id": _PROG}],
+        productions=[{"id": "p1", "programa_id": _PROG}],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado", "validado_em": fora.isoformat()}]
+        },
+    )
+
+    result = await service.get_productions_by_month(_PROG, meses=12)
+
+    assert all(item.mes != mes_fora for item in result)
+    assert sum(item.total for item in result) == 0
+
+
+async def test_productions_by_month_preenche_janela_ordenada_com_zeros() -> None:
+    mes_atual, hoje = _month_offset(0)
+    service = _build_service(
+        students=[{"id": "s1", "programa_id": _PROG}],
+        productions=[{"id": "p1", "programa_id": _PROG}],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado", "validado_em": hoje.isoformat()}]
+        },
+    )
+
+    result = await service.get_productions_by_month(_PROG, meses=6)
+
+    assert len(result) == 6
+    assert [item.mes for item in result] == sorted(item.mes for item in result)
+    assert result[-1].mes == mes_atual  # mês corrente por último
+    assert result[-1].total == 1
+    assert all(item.total == 0 for item in result if item.mes != mes_atual)
