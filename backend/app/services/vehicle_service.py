@@ -3,9 +3,11 @@ Serviço de negócio para veículos de publicação e seus níveis de relevânci
 
 Responsabilidades:
 - list_vehicles(): lista veículos do programa juntando o nível de relevância e o peso
-  configurados em programs/{id}/vehicle_levels/ — base dos fatos RL05.
+  configurados em programs/{id}/vehicle_levels/ — base dos fatos RL05. Inclui as métricas
+  descritivas (indice_h, percentil_scopus, jcr), que não alimentam a RL05.
 - create_vehicle(): coordenação cadastra um veículo e define seu nível inicial; o peso é
-  derivado do nível pela tabela PESO_POR_NIVEL.
+  derivado do nível pela tabela PESO_POR_NIVEL. Rejeita jcr para veículo do tipo 'evento'
+  (JCR é métrica exclusiva de revista).
 - update_vehicle_level(): coordenação altera o nível de relevância de um veículo, recalculando
   o peso. Altera os fatos nivel_relevancia e relevancia_peso usados pelo motor RL05.
 - delete_vehicle(): coordenação remove um veículo e seu nível de relevância no programa.
@@ -50,11 +52,20 @@ class VehicleService:
                     "issn": vehicle.get("issn"),
                     "nivel": nivel,
                     "peso": level.get("peso", PESO_POR_NIVEL.get(nivel, PESO_POR_NIVEL["SC"])),
+                    "indice_h": vehicle.get("indice_h"),
+                    "percentil_scopus": vehicle.get("percentil_scopus"),
+                    "jcr": vehicle.get("jcr"),
                 }
             )
         return result
 
     async def create_vehicle(self, data: VehicleCreate, user: CurrentUser) -> dict:
+        if data.jcr is not None and data.tipo != "revista":
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="JCR é exclusivo de veículos do tipo 'revista'",
+            )
+
         peso = PESO_POR_NIVEL[data.nivel]
         vehicle_id = await self._vehicles.create(
             {
@@ -62,6 +73,9 @@ class VehicleService:
                 "tipo": data.tipo,
                 "sigla": data.sigla,
                 "issn": data.issn,
+                "indice_h": data.indice_h,
+                "percentil_scopus": data.percentil_scopus,
+                "jcr": data.jcr,
                 "programa_id": user.programa_id,
                 "criado_em": datetime.now(timezone.utc),
             }

@@ -12,7 +12,13 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from typing import Any
 
+import pytest
+from fastapi import HTTPException
+
 from backend.app.services.report_service import ReportService
+
+# Programa do solicitante usado nos testes do relatório de produção (escopo US-AN06).
+_PROG = "prog_default"
 
 
 class _FakeStudentRepository:
@@ -28,6 +34,13 @@ class _FakeStudentRepository:
 
     async def list_all(self) -> list[dict[str, Any]]:
         return [dict(student) for student in self._students]
+
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(student)
+            for student in self._students
+            if student.get("programa_id") == programa_id
+        ]
 
     async def list_subcollection(self, doc_id: str, subcollection: str) -> list[dict[str, Any]]:
         return [dict(snap) for snap in self._snapshots.get(doc_id, [])]
@@ -51,6 +64,13 @@ class _FakeProductionRepository:
 
     async def list_productions(self) -> list[dict[str, Any]]:
         return [dict(production) for production in self._productions]
+
+    async def list_productions_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            dict(production)
+            for production in self._productions
+            if production.get("programa_id") == programa_id
+        ]
 
 
 class _FakeActivityRepository:
@@ -234,14 +254,14 @@ async def test_completion_time_conta_concluido_sem_data_mas_fora_do_historico() 
 async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador() -> None:
     service = _build_service(
         students=[
-            {"id": "s1", "nome": "Ana", "orientador_id": "a1"},
-            {"id": "s2", "nome": "Bruno", "orientador_id": "a1"},
-            {"id": "s3", "nome": "Caio", "orientador_id": "a2"},
+            {"id": "s1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+            {"id": "s2", "nome": "Bruno", "orientador_id": "a1", "programa_id": _PROG},
+            {"id": "s3", "nome": "Caio", "orientador_id": "a2", "programa_id": _PROG},
         ],
         advisors=[{"id": "a1", "nome": "Prof. X"}, {"id": "a2", "nome": "Profa. Y"}],
         productions=[
-            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0},
-            {"id": "p2", "nivel": "A5", "pontuacao_calculada": 1.0},
+            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A5", "pontuacao_calculada": 1.0, "programa_id": _PROG},
         ],
         activities={
             "s1": [
@@ -252,7 +272,7 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
         },
     )
 
-    result = await service.get_productions_report()
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     assert result.total_producoes_aprovadas == 2  # p1 e p2, sem duplicação
     por_aluno = {item.student_nome: item for item in result.por_aluno}
@@ -263,20 +283,22 @@ async def test_productions_credita_so_aprovadas_e_agrega_por_aluno_e_orientador(
     assert por_aluno["Caio"].por_nivel.A5 == 1
 
     por_orientador = {item.advisor_id: item for item in result.por_orientador}
-    # Prof. X tem 2 orientandos (Ana=4.0, Bruno=0.0) → média 2.0; 1 produção.
+    # Prof. X tem 2 orientandos (Ana=4.0, Bruno=0.0) → soma 4.0, média 2.0; 1 produção.
     assert por_orientador["a1"].total == 1
+    assert por_orientador["a1"].pontuacao_total == 4.0
     assert por_orientador["a1"].pontuacao_media_orientandos == 2.0
+    assert por_orientador["a2"].pontuacao_total == 1.0
     assert por_orientador["a2"].pontuacao_media_orientandos == 1.0
 
 
 async def test_productions_soma_multiplas_producoes_do_mesmo_aluno() -> None:
     service = _build_service(
-        students=[{"id": "s1", "nome": "Ana", "orientador_id": "a1"}],
+        students=[{"id": "s1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG}],
         advisors=[{"id": "a1", "nome": "Prof. X"}],
         productions=[
-            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0},
-            {"id": "p2", "nivel": "A2", "pontuacao_calculada": 1.5},
-            {"id": "p3", "nivel": "A1", "pontuacao_calculada": 4.0},
+            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A2", "pontuacao_calculada": 1.5, "programa_id": _PROG},
+            {"id": "p3", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
         ],
         activities={
             "s1": [
@@ -287,7 +309,7 @@ async def test_productions_soma_multiplas_producoes_do_mesmo_aluno() -> None:
         },
     )
 
-    result = await service.get_productions_report()
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     assert result.total_producoes_aprovadas == 3
     item = result.por_aluno[0]
@@ -296,16 +318,17 @@ async def test_productions_soma_multiplas_producoes_do_mesmo_aluno() -> None:
     assert item.por_nivel.A1 == 2
     assert item.por_nivel.A2 == 1
     assert result.por_orientador[0].total == 3
+    assert result.por_orientador[0].pontuacao_total == 9.5
     assert result.por_orientador[0].pontuacao_media_orientandos == 9.5
 
 
 async def test_productions_nivel_ausente_cai_para_SC_e_classifica_a3() -> None:
     service = _build_service(
-        students=[{"id": "s1", "nome": "Ana", "orientador_id": "a1"}],
+        students=[{"id": "s1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG}],
         advisors=[{"id": "a1", "nome": "Prof. X"}],
         productions=[
-            {"id": "p1", "pontuacao_calculada": 0.2},  # sem nivel → padrão "SC"
-            {"id": "p2", "nivel": "A3", "pontuacao_calculada": 2.0},  # nível Qualis válido
+            {"id": "p1", "pontuacao_calculada": 0.2, "programa_id": _PROG},  # sem nivel → padrão "SC"
+            {"id": "p2", "nivel": "A3", "pontuacao_calculada": 2.0, "programa_id": _PROG},  # nível Qualis válido
         ],
         activities={
             "s1": [
@@ -315,7 +338,7 @@ async def test_productions_nivel_ausente_cai_para_SC_e_classifica_a3() -> None:
         },
     )
 
-    result = await service.get_productions_report()
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     item = result.por_aluno[0]
     assert item.total == 2  # ambas creditadas
@@ -328,13 +351,130 @@ async def test_productions_nivel_ausente_cai_para_SC_e_classifica_a3() -> None:
 
 async def test_productions_ignora_producao_id_inexistente() -> None:
     service = _build_service(
-        students=[{"id": "s1", "nome": "Ana", "orientador_id": "a1"}],
+        students=[{"id": "s1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG}],
         advisors=[{"id": "a1", "nome": "Prof. X"}],
-        productions=[{"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0}],
+        productions=[{"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG}],
         activities={"s1": [{"producao_id": "p_fantasma", "status": "aprovado"}]},
     )
 
-    result = await service.get_productions_report()
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
 
     assert result.total_producoes_aprovadas == 0
     assert result.por_aluno == []
+
+
+async def test_productions_filtra_por_programa_id_do_solicitante() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+            {"id": "s2", "nome": "Bia", "orientador_id": "a2", "programa_id": "prog_outro"},
+        ],
+        advisors=[{"id": "a1", "nome": "Prof. X"}, {"id": "a2", "nome": "Profa. Y"}],
+        productions=[
+            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": "prog_outro"},
+        ],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado"}],
+            "s2": [{"producao_id": "p2", "status": "aprovado"}],
+        },
+    )
+
+    result = await service.get_productions_report(_PROG, "coordenacao", "")
+
+    # Apenas dados do próprio programa entram no relatório; o outro programa fica fora de escopo.
+    assert result.total_producoes_aprovadas == 1
+    assert {item.student_nome for item in result.por_aluno} == {"Ana"}
+    assert {item.advisor_id for item in result.por_orientador} == {"a1"}
+
+
+async def test_productions_discente_ve_so_a_propria_linha() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+            {"id": "s2", "uid": "u2", "nome": "Bia", "orientador_id": "a1", "programa_id": _PROG},
+        ],
+        advisors=[{"id": "a1", "nome": "Prof. X"}],
+        productions=[
+            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+        ],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado"}],
+            "s2": [{"producao_id": "p2", "status": "aprovado"}],
+        },
+    )
+
+    result = await service.get_productions_report(_PROG, "aluno", "u1")
+
+    # Discente vê apenas a própria produção; sem agregados por orientador.
+    assert {item.student_nome for item in result.por_aluno} == {"Ana"}
+    assert result.por_orientador == []
+    assert result.total_producoes_aprovadas == 1
+
+
+async def test_productions_discente_sem_registro_no_programa_retorna_403() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+        ],
+        advisors=[{"id": "a1", "nome": "Prof. X"}],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_productions_report(_PROG, "aluno", "u_fantasma")
+
+    assert exc_info.value.status_code == 403
+
+
+async def test_productions_orientador_ve_orientandos_identificados_e_resto_anonimo() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+            {"id": "s2", "uid": "u2", "nome": "Bia", "orientador_id": "a2", "programa_id": _PROG},
+        ],
+        advisors=[
+            {"id": "a1", "nome": "Prof. X", "uid": "ua1"},
+            {"id": "a2", "nome": "Profa. Y", "uid": "ua2"},
+        ],
+        productions=[
+            {"id": "p1", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+            {"id": "p2", "nivel": "A1", "pontuacao_calculada": 4.0, "programa_id": _PROG},
+        ],
+        activities={
+            "s1": [{"producao_id": "p1", "status": "aprovado"}],
+            "s2": [{"producao_id": "p2", "status": "aprovado"}],
+        },
+    )
+
+    result = await service.get_productions_report(_PROG, "orientador", "ua1")
+
+    # Orientando próprio: identificado.
+    proprios = [item for item in result.por_aluno if not item.anonimo]
+    assert len(proprios) == 1
+    assert proprios[0].student_id == "s1"
+    assert proprios[0].student_nome == "Ana"
+
+    # Aluno de outro orientador: anônimo, sem id/nome, mas com as métricas preservadas.
+    anonimos = [item for item in result.por_aluno if item.anonimo]
+    assert len(anonimos) == 1
+    assert anonimos[0].student_id is None
+    assert anonimos[0].student_nome is None
+    assert anonimos[0].total == 1
+
+    # por_orientador traz apenas o próprio orientador.
+    assert {item.advisor_id for item in result.por_orientador} == {"a1"}
+
+
+async def test_productions_orientador_sem_registro_retorna_403() -> None:
+    service = _build_service(
+        students=[
+            {"id": "s1", "uid": "u1", "nome": "Ana", "orientador_id": "a1", "programa_id": _PROG},
+        ],
+        advisors=[{"id": "a1", "nome": "Prof. X", "uid": "ua1"}],
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_productions_report(_PROG, "orientador", "ua_fantasma")
+
+    assert exc_info.value.status_code == 403

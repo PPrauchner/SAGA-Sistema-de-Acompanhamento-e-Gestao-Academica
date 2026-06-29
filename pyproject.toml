@@ -33,11 +33,16 @@ testpaths = [
     "backend/app/api/v1/tests/test_coordination_transfers.py",
     "backend/app/api/v1/tests/test_transfers.py",
     "backend/app/aspects/tests/test_audit_history.py",
+    "backend/app/repositories/tests/test_firebase_repository.py",
+    "backend/app/services/tests/test_activity_type_service.py",
     "backend/app/services/tests/test_coordination_transfer_service.py",
     "backend/app/services/tests/test_report_service.py",
     "backend/app/services/tests/test_student_advisor_services.py",
     "backend/app/services/tests/test_transfer_service.py",
 ]
+# importlib evita colisão de basename entre arquivos de teste homônimos em
+# árvores distintas (ex.: services/tests/ e tests/services/) sem exigir __init__.py.
+addopts = "--import-mode=importlib"
 asyncio_mode = "auto"
 pythonpath = ["backend"]
 
