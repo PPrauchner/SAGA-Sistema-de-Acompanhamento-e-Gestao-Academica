@@ -1,38 +1,44 @@
 """
-Camada de serviço — gerencia as regras de negócio e o fluxo de prorrogações.
+Serviço de gerenciamento do ciclo de vida das prorrogações de prazos.
+
+Contrato de identidade dos parâmetros student_id:
+- create_extension        → recebe uid (do token JWT via current_user.uid)
+                            → resolve uid→doc_id via _resolve_student_doc_id
+- list_by_student         → recebe doc_id (de /auth/me → studentId no frontend)
+- add_review              → recebe doc_id (montado pelo frontend a partir de /auth/me)
+- process_decision        → recebe doc_id (idem)
+
+Correção C1: _resolve_student_doc_id removida dos métodos que recebem doc_id
+diretamente, eliminando o 404 que impedia o aluno de ver as próprias prorrogações.
 """
 
-from __future__ import annotations
-
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import HTTPException, status
 from google.cloud import firestore
 
 from backend.app.models.extension import (
-    ExtensionCreateRequest,
     DecisionRequest,
+    ExtensionCreateRequest,
     ExtensionDocument,
     ExtensionResponse,
     ExtensionStatus,
 )
 from backend.app.repositories.extension_repository import ExtensionRepository
 
-DEFAULT_MAX_PRORROGACOES: int = 1
-DEFAULT_DURACAO_MESES:    int = 6
+DEFAULT_MAX_PRORROGACOES = 3
+DEFAULT_DURACAO_MESES = 6
 
 
-def _months_to_timedelta(months: int) -> timedelta:
+def _months_to_timedelta(months: int):
+    from datetime import timedelta
     return timedelta(days=months * 30)
 
 
-def _to_response(extension_id: str, data: dict) -> ExtensionResponse:
-    return ExtensionResponse(
-        extension_id=extension_id,
-        **{k: v for k, v in data.items() if k != "extension_id"},
-    )
+def _to_response(doc_id: str, data: dict) -> ExtensionResponse:
+    return ExtensionResponse(id=doc_id, **data)
 
 
 class ExtensionService:
@@ -47,7 +53,8 @@ class ExtensionService:
 
     async def _resolve_student_doc_id(self, uid: str) -> str:
         """
-        C2: Resolve uid → doc id da coleção students (chaveada por auto-id).
+        Resolve uid → doc id da coleção students (chaveada por auto-id).
+        Usado APENAS em create_extension, onde student_id vem do token JWT.
         Lança 404 se o aluno não existir.
         """
         doc_id = await self._repo.get_student_doc_id_by_uid(uid)
@@ -93,8 +100,8 @@ class ExtensionService:
         payload: ExtensionCreateRequest,
         requesting_uid: str,
     ) -> ExtensionResponse:
-        # C2: student_id recebido é uid; resolve para doc id real antes de
-        # qualquer operação no Firestore.
+        # Único método que recebe uid (de current_user.uid no router).
+        # _resolve_student_doc_id é correto aqui.
         student_doc_id = await self._resolve_student_doc_id(student_id)
 
         program_config = await self._repo.get_program_config()
@@ -132,8 +139,9 @@ class ExtensionService:
         parecer: str,
         orientador_uid: str,
     ) -> ExtensionResponse:
-        # C2: resolve uid → doc id antes de usar qualquer path no Firestore.
-        student_doc_id = await self._resolve_student_doc_id(student_id)
+        # C1: student_id já é doc_id (vem do frontend via /auth/me).
+        # Resolução uid→doc_id removida — evita 404 espúrio.
+        student_doc_id = student_id
 
         student_snap = await self._repo.student_ref(student_doc_id).get()
         if not student_snap.exists:
@@ -172,8 +180,9 @@ class ExtensionService:
         payload: DecisionRequest,
         coordinator_uid: str,
     ) -> ExtensionResponse:
-        # C2: resolve uid → doc id antes de montar referências síncronas.
-        student_doc_id = await self._resolve_student_doc_id(student_id)
+        # C1: student_id já é doc_id (vem do frontend via /auth/me).
+        # Resolução uid→doc_id removida — evita 404 espúrio.
+        student_doc_id = student_id
 
         # Resolve referências síncronas reais para uso dentro da transação.
         ext_ref_sync     = self._repo.extensions_col(student_doc_id).document(extension_id).sync_ref
@@ -183,7 +192,6 @@ class ExtensionService:
         duracao_meses: int = program_config.get("duracao_prorrogacao_meses", DEFAULT_DURACAO_MESES)
 
         # @firestore.transactional decora função SÍNCRONA — correto para Admin SDK.
-        # Todas as referências usadas dentro são DocumentReference síncronos.
         @firestore.transactional
         def _run_transaction(transaction) -> dict:
             ext_snap     = transaction.get(ext_ref_sync)
@@ -229,7 +237,6 @@ class ExtensionService:
                     "prazo_final":         prazo_novo,
                 }
 
-                # Usa referências síncronas reais — não proxies.
                 transaction.update(ext_ref_sync,     ext_updates)
                 transaction.update(student_ref_sync, student_updates)
                 ext_data.update(ext_updates)
@@ -240,16 +247,15 @@ class ExtensionService:
 
             return ext_data
 
-        # transaction() devolve o cliente síncrono; .transaction() abre a transação.
         db = self._repo.transaction()
         final_data = await asyncio.to_thread(_run_transaction, db.transaction())
 
         return _to_response(extension_id, final_data)
 
-    async def list_by_student(self, student_id: str) -> list[ExtensionResponse]:
-        # C2: resolve uid → doc id para acessar o path correto no Firestore.
-        student_doc_id = await self._resolve_student_doc_id(student_id)
-
+    async def list_by_student(self, student_doc_id: str) -> list[ExtensionResponse]:
+        # C1: student_doc_id já é o doc_id vindo de /auth/me → studentId no frontend.
+        # Resolução uid→doc_id removida — era a causa do 404 que impedia o aluno
+        # de ver as próprias prorrogações.
         docs = [
             d async for d in self._repo.extensions_col(student_doc_id)
             .order_by("criado_em", direction=firestore.Query.DESCENDING)
@@ -262,8 +268,6 @@ class ExtensionService:
         if advisor_doc_id is None:
             return []
 
-        # _db é o cliente síncrono — executa a query em to_thread e itera
-        # de forma normal (não async for), pois stream() é síncrono.
         def _fetch_students() -> list:
             return list(
                 self._repo._db
