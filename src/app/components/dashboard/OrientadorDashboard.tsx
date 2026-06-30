@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOrientadorDashboard } from "@/hooks/useDashboard";
 import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
 import { useNotifications } from "@/hooks/useNotifications";
+import { useOrientadorUpdates } from "@/hooks/useOrientadorUpdates";
 import {
   AlertTriangle, X, Calendar, ChevronRight,
   CheckCircle2, Bell, Plus, RefreshCw, Star, Send,
@@ -28,11 +29,6 @@ interface Student {
   status: StudentStatus; fase: string;
   ultimaAtual: string; proximo: string; bolsa: string;
 }
-interface Update {
-  id: number; student: string; init: string;
-  action: string; detail: string; time: string;
-  type: "relatorio" | "producao" | "plano" | "credito" | "defesa" | "reuniao";
-}
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 const ST: Record<StudentStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -53,15 +49,6 @@ const STUDENTS: Student[] = [
   { id: "6", name: "Ricardo Alves Santos", init: "RA", nivel: "Mestrado", ingresso: "2024", prazo: "Dez/2026", prazoMeses: 18, progress: 25, creditos: 8, creditosMax: 30, producoes: 0, producoesMin: 1, status: "regular", fase: "Revisão Bibliográfica", ultimaAtual: "há 5 dias", proximo: "Atualizar plano 2026/2", bolsa: "CNPq" },
   { id: "7", name: "Patrícia Lima Farias", init: "PL", nivel: "Doutorado", ingresso: "2021", prazo: "Mar/2027", prazoMeses: 21, progress: 62, creditos: 48, creditosMax: 80, producoes: 3, producoesMin: 3, status: "qualificado", fase: "Experimentos", ultimaAtual: "há 4 dias", proximo: "Relatório anual", bolsa: "CNPq" },
   { id: "8", name: "Bruno Carvalho Neves", init: "BC", nivel: "Doutorado", ingresso: "2022", prazo: "Jul/2026", prazoMeses: 13, progress: 48, creditos: 38, creditosMax: 80, producoes: 1, producoesMin: 3, status: "regular", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Reunião orientação", bolsa: "CAPES" },
-];
-
-const UPDATES: Update[] = [
-  { id: 1, student: "Fernanda Souza", init: "FS", action: "Submeteu tese para avaliação pré-defesa", detail: "Versão final entregue à orientadora para revisão da banca", time: "há 1 dia", type: "defesa" },
-  { id: 2, student: "Juliana Martins", init: "JM", action: "Concluiu disciplina Visão Computacional", detail: "Conceito: A · +4 créditos · Total acumulado: 44/80", time: "há 2 dias", type: "credito" },
-  { id: 3, student: "Ana Paula Costa", init: "AP", action: "Publicou artigo no SBES 2026 (Qualis B1)", detail: "Aguardando validação pelo SAGA · +1 produção científica", time: "há 3 dias", type: "producao" },
-  { id: 4, student: "Ricardo Santos", init: "RA", action: "Atualizou plano de trabalho 2026/2", detail: "Novas metas e cronograma do 2º semestre adicionados", time: "há 5 dias", type: "plano" },
-  { id: 5, student: "Bruno Neves", init: "BC", action: "Entregou relatório semestral 2026/1", detail: "Relatório enviado via SAGA — aguardando avaliação do orientador", time: "há 1 semana", type: "relatorio" },
-  { id: 6, student: "Carlos E. Lima", init: "CE", action: "Solicitou reunião de orientação urgente", detail: "Assunto: andamento da dissertação e risco de não cumprimento do prazo", time: "há 1 semana", type: "reuniao" },
 ];
 
 const DISTRIB_DATA = [
@@ -816,45 +803,65 @@ function PendingReviews() {
   );
 }
 
+// Mapeia a operação do audit_log (nome da função Python) para rótulo + emoji da timeline.
+const OPERACAO_CFG: Record<string, { label: string; emoji: string; bg: string }> = {
+  submit_activity: { label: "Submeteu atividade para validação", emoji: "📋", bg: "var(--tint-blue-bg)" },
+  create_activity: { label: "Registrou atividade creditável", emoji: "📋", bg: "var(--tint-blue-bg)" },
+  create_production: { label: "Registrou produção científica", emoji: "📄", bg: "var(--tint-teal-bg)" },
+};
+const OPERACAO_DEFAULT = { emoji: "•", bg: "var(--muted)" };
+
+// Fallback humano para operações sem rótulo dedicado: "update_work_plan" → "update work plan".
+function humanizeOperacao(operacao: string | null): string {
+  if (!operacao) return "Registrou uma ação no SAGA";
+  return operacao.replace(/_/g, " ");
+}
+
 function RecentUpdates() {
-  const typeMap: Record<string, { color: string; bg: string; emoji: string }> = {
-    relatorio: { color: "var(--tint-blue-text)",   bg: "var(--tint-blue-bg)",   emoji: "📋" },
-    producao:  { color: "var(--tint-teal-text)",   bg: "var(--tint-teal-bg)",   emoji: "📄" },
-    plano:     { color: "var(--tint-gold-text)",   bg: "var(--tint-gold-bg)",   emoji: "📅" },
-    credito:   { color: "var(--tint-violet-text)", bg: "var(--tint-violet-bg)", emoji: "📚" },
-    defesa:    { color: "var(--tint-blue-text)",   bg: "var(--tint-blue-bg)",   emoji: "🎓" },
-    reuniao:   { color: "var(--tint-orange-text)", bg: "var(--tint-orange-bg)", emoji: "📞" },
-  };
+  const { data, loading, error } = useOrientadorUpdates();
+  const items = data ?? [];
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead title="Atualizações Recentes" sub="Atividades recentes dos orientandos no SAGA" />
-      <div className="space-y-3.5">
-        {UPDATES.map((u, i) => {
-          const tm = typeMap[u.type];
-          const isLast = i === UPDATES.length - 1;
-          return (
-            <div key={u.id} className="flex items-start gap-3">
-              {/* Timeline line */}
-              <div className="flex flex-col items-center flex-shrink-0">
-                <Avt init={u.init} size={32} color={tm.color} />
-                {!isLast && <div style={{ width: 2, flex: 1, background: "var(--border)", minHeight: 16, marginTop: 4 }} />}
-              </div>
-              <div className="flex-1 min-w-0 pb-1">
-                <div className="flex items-start justify-between gap-2 mb-0.5">
-                  <div>
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{u.student}</span>
-                    <span className="ml-1.5 rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 700, color: tm.color, background: tm.bg }}>{tm.emoji}</span>
+
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar atualizações: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando atualizações…</p>
+      ) : items.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhuma atualização recente.</p>
+      ) : (
+        <div className="space-y-3.5">
+          {items.map((item, i) => {
+            const cfg = item.operacao ? OPERACAO_CFG[item.operacao] : undefined;
+            const bg = cfg?.bg ?? OPERACAO_DEFAULT.bg;
+            const emoji = cfg?.emoji ?? OPERACAO_DEFAULT.emoji;
+            const label = cfg?.label ?? humanizeOperacao(item.operacao);
+            const isLast = i === items.length - 1;
+            return (
+              <div key={item.id} className="flex items-start gap-3">
+                {/* Timeline line */}
+                <div className="flex flex-col items-center flex-shrink-0">
+                  <div className="rounded-full flex items-center justify-center" style={{ width: 32, height: 32, background: bg, fontSize: 14 }}>
+                    {emoji}
                   </div>
-                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)", flexShrink: 0, whiteSpace: "nowrap" }}>{u.time}</span>
+                  {!isLast && <div style={{ width: 2, flex: 1, background: "var(--border)", minHeight: 16, marginTop: 4 }} />}
                 </div>
-                <p style={{ fontSize: "12px", color: "var(--foreground)", lineHeight: 1.4 }}>{u.action}</p>
-                <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>{u.detail}</p>
+                <div className="flex-1 min-w-0 pb-1">
+                  <div className="flex items-start justify-between gap-2 mb-0.5">
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{label}</span>
+                    <span style={{ fontSize: "10px", color: "var(--muted-foreground)", flexShrink: 0, whiteSpace: "nowrap" }}>{formatDataBR(item.timestamp)}</span>
+                  </div>
+                  {item.recurso && (
+                    <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, wordBreak: "break-all" }}>{item.recurso}</p>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
