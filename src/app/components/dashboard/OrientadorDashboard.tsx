@@ -2,8 +2,9 @@ import { useState, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrientadorDashboard } from "@/hooks/useDashboard";
+import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
 import {
-  AlertTriangle, X, FileText, Calendar, ChevronRight,
+  AlertTriangle, X, Calendar, ChevronRight,
   CheckCircle2, Bell, Plus, RefreshCw, Star, Send,
   Users, Eye, Clock, GraduationCap, AlertCircle,
   ArrowUpRight, Filter, BookOpen,
@@ -25,10 +26,6 @@ interface Student {
   producoes: number; producoesMin: number;
   status: StudentStatus; fase: string;
   ultimaAtual: string; proximo: string; bolsa: string;
-}
-interface Review {
-  id: number; tipo: string; student: string;
-  desc: string; prazo: string; urgency: "critico" | "urgente" | "normal";
 }
 interface Update {
   id: number; student: string; init: string;
@@ -60,14 +57,6 @@ const STUDENTS: Student[] = [
   { id: "6", name: "Ricardo Alves Santos", init: "RA", nivel: "Mestrado", ingresso: "2024", prazo: "Dez/2026", prazoMeses: 18, progress: 25, creditos: 8, creditosMax: 30, producoes: 0, producoesMin: 1, status: "regular", fase: "Revisão Bibliográfica", ultimaAtual: "há 5 dias", proximo: "Atualizar plano 2026/2", bolsa: "CNPq" },
   { id: "7", name: "Patrícia Lima Farias", init: "PL", nivel: "Doutorado", ingresso: "2021", prazo: "Mar/2027", prazoMeses: 21, progress: 62, creditos: 48, creditosMax: 80, producoes: 3, producoesMin: 3, status: "qualificado", fase: "Experimentos", ultimaAtual: "há 4 dias", proximo: "Relatório anual", bolsa: "CNPq" },
   { id: "8", name: "Bruno Carvalho Neves", init: "BC", nivel: "Doutorado", ingresso: "2022", prazo: "Jul/2026", prazoMeses: 13, progress: 48, creditos: 38, creditosMax: 80, producoes: 1, producoesMin: 3, status: "regular", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Reunião orientação", bolsa: "CAPES" },
-];
-
-const REVIEWS: Review[] = [
-  { id: 1, tipo: "Relatório", student: "Carlos Eduardo Lima", desc: "Relatório semestral 2026/1 aguardando avaliação e parecer do orientador", prazo: "20/06/2026", urgency: "urgente" },
-  { id: 2, tipo: "Prorrogação", student: "Marcos Vinícius Oliveira", desc: "Pedido de prorrogação de prazo — mestrado com prazo vencido há 6 meses", prazo: "Vencido!", urgency: "critico" },
-  { id: 3, tipo: "Produção Científica", student: "Juliana Mendes Martins", desc: "Artigo SBES 2026 submetido pelo aluno e aguardando parecer do orientador", prazo: "30/06/2026", urgency: "urgente" },
-  { id: 4, tipo: "Plano de Trabalho", student: "Ricardo Alves Santos", desc: "Plano de trabalho 2026/2 atualizado pelo aluno — aguardando aprovação", prazo: "01/07/2026", urgency: "normal" },
-  { id: 5, tipo: "Banca de Defesa", student: "Fernanda Souza Gomes", desc: "Composição e convites da banca de defesa para aprovação formal do orientador", prazo: "15/07/2026", urgency: "normal" },
 ];
 
 const UPDATES: Update[] = [
@@ -774,60 +763,67 @@ function WorkPlanMonitoring({ onSelect }: { onSelect: (s: Student) => void }) {
   );
 }
 
+// Formata data ISO (date "AAAA-MM-DD" ou datetime) em "DD/MM/AAAA", sem deslocar por fuso.
+function formatDataBR(value?: string | null): string {
+  if (!value) return "—";
+  const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("pt-BR");
+}
+
+const REVIEW_TIPO_CFG: Record<ValidationQueueItem["tipo"], { label: string; color: string; icon: ReactNode }> = {
+  atividade: { label: "Atividade", color: "var(--tint-gold-text)", icon: <BookOpen size={13} /> },
+  producao: { label: "Produção", color: "var(--tint-teal-text)", icon: <Star size={13} /> },
+};
+
 function PendingReviews() {
-  const uc = {
-    critico: { color: "var(--tint-danger-text)", bg: "var(--tint-danger-bg)", border: "var(--tint-danger-border)", label: "CRÍTICO" },
-    urgente: { color: "var(--tint-gold-text)",   bg: "var(--tint-gold-bg)",   border: "var(--tint-gold-border)",   label: "URGENTE" },
-    normal:  { color: "var(--tint-blue-text)",   bg: "var(--tint-blue-bg)",   border: "var(--tint-blue-border)",   label: "NORMAL"  },
-  };
-  const tipoIcon: Record<string, ReactNode> = {
-    "Relatório": <FileText size={13} />,
-    "Prorrogação": <Clock size={13} />,
-    "Produção Científica": <Star size={13} />,
-    "Plano de Trabalho": <RefreshCw size={13} />,
-    "Banca de Defesa": <GraduationCap size={13} />,
-  };
+  const { data, loading, error } = useValidationQueue();
+  const items = data ?? [];
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Avaliações Pendentes"
-        sub={`${REVIEWS.length} itens aguardando seu parecer`}
-        right={
-          <span className="rounded-full px-2 py-0.5" style={{ fontSize: "11px", fontWeight: 700, color: "var(--tint-danger-text)", background: "var(--tint-danger-bg)" }}>
-            {REVIEWS.filter((r) => r.urgency === "critico").length} críticos
-          </span>
-        }
+        sub={loading ? "Carregando…" : `${items.length} ${items.length === 1 ? "item aguardando" : "itens aguardando"} seu parecer`}
       />
-      <div className="space-y-2.5">
-        {REVIEWS.map((r) => {
-          const u = uc[r.urgency];
-          return (
-            <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl"
-              style={{ background: u.bg, border: `1px solid ${u.border}` }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: `${u.color}18`, color: u.color }}>
-                {tipoIcon[r.tipo] || <FileText size={13} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                  <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 800, color: "#fff", background: u.color }}>{u.label}</span>
-                  <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 700, color: u.color, background: `${u.color}15` }}>{r.tipo}</span>
+
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar avaliações pendentes: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando avaliações pendentes…</p>
+      ) : items.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhum item aguardando seu parecer.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {items.map((item) => {
+            const tc = REVIEW_TIPO_CFG[item.tipo];
+            return (
+              <div key={item.id} className="flex items-start gap-3 p-3 rounded-xl"
+                style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${tc.color}18`, color: tc.color }}>
+                  {tc.icon}
                 </div>
-                <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{r.student}</p>
-                <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>{r.desc}</p>
-                <p style={{ fontSize: "10px", fontWeight: 700, color: u.color, marginTop: "3px" }}>
-                  <Calendar size={9} className="inline mr-1" />Prazo: {r.prazo}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 800, color: tc.color, background: `${tc.color}15` }}>{tc.label}</span>
+                  </div>
+                  <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{item.aluno}</p>
+                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>{item.descricao}</p>
+                  <p style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted-foreground)", marginTop: "3px" }}>
+                    <Calendar size={9} className="inline mr-1" />Enviado em: {formatDataBR(item.data)}
+                  </p>
+                </div>
+                <button className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
+                  style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>
+                  Avaliar
+                </button>
               </div>
-              <button className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
-                style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>
-                Avaliar
-              </button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
