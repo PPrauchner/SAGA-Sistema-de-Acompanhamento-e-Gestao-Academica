@@ -16,6 +16,7 @@ escala nem rebaixa o acesso.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -48,6 +49,18 @@ def _override_user(role: str) -> None:
     )
 
 
+def _patch_ownership_repo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Faz o aluno legítimo (uid-aluno) ser o dono da task no @check_work_plan_ownership."""
+
+    def factory(collection: str) -> AsyncMock:
+        repo = AsyncMock()
+        if collection == "students":
+            repo.get.return_value = {"uid": "uid-aluno"}
+        return repo
+
+    monkeypatch.setattr("backend.app.aspects.ownership.FirebaseRepository", factory)
+
+
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     _FakeWorkPlanService.calls = []
@@ -57,6 +70,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(aspect_config, "HISTORY_ENABLED", False)
     monkeypatch.setattr(aspect_config, "DEADLINE_VALIDATION_ENABLED", False)
     monkeypatch.setattr(aspect_config, "ALERTS_ENABLED", False)
+    _patch_ownership_repo(monkeypatch)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
