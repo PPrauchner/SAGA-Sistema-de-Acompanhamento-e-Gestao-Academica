@@ -89,7 +89,7 @@ class OrientandosPorStatus(BaseModel):
     regular: int = 0
     em_risco: int = 0
     qualificado: int = 0
-    fase_defesa: int = 0
+    em_fase_de_defesa: int = 0
     em_prorrogacao: int = 0
 
 
@@ -111,7 +111,7 @@ class AlunosPorStatus(BaseModel):
     em_risco: int = 0
     em_prorrogacao: int = 0
     qualificado: int = 0
-    fase_defesa: int = 0
+    em_fase_de_defesa: int = 0
 
 
 class AuditoriaRecenteItem(BaseModel):

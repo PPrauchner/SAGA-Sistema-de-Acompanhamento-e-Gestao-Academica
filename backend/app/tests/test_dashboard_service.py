@@ -389,7 +389,7 @@ async def test_orientador_dashboard_counts_by_status():
 
     assert result.orientandos_por_status.regular == 2
     assert result.orientandos_por_status.em_risco == 1
-    assert result.orientandos_por_status.fase_defesa == 1
+    assert result.orientandos_por_status.em_fase_de_defesa == 1
     assert result.total_orientandos == 4
 
     MockAdvR.return_value.get.assert_called_once_with("adv_001")

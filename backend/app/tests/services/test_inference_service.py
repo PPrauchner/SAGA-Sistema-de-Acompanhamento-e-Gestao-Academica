@@ -49,7 +49,7 @@ async def test_inference_reflects_program_config_change(monkeypatch):
 
 @pytest.mark.anyio
 async def test_aptidao_defesa_aluno_apto():
-    """Verifica se o aluno_apto é inferido corretamente como fase_defesa."""
+    """Verifica se o aluno_apto é inferido corretamente como em_fase_de_defesa."""
     repo = FixtureRepository()
     service = InferenceService(data_source=repo)
     
