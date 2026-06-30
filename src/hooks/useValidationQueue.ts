@@ -1,12 +1,14 @@
 /**
- * Hook React para a fila de validação da coordenação (dashboard).
+ * Hook React para a lista de atividades e produções com status "enviado" (dashboard).
  *
  * Responsabilidades:
- * - useValidationQueue(): carrega atividades e produções com status "enviado" (aguardando
- *   validação) e funde numa lista unificada de itens, expondo loading/error/data.
+ * - useValidationQueue(): carrega atividades e produções com status "enviado" e funde numa
+ *   lista unificada de itens, expondo loading/error/data.
  * - Atividades de produção bibliográfica (com producao_id) são excluídas da lista de
  *   atividades para não duplicar com as produções.
- * - O token de autenticação vem do useAuth() via AppContext; exclusivo da coordenação.
+ * - O token de autenticação vem do useAuth() via AppContext. O backend escopa por papel:
+ *   a coordenação vê todos os itens (fila de validação); o orientador vê apenas os dos seus
+ *   orientandos (itens aguardando seu parecer).
  */
 
 import { useEffect, useState } from "react";
