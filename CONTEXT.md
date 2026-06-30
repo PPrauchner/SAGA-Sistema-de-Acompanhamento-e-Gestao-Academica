@@ -41,8 +41,11 @@ Docente responsável por orientar discentes. Cria e mantém o plano de trabalho,
 ### Coordenação
 Papel administrativo do programa. Realiza CRUD completo, valida atividades e produções em segunda instância, configura tipos de atividade e veículos, e emite relatórios gerenciais.
 
+### Departamento
+Unidade institucional que **sedia** um ou mais [Programas](#programa). Registro global à instituição, mantido exclusivamente pelo papel `adm`. O departamento de um orientador ou discente é **derivado** do programa ao qual pertence, nunca atribuído diretamente. Ver [ADR-0004](./docs/adr/0004-departamento-como-pai-estrutural-do-programa.md).
+
 ### Programa
-Programa de pós-graduação. Agrupa discentes e orientadores e define as regras de crédito vigentes (mínimos e máximos por grupo de atividade).
+Programa de pós-graduação, vinculado a um [Departamento](#departamento). Agrupa discentes e orientadores e define as regras de crédito vigentes (mínimos e máximos por grupo de atividade).
 
 ### Plano de Trabalho
 Estrutura do percurso acadêmico do discente, dividida em **etapas** (`stages`) e **tasks**. Cada task tem prazo, status e prioridade. O discente registra atualizações de progresso; o orientador cria e mantém a estrutura. Plano concluído é condição necessária para aptidão à defesa (RL01).
