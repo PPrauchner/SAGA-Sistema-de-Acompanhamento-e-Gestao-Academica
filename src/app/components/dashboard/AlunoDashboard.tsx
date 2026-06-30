@@ -19,12 +19,10 @@ interface ChecklistItem { id: string; label: string; icon: string; required: num
 interface WorkPhase { id: number; label: string; start: number; duration: number; color: string; progress: number; }
 interface PendingTask { id: number; title: string; deadline: string; priority: "alta" | "media" | "baixa"; type: string; done: boolean; detail: string; }
 interface Deadline { id: number; label: string; date: string; days: number; type: "urgente" | "importante" | "normal" | "critico"; icon: string; }
-interface CreditActivity { id: number; nome: string; tipo: string; creditos: number; status: "validado" | "pendente" | "planejado"; data: string; conceito: string; }
 interface Notif { id: string; title: string; body: string; type: "alerta" | "orientacao" | "sucesso" | "info" | "lembrete"; time: string; read: boolean; }
 type ModalData =
   | { type: "checklist"; item: ChecklistItem }
   | { type: "task"; task: PendingTask }
-  | { type: "activity"; activity: CreditActivity }
   | { type: "notif"; notif: Notif }
   | { type: "deadline"; deadline: Deadline }
   | null;
@@ -83,23 +81,6 @@ const DEADLINES: Deadline[] = [
   { id: 4, label: "Plano de Trabalho 2026/2", date: "01/07/2026", days: 29, type: "normal", icon: "📅" },
   { id: 5, label: "Inscrição Disciplina 2026/2", date: "05/07/2026", days: 33, type: "normal", icon: "📚" },
   { id: 6, label: "Prazo Máximo do Doutorado", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
-];
-
-const ACTIVITIES: CreditActivity[] = [
-  { id: 1, nome: "Computação Paralela e Distribuída", tipo: "Disciplina", creditos: 4, status: "validado", data: "Ago/2022", conceito: "A" },
-  { id: 2, nome: "Aprendizado de Máquina Avançado", tipo: "Disciplina", creditos: 4, status: "validado", data: "Fev/2023", conceito: "A" },
-  { id: 3, nome: "Algoritmos em Grafos", tipo: "Disciplina", creditos: 4, status: "validado", data: "Mar/2023", conceito: "A" },
-  { id: 4, nome: "Proficiência em Inglês (TOEFL)", tipo: "Proficiência", creditos: 0, status: "validado", data: "Mar/2023", conceito: "Aprovado" },
-  { id: 5, nome: "Sistemas Distribuídos", tipo: "Disciplina", creditos: 4, status: "validado", data: "Ago/2023", conceito: "B+" },
-  { id: 6, nome: "Tópicos em Segurança Computacional", tipo: "Disciplina", creditos: 4, status: "validado", data: "Fev/2024", conceito: "A" },
-  { id: 7, nome: "Publicação: SBRC 2024 (Qualis A2)", tipo: "Produção Científica", creditos: 6, status: "validado", data: "Jun/2024", conceito: "A2" },
-  { id: 8, nome: "Mineração de Dados e Análise Preditiva", tipo: "Disciplina", creditos: 4, status: "validado", data: "Ago/2024", conceito: "A" },
-  { id: 9, nome: "Qualificação Aprovada", tipo: "Marco Acadêmico", creditos: 0, status: "validado", data: "Ago/2024", conceito: "Aprovado" },
-  { id: 10, nome: "Publicação: WSCAD 2024 (Qualis B1)", tipo: "Produção Científica", creditos: 3, status: "pendente", data: "Nov/2024", conceito: "B1" },
-  { id: 11, nome: "Visão Computacional", tipo: "Disciplina", creditos: 4, status: "validado", data: "Fev/2025", conceito: "A" },
-  { id: 12, nome: "Workshop ERAD 2025", tipo: "Atividade Complementar", creditos: 1, status: "pendente", data: "Mar/2025", conceito: "Participação" },
-  { id: 13, nome: "Seminário Departamental – Jun/2026", tipo: "Atividade Complementar", creditos: 0.5, status: "validado", data: "Jun/2026", conceito: "Participação" },
-  { id: 14, nome: "Tópicos Especiais em IA", tipo: "Disciplina", creditos: 4, status: "planejado", data: "2026/2", conceito: "—" },
 ];
 
 const GRAPH_DATA = [
@@ -323,34 +304,6 @@ function Modal({ data, onClose }: { data: ModalData; onClose: () => void }) {
             </div>
             <div className="rounded-xl p-4" style={{ background: "var(--muted)" }}>
               <p style={{ fontSize: "13px", color: "var(--foreground)", lineHeight: 1.7 }}>{task.detail}</p>
-            </div>
-          </div>
-        </>
-      );
-    }
-
-    if (data.type === "activity") {
-      const { activity } = data;
-      const sc = activity.status === "validado" ? { color: "#1F8A70", bg: "#dcfce7", label: "Validado" }
-        : activity.status === "pendente" ? { color: "#D4A017", bg: "#fffbeb", label: "Pendente" }
-        : { color: "#123C7A", bg: "#eef3fc", label: "Planejado" };
-      return (
-        <>
-          <MHead title="Atividade Creditável" onClose={onClose} bg={sc.bg} color={sc.color} />
-          <div className="p-5 space-y-4">
-            <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)", lineHeight: 1.4 }}>{activity.nome}</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { l: "Tipo", v: activity.tipo },
-                { l: "Créditos", v: activity.creditos > 0 ? `+${activity.creditos} créditos` : "—" },
-                { l: "Data / Período", v: activity.data },
-                { l: "Conceito / Resultado", v: activity.conceito },
-              ].map((f) => (
-                <div key={f.l} className="rounded-xl p-3" style={{ background: "var(--muted)" }}>
-                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginBottom: "3px" }}>{f.l}</p>
-                  <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{f.v}</p>
-                </div>
-              ))}
             </div>
           </div>
         </>
