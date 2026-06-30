@@ -62,8 +62,16 @@ Fluxo de validação: discente submete → orientador emite parecer → coordena
 ### Produção Bibliográfica
 Publicação científica associada ao discente. Associada a um **veículo** (fator de pontuação configurado pela coordenação). A pontuação ponderada é calculada pela RL05. Pelo menos uma produção validada é condição para aptidão à defesa.
 
+### Solicitação
+Pedido formal que requer decisão da coordenação, consolidado numa lista única para revisão. Distingue-se pela **origem**:
+
+- **Criada pelo formulário "Nova Solicitação"** (aluno ou orientador preenche, status inicia `pendente`): _prorrogação_ (de defesa ou de qualificação), _trancamento de matrícula_ e _transferência de orientando_.
+- **Iniciada em outro fluxo e apenas agregada** na lista: _validação_ de atividade creditável ou produção bibliográfica (nasce da submissão do discente) e _transferência de coordenação_ (iniciada na lista de orientadores, ver US-SO02).
+
+_Avoid_: transferência (é apenas um subtipo de solicitação).
+
 ### Prorrogação
-Extensão de prazo concedida ao discente. Muda o estado para "Em Prorrogação" e recalcula o prazo final. Registrada pela coordenação ou orientador.
+Extensão de prazo concedida ao discente. Muda o estado para "Em Prorrogação" e recalcula o prazo final. Registrada pela coordenação ou orientador. É o subtipo mais comum de [Solicitação](#solicitação).
 
 ### Veículo
 Publicação ou evento científico classificado em um **nível Qualis** (`A1`–`A8`, ou _fallback_ quando não classificado). Usado pela RL05 para ponderar o score de produções bibliográficas.
