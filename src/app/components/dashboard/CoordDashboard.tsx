@@ -2,12 +2,13 @@ import React, { useState } from "react";
 import { useCoordDashboard } from "@/hooks/useDashboard";
 import { useProductionsByMonth } from "@/hooks/useProductionsByMonth";
 import { usePendingExtensions } from "@/hooks/usePendingExtensions";
+import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
 import type { ProductionByMonthItem } from "@/api/reportsApi";
 import type { Solicitacao } from "@/api/solicitacoesApi";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
   BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
-  BarChart2, Filter, Bell, GraduationCap, Layers,
+  BarChart2, Filter, Bell, GraduationCap,
   FileSpreadsheet,
 } from "lucide-react";
 import {
@@ -19,17 +20,6 @@ import {
 
 type ReportType = "status" | "orientador" | "producao" | "integralizacao" | null;
 type ExportFormat = "pdf" | "excel" | "csv";
-
-interface ValidationItem {
-  id: string;
-  tipo: "relatorio" | "plano" | "producao" | "atividade";
-  aluno: string;
-  orientador: string;
-  descricao: string;
-  prazo: string;
-  urgencia: "alta" | "media" | "baixa";
-  data: string;
-}
 
 interface AlertItem {
   id: string;
@@ -87,15 +77,6 @@ const INTEGRALIZACAO_DATA = [
   { ano: "2023", mestrado: 25, doutorado: 48, metaMestrado: 24, metaDoutorado: 48 },
 ];
 
-const VALIDATIONS: ValidationItem[] = [
-  { id: "v1", tipo: "relatorio", aluno: "Carlos Eduardo Lima", orientador: "Profa. Carla Mendes", descricao: "Relatório Semestral 2024-2", prazo: "05/06/2026", urgencia: "alta", data: "28/05/2026" },
-  { id: "v2", tipo: "plano", aluno: "Juliana Mendes Martins", orientador: "Prof. Paulo Rodrigues", descricao: "Plano de Trabalho — Fase 3", prazo: "08/06/2026", urgencia: "alta", data: "29/05/2026" },
-  { id: "v3", tipo: "producao", aluno: "Ana Paula Costa", orientador: "Profa. Ana Lopes", descricao: "Artigo submetido ao IEEE Access", prazo: "12/06/2026", urgencia: "media", data: "30/05/2026" },
-  { id: "v4", tipo: "atividade", aluno: "Ricardo Alves Santos", orientador: "Prof. João Figueiredo", descricao: "Atividade creditável — Workshop IA", prazo: "15/06/2026", urgencia: "media", data: "01/06/2026" },
-  { id: "v5", tipo: "relatorio", aluno: "Bruno Carvalho Neves", orientador: "Profa. Beatriz Souza", descricao: "Relatório de Qualificação", prazo: "10/06/2026", urgencia: "alta", data: "01/06/2026" },
-  { id: "v6", tipo: "plano", aluno: "Patrícia Lima Farias", orientador: "Prof. Rafael Costa", descricao: "Revisão do Cronograma — Prorrogação", prazo: "20/06/2026", urgencia: "baixa", data: "31/05/2026" },
-];
-
 const ALERTS: AlertItem[] = [
   { id: "a1", nivel: "critico", titulo: "Prazos vencidos sem prorrogação aprovada", descricao: "8 alunos ultrapassaram o prazo máximo de integralização sem prorrogação formalizada.", afetados: 8, data: "02/06/2026", acao: "Ver alunos" },
   { id: "a2", nivel: "critico", titulo: "Relatórios semestrais em atraso", descricao: "12 relatórios do período 2024-2 não foram entregues até a data limite.", afetados: 12, data: "01/06/2026", acao: "Notificar alunos" },
@@ -106,15 +87,7 @@ const ALERTS: AlertItem[] = [
 ];
 
 
-const URGENCIA_CFG = {
-  alta: { label: "Alta", color: "#dc2626", bg: "#fef2f2" },
-  media: { label: "Média", color: "#D4A017", bg: "#fffbeb" },
-  baixa: { label: "Baixa", color: "#1F8A70", bg: "#f0fdf4" },
-};
-
-const TIPO_CFG: Record<ValidationItem["tipo"], { label: string; color: string; icon: React.ReactNode }> = {
-  relatorio: { label: "Relatório", color: "#123C7A", icon: <FileText size={13} /> },
-  plano: { label: "Plano", color: "#8b5cf6", icon: <Layers size={13} /> },
+const TIPO_CFG: Record<ValidationQueueItem["tipo"], { label: string; color: string; icon: React.ReactNode }> = {
   producao: { label: "Produção", color: "#1F8A70", icon: <Award size={13} /> },
   atividade: { label: "Atividade", color: "#D4A017", icon: <BookOpen size={13} /> },
 };
@@ -530,31 +503,24 @@ function IntegralizacaoChart({ onReport }: { onReport: () => void }) {
 }
 
 
-function ValidationQueue() {
-  const [filter, setFilter] = useState<"todos" | ValidationItem["tipo"] | "alta">("todos");
+function ValidationQueue({ items, loading, error }: { items: ValidationQueueItem[]; loading: boolean; error: string | null }) {
+  const [filter, setFilter] = useState<"todos" | ValidationQueueItem["tipo"]>("todos");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtered = VALIDATIONS.filter((v) => {
-    if (filter === "todos") return true;
-    if (filter === "alta") return v.urgencia === "alta";
-    return v.tipo === filter;
-  });
+  const filtered = items.filter((v) => filter === "todos" || v.tipo === filter);
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
-            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
-          </div>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{VALIDATIONS.length} itens aguardando aprovação</p>
+          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{loading ? "Carregando…" : `${items.length} ${items.length === 1 ? "item aguardando" : "itens aguardando"} aprovação`}</p>
         </div>
         <ExportBar section="Fila de Validação" />
       </div>
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {(["todos", "alta", "relatorio", "plano", "producao", "atividade"] as const).map((f) => (
+        {(["todos", "atividade", "producao"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -566,15 +532,21 @@ function ValidationQueue() {
               border: `1px solid ${filter === f ? "var(--primary)" : "var(--border)"}`,
             }}
           >
-            {f === "todos" ? "Todos" : f === "alta" ? "⚡ Urgente" : TIPO_CFG[f as ValidationItem["tipo"]].label}
+            {f === "todos" ? "Todos" : TIPO_CFG[f].label}
           </button>
         ))}
       </div>
 
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar a fila: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando fila de validação…</p>
+      ) : filtered.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhum item aguardando validação.</p>
+      ) : (
       <div className="space-y-2">
         {filtered.map((v) => {
           const tc = TIPO_CFG[v.tipo];
-          const uc = URGENCIA_CFG[v.urgencia];
           const isOpen = expanded === v.id;
           return (
             <div
@@ -591,13 +563,12 @@ function ValidationQueue() {
                   <div className="flex items-center gap-2">
                     <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{v.aluno}</span>
                     <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: `${tc.color}18`, color: tc.color }}>{tc.label}</span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: uc.bg, color: uc.color }}>{uc.label}</span>
                   </div>
                   <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{v.descricao}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Prazo</p>
-                  <p style={{ fontSize: "11px", fontWeight: 700, color: v.urgencia === "alta" ? "var(--tint-danger-text)" : "var(--foreground)" }}>{v.prazo}</p>
+                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Enviado</p>
+                  <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--foreground)" }}>{formatDataBR(v.data)}</p>
                 </div>
                 <ChevronRight size={14} style={{ color: "var(--muted-foreground)", transform: isOpen ? "rotate(90deg)" : undefined, transition: "transform 0.2s", flexShrink: 0 }} />
               </button>
@@ -606,7 +577,7 @@ function ValidationQueue() {
                   <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                     <div className="grid grid-cols-2 gap-2" style={{ fontSize: "12px" }}>
                       <div><span style={{ color: "var(--muted-foreground)" }}>Orientador: </span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{v.orientador}</span></div>
-                      <div><span style={{ color: "var(--muted-foreground)" }}>Enviado em: </span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{v.data}</span></div>
+                      <div><span style={{ color: "var(--muted-foreground)" }}>Enviado em: </span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{formatDataBR(v.data)}</span></div>
                     </div>
                     <div className="flex gap-2 mt-3">
                       <button className="flex-1 py-2 rounded-xl" style={{ background: "var(--tint-teal-text)", color: "#fff", fontSize: "12px", fontWeight: 700 }}>
@@ -626,6 +597,7 @@ function ValidationQueue() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
@@ -765,6 +737,8 @@ export function CoordDashboard() {
   const producaoData = toProducaoChartData(producaoRaw);
   const { data: pendingExtensions, loading: extLoading, error: extError } = usePendingExtensions();
   const extensions = pendingExtensions ?? [];
+  const { data: validationItems, loading: valLoading, error: valError } = useValidationQueue();
+  const validationQueue = validationItems ?? [];
   const [reportModal, setReportModal] = useState<ReportType>(null);
 
   if (loading) {
@@ -821,7 +795,7 @@ export function CoordDashboard() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {[
-              { v: dashData?.atividades_aguardando_validacao ?? VALIDATIONS.length, l: "Na fila", color: "#D4A017" },
+              { v: dashData?.atividades_aguardando_validacao ?? validationQueue.length, l: "Na fila", color: "#D4A017" },
               { v: dashData?.prorrogacoes_pendentes ?? extensions.length, l: "Prorrogações", color: "#f97316" },
             ].map((s) => (
               <div key={s.l} className="text-center rounded-xl px-3 py-2 sm:px-4 sm:py-2.5" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
@@ -857,7 +831,7 @@ export function CoordDashboard() {
 
       {/* Validation Queue + Extension Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ValidationQueue />
+        <ValidationQueue items={validationQueue} loading={valLoading} error={valError} />
         <ExtensionRequestsSection extensions={extensions} loading={extLoading} error={extError} />
       </div>
       {/* Alerts */}
