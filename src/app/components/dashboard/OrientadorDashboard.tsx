@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrientadorDashboard } from "@/hooks/useDashboard";
 import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
+import { useNotifications } from "@/hooks/useNotifications";
 import {
   AlertTriangle, X, Calendar, ChevronRight,
   CheckCircle2, Bell, Plus, RefreshCw, Star, Send,
@@ -31,11 +32,6 @@ interface Update {
   id: number; student: string; init: string;
   action: string; detail: string; time: string;
   type: "relatorio" | "producao" | "plano" | "credito" | "defesa" | "reuniao";
-}
-interface AcAlert {
-  id: number; student: string;
-  tipo: "critico" | "atencao" | "info";
-  mensagem: string; detalhe: string;
 }
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
@@ -66,14 +62,6 @@ const UPDATES: Update[] = [
   { id: 4, student: "Ricardo Santos", init: "RA", action: "Atualizou plano de trabalho 2026/2", detail: "Novas metas e cronograma do 2º semestre adicionados", time: "há 5 dias", type: "plano" },
   { id: 5, student: "Bruno Neves", init: "BC", action: "Entregou relatório semestral 2026/1", detail: "Relatório enviado via SAGA — aguardando avaliação do orientador", time: "há 1 semana", type: "relatorio" },
   { id: 6, student: "Carlos E. Lima", init: "CE", action: "Solicitou reunião de orientação urgente", detail: "Assunto: andamento da dissertação e risco de não cumprimento do prazo", time: "há 1 semana", type: "reuniao" },
-];
-
-const ALERTS: AcAlert[] = [
-  { id: 1, student: "Marcos V. Oliveira", tipo: "critico", mensagem: "Prazo do mestrado vencido há 6 meses", detalhe: "Prazo oficial: Dez/2024. Prorrogação não formalizada. Contato com secretaria é urgente." },
-  { id: 2, student: "Carlos E. Lima", tipo: "critico", mensagem: "Prazo vence em 1 mês — nenhuma produção publicada", detalhe: "Prazo: Jul/2025. 0 de 1 artigo exigido publicado. Risco alto de não conclusão." },
-  { id: 3, student: "Carlos E. Lima", tipo: "atencao", mensagem: "Progresso acadêmico abaixo do esperado (45%)", detalhe: "Para mestrado em andamento há 3 anos, esperado ~70%. Déficit de 25 pontos." },
-  { id: 4, student: "Juliana M. Martins", tipo: "atencao", mensagem: "Falta 1 produção para cumprir requisito de defesa", detalhe: "2 de 3 artigos publicados. Submissão urgente necessária antes do prazo final." },
-  { id: 5, student: "Bruno C. Neves", tipo: "info", mensagem: "Sem atualização no SAGA há mais de 7 dias", detalhe: "Última atividade registrada: há 1 semana. Recomendado: reunião de acompanhamento." },
 ];
 
 const DISTRIB_DATA = [
@@ -871,44 +859,68 @@ function RecentUpdates() {
   );
 }
 
+type AlertSeverity = "critico" | "atencao" | "info";
+
+// Mapeia o tipo da notificação (A05) para a severidade visual do painel. Default: "info".
+const NOTIF_SEVERITY: Record<string, AlertSeverity> = {
+  prazo_critico: "critico",
+  atividade_submetida: "atencao",
+  prorrogacao_aprovada: "atencao",
+  transferencia_orientador: "atencao",
+  transferencia_coordenacao: "atencao",
+  atividade_validada: "info",
+  progresso_task: "info",
+};
+
 function AcademicAlerts() {
-  const alertCfg = {
+  const { notifications, loading } = useNotifications();
+  const alertCfg: Record<AlertSeverity, { color: string; bg: string; border: string; icon: ReactNode; label: string }> = {
     critico: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: <AlertCircle size={14} />, label: "CRÍTICO" },
     atencao: { color: "#D4A017", bg: "#fffbeb", border: "#fde68a", icon: <AlertTriangle size={14} />, label: "ATENÇÃO" },
     info: { color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd", icon: <Bell size={14} />, label: "INFO" },
   };
+  const severityOf = (tipo: string): AlertSeverity => NOTIF_SEVERITY[tipo] ?? "info";
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Alertas Acadêmicos"
-        sub="Situações identificadas pelo SAGA"
+        sub={loading ? "Carregando…" : "Situações identificadas pelo SAGA"}
         right={
           <span className="rounded-full px-2 py-0.5" style={{ fontSize: "11px", fontWeight: 700, color: "#dc2626", background: "#fef2f2" }}>
-            {ALERTS.filter((a) => a.tipo === "critico").length} críticos
+            {notifications.filter((n) => severityOf(n.tipo) === "critico").length} críticos
           </span>
         }
       />
-      <div className="space-y-2.5">
-        {ALERTS.map((a) => {
-          const ac = alertCfg[a.tipo];
-          return (
-            <div key={a.id} className="rounded-xl p-3" style={{ background: ac.bg, border: `1px solid ${ac.border}` }}>
-              <div className="flex items-start gap-2.5">
-                <span style={{ color: ac.color, flexShrink: 0, marginTop: 1 }}>{ac.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                    <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "8px", fontWeight: 800, color: "#fff", background: ac.color }}>{ac.label}</span>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: ac.color }}>{a.student}</span>
+
+      {loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando alertas…</p>
+      ) : notifications.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhum alerta no momento.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {notifications.map((n) => {
+            const ac = alertCfg[severityOf(n.tipo)];
+            return (
+              <div key={n.id} className="rounded-xl p-3" style={{ background: ac.bg, border: `1px solid ${ac.border}` }}>
+                <div className="flex items-start gap-2.5">
+                  <span style={{ color: ac.color, flexShrink: 0, marginTop: 1 }}>{ac.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "8px", fontWeight: 800, color: "#fff", background: ac.color }}>{ac.label}</span>
+                      {n.timestamp && (
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: ac.color }}>{n.timestamp.toLocaleDateString("pt-BR")}</span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", lineHeight: 1.35 }}>{n.titulo}</p>
+                    <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, marginTop: "3px" }}>{n.mensagem}</p>
                   </div>
-                  <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", lineHeight: 1.35 }}>{a.mensagem}</p>
-                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, marginTop: "3px" }}>{a.detalhe}</p>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
