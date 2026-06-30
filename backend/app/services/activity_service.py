@@ -131,9 +131,15 @@ class ActivityService:
     ) -> list[dict]:
         visible_ids = await self._visible_student_ids(user, student_id)
         types_map = {item["id"]: item for item in await self._types.list_all()}
+        student_by_id = {item["id"]: item for item in await self._students.list_all()}
+        advisor_name_by_id = {
+            item["id"]: item.get("nome", "") for item in await self._advisors.list_all()
+        }
 
         result: list[dict] = []
         for sid in visible_ids:
+            student = student_by_id.get(sid, {})
+            orientador_nome = advisor_name_by_id.get(student.get("orientador_id"))
             for activity in await self._activities.list_by_student(sid):
                 tipo = types_map.get(activity.get("tipo_id"), {})
                 activity_categoria = tipo.get("categoria")
@@ -145,6 +151,8 @@ class ActivityService:
                     {
                         **activity,
                         "student_id": sid,
+                        "aluno_nome": student.get("nome", ""),
+                        "orientador_nome": orientador_nome,
                         "tipo_nome": tipo.get("nome"),
                         "categoria": activity_categoria,
                     }
