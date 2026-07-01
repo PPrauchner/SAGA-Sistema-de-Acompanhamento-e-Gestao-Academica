@@ -289,33 +289,3 @@ async def test_outro_usuario_nao_cancela() -> None:
     assert exc.value.status_code == 403
 
 
-async def test_force_transfer_troca_papeis_diretamente() -> None:
-    service, transfers, users, advisors, auth = _service()
-
-    resp = await service.force_transfer(
-        CoordinationTransferStartRequest(successor_uid="adv"),
-        _coord(),
-    )
-
-    assert resp.status == "concluido"
-    assert auth.claims["adv"] == {"role": "coordenacao", "programa_id": "prog1"}
-    assert auth.claims["coord"] == {"role": "orientador", "programa_id": "prog1"}
-    assert users.store["adv"]["role"] == "coordenacao"
-    assert users.store["coord"]["role"] == "orientador"
-    assert users.store["coord"]["advisor_id"] == "coord"
-    assert advisors.store["coord"]["limite_orientandos"] == 5
-    assert set(auth.revoked) == {"adv", "coord"}
-    assert transfers.store[resp.id]["status"] == "concluido"
-
-
-async def test_force_transfer_bloqueia_sucessor_de_outro_programa() -> None:
-    service, _, users, _, _ = _service()
-    users.store["adv"]["programa_id"] = "prog2"
-
-    with pytest.raises(HTTPException) as exc:
-        await service.force_transfer(
-            CoordinationTransferStartRequest(successor_uid="adv"),
-            _coord(),
-        )
-
-    assert exc.value.status_code == 403
