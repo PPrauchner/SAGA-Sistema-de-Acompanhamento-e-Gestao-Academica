@@ -345,6 +345,19 @@ class WorkPlanRepository:
 
         await asyncio.to_thread(_write)
 
+    async def delete_task(self, task_id: str) -> None:
+        """Remove uma task e seus updates. Levanta KeyError se a task nao existir."""
+
+        def _write() -> None:
+            ref = _task_ref(task_id)
+            if not ref.get().exists:
+                raise KeyError(task_id)
+            for update_doc in ref.collection(_UPDATES).stream():
+                update_doc.reference.delete()
+            ref.delete()
+
+        await asyncio.to_thread(_write)
+
     async def create_update(self, task_id: str, data: dict[str, Any]) -> str:
         """Registra um update de progresso e ajusta progresso/status da task.
 

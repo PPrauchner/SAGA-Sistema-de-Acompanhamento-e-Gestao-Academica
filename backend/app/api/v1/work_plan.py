@@ -162,6 +162,22 @@ async def update_task(
         raise _not_found(exc)
 
 
+@router.delete("/tasks/{task_id}", response_model=MutationMessage)
+@requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
+@audit_operation
+async def delete_task(
+    task_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    service: WorkPlanService = Depends(_get_service),
+) -> MutationMessage:
+    try:
+        result = await service.delete_task(task_id)
+        return MutationMessage(**result)
+    except WorkPlanNotFoundError as exc:
+        raise _not_found(exc)
+
+
 @router.patch("/tasks/{task_id}/status", response_model=TaskStatusResponse)
 @requires_role("aluno", "orientador", "coordenacao")
 @check_work_plan_ownership("status")
