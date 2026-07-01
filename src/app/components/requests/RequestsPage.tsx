@@ -62,10 +62,24 @@ export function RequestsPage() {
         }
       } else if (req.tipo === "transferencia_coordenacao") {
         if (action === "approve") {
-          await coordinationTransfersApi.accept(req.id, token);
+          if (req.payload_original.successor_uid !== currentUser?.uid) {
+            alert("Apenas o orientador convidado pode aprovar a transferência.");
+            return;
+          }
+          await coordinationTransfersApi.accept(token, req.id);
         } else {
-          alert("Rejeição de transferência de coordenação ainda não implementada.");
-          return;
+          if (req.payload_original.initiator_uid === currentUser?.uid || currentUser?.role === "adm") {
+            if (confirm("Tem certeza que deseja cancelar esta solicitação de transferência?")) {
+              await coordinationTransfersApi.cancel(token, req.id);
+            }
+          } else if (req.payload_original.successor_uid === currentUser?.uid) {
+            if (confirm("Tem certeza que deseja rejeitar o convite de coordenação?")) {
+              await coordinationTransfersApi.reject(token, req.id);
+            }
+          } else {
+            alert("Sem permissão para cancelar ou rejeitar.");
+            return;
+          }
         }
       } else if (req.tipo === "transferencia") {
         if (action === "approve") {
@@ -220,13 +234,15 @@ export function RequestsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm flex gap-2 justify-center">
-                  <button
-                    onClick={() => handleAction(req, "approve")}
-                    className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
-                    title="Aprovar / Aceitar"
-                  >
-                    <CheckCircle size={15} />
-                  </button>
+                  {!(req.tipo === "transferencia_coordenacao" && req.payload_original.successor_uid !== currentUser?.uid) && (
+                    <button
+                      onClick={() => handleAction(req, "approve")}
+                      className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
+                      title="Aprovar / Aceitar"
+                    >
+                      <CheckCircle size={15} />
+                    </button>
+                  )}
                   <button
                     onClick={() => handleAction(req, "reject")}
                     className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
