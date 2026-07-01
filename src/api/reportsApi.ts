@@ -92,8 +92,10 @@ export interface ProductionLevelBreakdown {
     A2: number;
     A3: number;
     A4: number;
-    B1: number;
-    B2: number;
+    A5: number;
+    A6: number;
+    A7: number;
+    A8: number;
     SC: number;
 }
 
