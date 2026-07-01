@@ -133,11 +133,11 @@ export function AdvisorsPage() {
     setSaving(true);
     setError(null);
     try {
-      await coordinationTransfersApi.force(token, confirmTransferAdvisor.uid);
+      await coordinationTransfersApi.start(token, confirmTransferAdvisor.uid);
       setConfirmTransferAdvisor(null);
       await loadData(token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao transferir coordenação");
+      setError(err instanceof Error ? err.message : "Falha ao enviar solicitação de transferência");
       setConfirmTransferAdvisor(null);
     } finally {
       setSaving(false);
@@ -261,11 +261,11 @@ export function AdvisorsPage() {
           <div className="rounded-2xl p-6 w-full max-w-sm mx-4" style={{ background: "var(--card)" }}>
             <h2 className="mb-4" style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>Confirmar Transferência</h2>
             <p className="mb-6" style={{ fontSize: "14px", color: "var(--muted-foreground)" }}>
-              Tem certeza que deseja transferir a coordenação para <strong>{confirmTransferAdvisor.nome}</strong>? Esta ação é irreversível.
+              Tem certeza que deseja solicitar a transferência de coordenação para <strong>{confirmTransferAdvisor.nome}</strong>? Se o receptor aceitar, essa ação é irreversível.
             </p>
             <div className="flex gap-3">
               <button type="button" onClick={() => setConfirmTransferAdvisor(null)} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
-              <button onClick={handleTransferCoordination} disabled={saving} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>{saving ? "Transferindo..." : "Confirmar"}</button>
+              <button onClick={handleTransferCoordination} disabled={saving} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>{saving ? "Enviando..." : "Confirmar Solicitação"}</button>
             </div>
           </div>
         </div>

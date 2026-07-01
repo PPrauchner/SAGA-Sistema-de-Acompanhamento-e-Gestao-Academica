@@ -50,13 +50,6 @@ export const coordinationTransfersApi = {
     });
   },
 
-  force(token: string, successorUid: string): Promise<CoordinationTransfer> {
-    return request<CoordinationTransfer>("/api/v1/coordination-transfers/force", token, {
-      method: "POST",
-      body: JSON.stringify({ successor_uid: successorUid }),
-    });
-  },
-
   accept(token: string, transferId: string): Promise<{ message: string }> {
     return request<{ message: string }>(
       `/api/v1/coordination-transfers/${transferId}/accept`,
