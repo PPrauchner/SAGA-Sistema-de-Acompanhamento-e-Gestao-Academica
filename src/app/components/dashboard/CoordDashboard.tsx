@@ -830,7 +830,7 @@ export function CoordDashboard() {
       { name: "Qualificado", value: dashData.alunos_por_status.qualificado, color: "#123C7A" },
       { name: "Em Risco", value: dashData.alunos_por_status.em_risco, color: "#D4A017" },
       { name: "Prorrogação", value: dashData.alunos_por_status.em_prorrogacao, color: "#f97316" },
-      { name: "Fase de Defesa", value: dashData.alunos_por_status.fase_defesa, color: "#8b5cf6" },
+      { name: "Fase de Defesa", value: dashData.alunos_por_status.em_fase_de_defesa, color: "#8b5cf6" },
     ].filter(s => s.value > 0);
   }
 

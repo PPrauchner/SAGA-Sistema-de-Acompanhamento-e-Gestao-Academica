@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from backend.app.core.auth import CurrentUser
 from backend.app.models.extension import ExtensionCreateRequest
@@ -172,3 +173,27 @@ async def test_create_extension_bloqueia_pendente_duplicada() -> None:
         )
 
     assert exc.value.status_code == 409
+
+
+@pytest.mark.parametrize(
+    "tipo",
+    ["prazo_defesa", "prazo_qualificacao", "trancamento", "mudanca_nivel"],
+)
+def test_extension_request_aceita_tipos_validos(tipo: str) -> None:
+    request = ExtensionCreateRequest(
+        tipo=tipo, nova_data=date(2028, 7, 1), motivo="Ajuste"
+    )
+
+    assert request.tipo == tipo
+
+
+def test_extension_request_rejeita_tipo_invalido() -> None:
+    with pytest.raises(ValidationError):
+        ExtensionCreateRequest(
+            tipo="qualquer", nova_data=date(2028, 7, 1), motivo="Ajuste"
+        )
+
+
+def test_extension_request_exige_tipo() -> None:
+    with pytest.raises(ValidationError):
+        ExtensionCreateRequest(nova_data=date(2028, 7, 1), motivo="Ajuste")

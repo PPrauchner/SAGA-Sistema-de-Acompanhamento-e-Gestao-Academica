@@ -41,8 +41,11 @@ Docente responsável por orientar discentes. Cria e mantém o plano de trabalho,
 ### Coordenação
 Papel administrativo do programa. Realiza CRUD completo, valida atividades e produções em segunda instância, configura tipos de atividade e veículos, e emite relatórios gerenciais.
 
+### Departamento
+Unidade institucional que **sedia** um ou mais [Programas](#programa). Registro global à instituição, mantido exclusivamente pelo papel `adm`. O departamento de um orientador ou discente é **derivado** do programa ao qual pertence, nunca atribuído diretamente. Ver [ADR-0004](./docs/adr/0004-departamento-como-pai-estrutural-do-programa.md).
+
 ### Programa
-Programa de pós-graduação. Agrupa discentes e orientadores e define as regras de crédito vigentes (mínimos e máximos por grupo de atividade).
+Programa de pós-graduação, vinculado a um [Departamento](#departamento). Agrupa discentes e orientadores e define as regras de crédito vigentes (mínimos e máximos por grupo de atividade).
 
 ### Plano de Trabalho
 Estrutura do percurso acadêmico do discente, dividida em **etapas** (`stages`) e **tasks**. Cada task tem prazo, status e prioridade. O discente registra atualizações de progresso; o orientador cria e mantém a estrutura. Plano concluído é condição necessária para aptidão à defesa (RL01).
@@ -62,8 +65,16 @@ Fluxo de validação: discente submete → orientador emite parecer → coordena
 ### Produção Bibliográfica
 Publicação científica associada ao discente. Associada a um **veículo** (fator de pontuação configurado pela coordenação). A pontuação ponderada é calculada pela RL05. Pelo menos uma produção validada é condição para aptidão à defesa.
 
+### Solicitação
+Pedido formal que requer decisão da coordenação, consolidado numa lista única para revisão. Distingue-se pela **origem**:
+
+- **Criada pelo formulário "Nova Solicitação"** (aluno ou orientador preenche, status inicia `pendente`): _prorrogação_ (de defesa ou de qualificação), _trancamento de matrícula_ e _transferência de orientando_.
+- **Iniciada em outro fluxo e apenas agregada** na lista: _validação_ de atividade creditável ou produção bibliográfica (nasce da submissão do discente) e _transferência de coordenação_ (iniciada na lista de orientadores, ver US-SO02).
+
+_Avoid_: transferência (é apenas um subtipo de solicitação).
+
 ### Prorrogação
-Extensão de prazo concedida ao discente. Muda o estado para "Em Prorrogação" e recalcula o prazo final. Registrada pela coordenação ou orientador.
+Extensão de prazo concedida ao discente. Muda o estado para "Em Prorrogação" e recalcula o prazo final. Registrada pela coordenação ou orientador. É o subtipo mais comum de [Solicitação](#solicitação).
 
 ### Veículo
 Publicação ou evento científico classificado em um **nível Qualis** (`A1`–`A8`, ou _fallback_ quando não classificado). Usado pela RL05 para ponderar o score de produções bibliográficas.

@@ -203,7 +203,7 @@ erDiagram
 | `qualificacao_data` | timestamp\|null | | |
 | `criado_em` / `atualizado_em` / `atualizado_por` | timestamp / uid | | |
 
-¹ `regular`\|`em_prorrogacao`\|`em_risco`\|`qualificado`\|`fase_defesa`\|`concluido`\|`desligado`.
+¹ `regular`\|`em_prorrogacao`\|`em_risco`\|`qualificado`\|`em_fase_de_defesa`\|`concluido`\|`desligado`.
 `situacao_registrada` (humano + transição automática) e `situacao_inferida` (motor) usam o mesmo enum;
 a **divergência entre as duas é sinal de atenção**.
 
@@ -597,6 +597,7 @@ erDiagram
     students ||--o{ history : versiona
     work_plan ||--o{ history : versiona
     activity_types ||--o{ history : versiona
+    users ||--o{ history : versiona
     users ||--o{ audit_logs : "registra (soft)"
     users ||--o{ notifications : "recebe (soft)"
 
@@ -695,8 +696,9 @@ erDiagram
 
 ### `history` 🔲 — sub-coleção **polimórfica** (A03)
 
-Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genérica;
-`entidade_tipo`/`entidade_id` discriminam o pai.
+Presente sob `students/`, `work_plan/`, `activity_types/` e `users/`. Uma entidade genérica;
+`entidade_tipo`/`entidade_id` discriminam o pai. A edição do próprio perfil
+(`PUT /users/profile`, issue #195) versiona `users/{uid}/history/` com `entidade_tipo="user"`.
 
 | Campo | Tipo | Notas |
 |-------|------|-------|

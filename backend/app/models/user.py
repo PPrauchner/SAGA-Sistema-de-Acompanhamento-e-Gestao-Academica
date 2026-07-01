@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Papéis reconhecidos pelo sistema (custom claim 'role').
 # `adm` é o superusuário global (ADR-0001): não pertence a programa algum,
@@ -150,3 +150,26 @@ class CreateCoordinatorResponse(BaseModel):
     message: str
     uid: str
     email: str
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Corpo de PUT /api/v1/users/profile: edição do próprio perfil.
+
+    Campos editáveis por papel: `nome` para todos; `departamento` apenas para
+    orientador (o service rejeita `departamento` para os demais papéis). Campos
+    não editáveis (`email`, `programa_id`, `matricula`, `telefone`) são proibidos
+    no corpo via `extra="forbid"`, que faz qualquer chave desconhecida retornar 422.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nome: str = Field(..., min_length=1)
+    departamento: str | None = None
+
+
+class ProfileUpdateResponse(BaseModel):
+    """Resposta 200 de PUT /api/v1/users/profile: perfil atualizado."""
+
+    uid: str
+    nome: str
+    departamento: str | None = None

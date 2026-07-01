@@ -13,7 +13,8 @@ Responsabilidades:
   proficiencia do aluno.
 - A entidade e o repositório a versionar são resolvidos pelo nome do parâmetro de id
   presente na assinatura da função decorada (student_id → StudentRepository/"student",
-  type_id → ActivityTypeRepository/"activity_type") via _resolve().
+  type_id → ActivityTypeRepository/"activity_type") via _resolve(). A edição do próprio
+  perfil (ProfileUpdateRequest no body) versiona users/{uid} via FirebaseRepository("users").
 - Weaving via HistoryMeta: envolve automaticamente todos os métodos update_* de subclasses
   de EntityService. Alternativa: @track_history aplicado explicitamente.
 """
@@ -27,7 +28,9 @@ from typing import Any
 
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
+from backend.app.models.user import ProfileUpdateRequest
 from backend.app.repositories.activity_type_repository import ActivityTypeRepository
+from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.transfer_repository import TransferRepository
 
@@ -48,6 +51,14 @@ def _resolve(bound_arguments: dict[str, Any]) -> tuple[Any, str, str] | None:
     type_id = bound_arguments.get("type_id")
     if isinstance(type_id, str):
         return ActivityTypeRepository(), "activity_type", type_id
+
+    if isinstance(body, ProfileUpdateRequest):
+        user = next(
+            (value for value in bound_arguments.values() if isinstance(value, CurrentUser)),
+            None,
+        )
+        if user is not None:
+            return FirebaseRepository("users"), "user", user.uid
 
     return None
 
