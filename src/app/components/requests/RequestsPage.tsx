@@ -62,17 +62,17 @@ export function RequestsPage() {
         }
       } else if (req.tipo === "transferencia_coordenacao") {
         if (action === "approve") {
-          if (req.payload_original.successor_uid !== currentUser?.uid) {
+          if (req.payload_original.successor_uid !== currentUser?.id) {
             alert("Apenas o orientador convidado pode aprovar a transferência.");
             return;
           }
           await coordinationTransfersApi.accept(token, req.id);
         } else {
-          if (req.payload_original.initiator_uid === currentUser?.uid || currentUser?.role === "adm") {
+          if (req.payload_original.initiator_uid === currentUser?.id || currentUser?.role === "adm") {
             if (confirm("Tem certeza que deseja cancelar esta solicitação de transferência?")) {
               await coordinationTransfersApi.cancel(token, req.id);
             }
-          } else if (req.payload_original.successor_uid === currentUser?.uid) {
+          } else if (req.payload_original.successor_uid === currentUser?.id) {
             if (confirm("Tem certeza que deseja rejeitar o convite de coordenação?")) {
               await coordinationTransfersApi.reject(token, req.id);
             }
@@ -234,7 +234,7 @@ export function RequestsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm flex gap-2 justify-center">
-                  {!(req.tipo === "transferencia_coordenacao" && req.payload_original.successor_uid !== currentUser?.uid) && (
+                  {!(req.tipo === "transferencia_coordenacao" && req.payload_original.successor_uid !== currentUser?.id) && (
                     <button
                       onClick={() => handleAction(req, "approve")}
                       className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
