@@ -1,6 +1,6 @@
 import { API_URL } from "@/api/authApi";
 
-export type CoordinationTransferStatus = "pendente" | "aceita" | "rejeitada" | "cancelada";
+export type CoordinationTransferStatus = "pendente" | "aceita" | "rejeitada" | "cancelada" | "concluido";
 
 export interface CoordinationTransfer {
   id: string;
@@ -45,6 +45,13 @@ export const coordinationTransfersApi = {
 
   start(token: string, successorUid: string): Promise<CoordinationTransfer> {
     return request<CoordinationTransfer>("/api/v1/coordination-transfers", token, {
+      method: "POST",
+      body: JSON.stringify({ successor_uid: successorUid }),
+    });
+  },
+
+  force(token: string, successorUid: string): Promise<CoordinationTransfer> {
+    return request<CoordinationTransfer>("/api/v1/coordination-transfers/force", token, {
       method: "POST",
       body: JSON.stringify({ successor_uid: successorUid }),
     });
