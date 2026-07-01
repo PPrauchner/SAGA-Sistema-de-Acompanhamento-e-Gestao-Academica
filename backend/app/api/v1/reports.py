@@ -11,17 +11,20 @@ Responsabilidades:
   (média de data_conclusao - data_ingresso).
 - GET /api/v1/reports/productions: produção bibliográfica por aluno e por orientador com
   pontuação total e distribuição por nível de relevância. Aplica @audit_operation.
+- GET /api/v1/reports/productions-by-month: série mensal da contagem de produções validadas
+  nos últimos N meses (default 12), para o gráfico de produção do dashboard da coordenação.
 Sem lógica de negócio — cada endpoint apenas recebe a request, delega ao ReportService e
 retorna a response.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.report import (
     CompletionTimeResponse,
+    ProductionByMonthItem,
     ProductionsReportResponse,
     StudentsAtRiskResponse,
     StudentsByAdvisorResponse,
@@ -74,3 +77,12 @@ async def get_productions_report(
     user: CurrentUser = Depends(get_current_user),
 ) -> ProductionsReportResponse:
     return await service.get_productions_report(user.programa_id, user.role, user.uid)
+
+
+@router.get("/reports/productions-by-month", response_model=list[ProductionByMonthItem])
+@requires_role("coordenacao")
+async def get_productions_by_month(
+    meses: int = Query(12, ge=1, le=60),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[ProductionByMonthItem]:
+    return await service.get_productions_by_month(user.programa_id, meses)

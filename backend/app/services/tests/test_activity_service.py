@@ -256,6 +256,8 @@ async def test_list_aluno_ve_apenas_proprias_enriquecidas() -> None:
     assert result[0]["id"] == "a1"
     assert result[0]["tipo_nome"] == "Curso de extensão"
     assert result[0]["categoria"] == "basico"
+    assert result[0]["aluno_nome"] == "Maria"
+    assert result[0]["orientador_nome"] == "Prof"
 
 
 async def test_list_orientador_ve_orientandos() -> None:

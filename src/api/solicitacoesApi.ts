@@ -44,6 +44,12 @@ export const solicitacoesApi = {
     return apiGet<Solicitacao[]>("/extensions", token);
   },
 
+  // Fila de prorrogações do programa para a coordenação (default: status pendente).
+  listPending(token: string, status?: string): Promise<Solicitacao[]> {
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    return apiGet<Solicitacao[]>(`/extensions/pending${query}`, token);
+  },
+
   create(token: string, payload: CreateSolicitacaoPayload): Promise<Solicitacao> {
     return apiPost<Solicitacao>("/extensions", payload, token);
   },

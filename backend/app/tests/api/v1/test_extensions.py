@@ -42,6 +42,12 @@ class _FakeExtensionService:
         self.calls.append(("list", user))
         return [_extension_payload()]
 
+    async def list_pending_for_coordination(
+        self, user: CurrentUser, status: str = "pendente"
+    ) -> list[dict[str, Any]]:
+        self.calls.append(("pending", (user, status)))
+        return [_extension_payload()]
+
     async def create_extension(self, body: Any, user: CurrentUser) -> dict[str, Any]:
         self.calls.append(("create", (body, user)))
         return _extension_payload("ext2")
@@ -76,6 +82,22 @@ def test_get_extensions_lista_solicitacoes_visiveis(client: TestClient) -> None:
     assert body[0]["id"] == "ext1"
     assert body[0]["aluno_nome"] == "Aluno SAGA"
     assert _FakeExtensionService.calls[0][0] == "list"
+
+
+def test_get_pending_extensions_coordenacao(client: TestClient) -> None:
+    response = client.get("/api/v1/extensions/pending")
+
+    assert response.status_code == 200
+    assert response.json()[0]["id"] == "ext1"
+    assert _FakeExtensionService.calls[0][0] == "pending"
+
+
+def test_get_pending_extensions_bloqueia_aluno(client: TestClient) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user("aluno")
+
+    response = client.get("/api/v1/extensions/pending")
+
+    assert response.status_code == 403
 
 
 def test_post_extensions_aluno_cria_solicitacao(client: TestClient) -> None:

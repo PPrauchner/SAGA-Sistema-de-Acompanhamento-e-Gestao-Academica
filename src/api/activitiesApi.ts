@@ -26,12 +26,17 @@ export type ActivityCreateStatus = "rascunho" | "enviado";
 /** Atividade retornada por GET /api/v1/activities (enriquecida com tipo_nome/categoria). */
 export interface Activity {
   id: string;
+  aluno_nome: string | null;
+  orientador_nome: string | null;
   // null para atividades lastreadas em produção bibliográfica (sem tipo creditável).
   tipo_id: string | null;
+  // preenchido apenas em atividades de produção bibliográfica (FK para productions/).
+  producao_id: string | null;
   tipo_nome: string | null;
   categoria: ActivityCategory | string | null;
   descricao: string;
   data_realizacao: string | null;
+  criado_em: string | null;
   comprovante_url: string | null;
   creditos_gerados: number;
   status: ActivityStatus | string;

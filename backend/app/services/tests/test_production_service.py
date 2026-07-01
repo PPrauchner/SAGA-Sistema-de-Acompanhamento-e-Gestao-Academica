@@ -93,7 +93,14 @@ class _FakeVehicleRepository:
 
 class _FakeStudentService:
     async def list_students(self, user: CurrentUser) -> list[dict[str, Any]]:
-        return [{"id": "student1", "uid": "uid-aluno", "nome": "Maria"}]
+        return [
+            {"id": "student1", "uid": "uid-aluno", "nome": "Maria", "orientador_id": "adv1"}
+        ]
+
+
+class _FakeAdvisorRepository:
+    async def list_all(self) -> list[dict[str, Any]]:
+        return [{"id": "adv1", "nome": "Dr. Silva"}]
 
 
 class _FakeInferenceService:
@@ -119,6 +126,7 @@ def _setup_coupling(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeActivityRepository.counter = 0
     monkeypatch.setattr(production_module, "ProductionRepository", _FakeProductionRepository)
     monkeypatch.setattr(production_module, "ActivityRepository", _FakeActivityRepository)
+    monkeypatch.setattr(production_module, "AdvisorRepository", _FakeAdvisorRepository)
     monkeypatch.setattr(production_module, "VehicleRepository", _FakeVehicleRepository)
     monkeypatch.setattr(production_module, "StudentService", _FakeStudentService)
     monkeypatch.setattr(production_module, "InferenceService", _FakeInferenceService)
@@ -171,3 +179,19 @@ async def test_list_productions_usa_status_da_atividade() -> None:
 
     assert listadas[0]["id"] == "prod1"
     assert listadas[0]["status_atividade"] == "aprovado"
+
+
+async def test_list_productions_enriquece_orientador_data_e_filtra_status() -> None:
+    service = ProductionService()
+    await service.create_production(_payload(), _aluno())  # atividade ligada nasce "enviado"
+
+    enviadas = await service.list_productions(_aluno(), status="enviado")
+
+    assert len(enviadas) == 1
+    item = enviadas[0]
+    assert item["aluno_nome"] == "Maria"
+    assert item["orientador_nome"] == "Dr. Silva"
+    assert item["criado_em"] is not None  # data de submissão (criado_em da atividade)
+
+    # Filtro que não casa com o status_atividade não retorna a produção.
+    assert await service.list_productions(_aluno(), status="aprovado") == []
