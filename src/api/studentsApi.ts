@@ -78,6 +78,10 @@ export function getStudents(token: string): Promise<Student[]> {
   return request<Student[]>("/api/v1/students", token);
 }
 
+export function getStudent(token: string, studentId: string): Promise<Student> {
+  return request<Student>(`/api/v1/students/${studentId}`, token);
+}
+
 export function createStudent(
   token: string,
   data: StudentCreatePayload,
