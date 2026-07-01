@@ -106,9 +106,12 @@ class RequestService:
                         )
                     )
 
-        coord_transfers = await self._coord_transfers.list_pending_for_successor(
-            user.uid
+        all_coord_transfers = (
+            await self._coord_transfers.list_all()
+            if hasattr(self._coord_transfers, "list_all")
+            else []
         )
+        coord_transfers = [ct for ct in all_coord_transfers if ct.get("successor_uid") == user.uid and ct.get("status") in ["pendente", "concluido", "aceita"]]
         for ct in coord_transfers:
             initiator_name = await self._get_user_name(ct.get("initiator_uid"))
             requests.append(
@@ -211,7 +214,7 @@ class RequestService:
 
         coord_transfers = await self._coord_transfers.list_by_program(program_id)
         for ct in coord_transfers:
-            if ct.get("initiator_uid") == user.uid and ct.get("status") == "pendente":
+            if ct.get("initiator_uid") == user.uid and ct.get("status") in ["pendente", "concluido", "aceita"]:
                 successor_name = await self._get_user_name(ct.get("successor_uid"))
                 requests.append(
                     self._build_request(
@@ -219,7 +222,7 @@ class RequestService:
                         tipo="transferencia_coordenacao",
                         solicitante=f"Para: {successor_name}",
                         data=ct.get("created_at") or datetime.now(timezone.utc),
-                        status="pendente_aceite",
+                        status=ct.get("status", "pendente"),
                         payload=ct,
                     )
                 )
@@ -240,7 +243,7 @@ class RequestService:
             else []
         )
         for ct in all_coord_transfers:
-            if ct.get("status") == "pendente":
+            if ct.get("status") in ["pendente", "concluido", "aceita"]:
                 initiator_name = await self._get_user_name(ct.get("initiator_uid"))
                 requests.append(
                     self._build_request(
@@ -248,7 +251,7 @@ class RequestService:
                         tipo="transferencia_coordenacao",
                         solicitante=initiator_name,
                         data=ct.get("created_at") or datetime.now(timezone.utc),
-                        status="pendente",
+                        status=ct.get("status", "pendente"),
                         payload=ct,
                     )
                 )

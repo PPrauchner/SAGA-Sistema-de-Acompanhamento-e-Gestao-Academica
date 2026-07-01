@@ -79,6 +79,117 @@ class CoordinationTransferService:
         transfer = await self._transfers.get_transfer(transfer_id)
         return self._to_response(transfer or {"id": transfer_id})
 
+    async def force_transfer(
+        self,
+        data: CoordinationTransferStartRequest,
+        current_user: CurrentUser,
+    ) -> CoordinationTransferResponse:
+        successor = await self._get_user(data.successor_uid, "Sucessor nao encontrado")
+
+        if successor.get("role") != "orientador":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sucessor precisa ser orientador",
+            )
+            
+        programa_id = successor.get("programa_id")
+        if not programa_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Sucessor nao pertence a um programa",
+            )
+
+        if current_user.role == "coordenacao" and current_user.programa_id != programa_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Apenas administradores podem transferir coordenacao de outros programas",
+            )
+
+        coordinations = await self._users.query(
+            filters=[
+                ("programa_id", "==", programa_id),
+                ("role", "==", "coordenacao"),
+            ]
+        )
+        if not coordinations:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Nenhuma coordenacao atual encontrada para o programa",
+            )
+        initiator = coordinations[0]
+        initiator_uid = initiator.get("uid", initiator.get("id"))
+        successor_uid = successor.get("uid", successor.get("id"))
+
+        if initiator_uid == successor_uid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="O sucessor ja e o coordenador atual",
+            )
+
+        successor_claims = {
+            "role": "coordenacao",
+            "programa_id": programa_id,
+        }
+        initiator_claims = {
+            "role": "orientador",
+            "programa_id": programa_id,
+        }
+
+        await asyncio.to_thread(
+            self._auth.set_custom_user_claims,
+            successor_uid,
+            successor_claims,
+        )
+        await asyncio.to_thread(
+            self._auth.set_custom_user_claims,
+            initiator_uid,
+            initiator_claims,
+        )
+
+        advisor_id = await self._ensure_initiator_advisor(initiator)
+
+        now = datetime.now(timezone.utc)
+        await self._users.update(
+            successor_uid,
+            {"role": "coordenacao", "atualizado_em": now},
+        )
+        initiator_update = {
+            "role": "orientador",
+            "atualizado_em": now,
+        }
+        if advisor_id:
+            initiator_update["advisor_id"] = advisor_id
+        await self._users.update(initiator_uid, initiator_update)
+
+        await asyncio.to_thread(
+            self._auth.revoke_refresh_tokens,
+            successor_uid,
+        )
+        await asyncio.to_thread(
+            self._auth.revoke_refresh_tokens,
+            initiator_uid,
+        )
+
+        transfer_id = await self._transfers.create_transfer(
+            {
+                "programa_id": programa_id,
+                "initiator_uid": initiator_uid,
+                "successor_uid": successor_uid,
+                "status": "concluido",
+                "created_at": now,
+                "updated_at": now,
+                "decided_at": now,
+                "accepted_at": now,
+                "cancelled_at": None,
+                "rejected_at": None,
+                "forced_by": current_user.uid,
+            }
+        )
+        
+        transfer = await self._transfers.get_transfer(transfer_id)
+        return self._to_response(transfer or {"id": transfer_id})
+
+
     async def accept_transfer(
         self,
         transfer_id: str,
