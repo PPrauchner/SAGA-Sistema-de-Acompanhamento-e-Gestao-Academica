@@ -91,40 +91,12 @@ def _notify_successor_cancel(
     )
 
 
-def _notify_successor_force(
-    result: CoordinationTransferResponse,
-    args: Any,
-    kwargs: Any,
-) -> dict[str, Any]:
-    return _transfer_notification(
-        user_id=result.successor_uid,
-        programa_id=result.programa_id,
-        tipo="transferencia_coordenacao",
-        titulo="Coordenacao transferida",
-        mensagem="Voce foi definido como o novo coordenador do programa.",
-    )
-
-
-def _notify_initiator_force(
-    result: CoordinationTransferResponse,
-    args: Any,
-    kwargs: Any,
-) -> dict[str, Any]:
-    return _transfer_notification(
-        user_id=result.initiator_uid,
-        programa_id=result.programa_id,
-        tipo="transferencia_coordenacao",
-        titulo="Coordenacao transferida",
-        mensagem="Sua coordenacao foi transferida para um novo orientador.",
-    )
-
-
 
 @router.post(
     "/coordination-transfers",
     status_code=status.HTTP_201_CREATED,
 )
-@requires_role("coordenacao")
+@requires_role("adm", "coordenacao")
 @audit_operation
 @trigger_alerts(_notify_successor)
 async def start_transfer(
@@ -132,21 +104,6 @@ async def start_transfer(
     user: CurrentUser = Depends(get_current_user),
 ) -> CoordinationTransferResponse:
     return await CoordinationTransferService().start_transfer(body, user)
-
-
-@router.post(
-    "/coordination-transfers/force",
-    status_code=status.HTTP_201_CREATED,
-)
-@requires_role("adm", "coordenacao")
-@audit_operation
-@trigger_alerts(_notify_successor_force)
-@trigger_alerts(_notify_initiator_force)
-async def force_transfer(
-    body: CoordinationTransferStartRequest,
-    user: CurrentUser = Depends(get_current_user),
-) -> CoordinationTransferResponse:
-    return await CoordinationTransferService().force_transfer(body, user)
 
 
 @router.get("/coordination-transfers")
@@ -196,7 +153,7 @@ async def reject_transfer(
 
 
 @router.post("/coordination-transfers/{transfer_id}/cancel")
-@requires_role("coordenacao")
+@requires_role("adm", "coordenacao")
 @audit_operation
 @trigger_alerts(_notify_successor_cancel)
 async def cancel_transfer(
