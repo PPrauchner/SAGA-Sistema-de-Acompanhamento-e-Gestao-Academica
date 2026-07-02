@@ -123,7 +123,7 @@ export function QualisWeightsSection() {
                   Vigente desde {_formatDate(version.vigente_desde)}
                 </p>
                 <span className="text-xs text-[var(--muted-foreground)]">
-                  por {version.alterado_por} · {_formatDate(version.alterado_em)}
+                  por {version.alterado_por_nome ?? version.alterado_por} · {_formatDate(version.alterado_em)}
                 </span>
               </div>
               <p className="text-xs text-[var(--muted-foreground)] mt-1">
