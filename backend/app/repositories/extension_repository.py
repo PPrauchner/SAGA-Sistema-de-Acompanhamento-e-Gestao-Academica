@@ -15,12 +15,22 @@ Contrato exigido por ExtensionService:
   transaction()                       → google.cloud.firestore.Client
   collection_group_extensions()       → _CollectionGroupProxy
   _db                                 → google.cloud.firestore.Client
+
+Seam de injeção (fix desta versão):
+  ExtensionRepository(client=...) aceita um google.cloud.firestore.Client
+  já construído (ex: apontando para uma app Firebase de teste). Todos os
+  proxies internos (_ExtensionsCol, _DocRef, _StudentRef,
+  _CollectionGroupProxy) recebem um getter de client em vez de chamar
+  get_firestore_client() diretamente, então o override propaga para
+  qualquer operação de leitura/escrita feita através deles.
+  Sem argumento, comportamento idêntico ao anterior (usa o singleton
+  global via get_firestore_client()).
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from google.cloud import firestore as _fs
 
@@ -31,6 +41,8 @@ _COL_EXTENSIONS: str = "extensions"
 _COL_USERS:      str = "users"
 _COL_CONFIG:     str = "config"
 _DOC_PROGRAM:    str = "program"
+
+ClientGetter = Callable[[], _fs.Client]
 
 
 # ---------------------------------------------------------------------------
@@ -49,14 +61,15 @@ class _ExtensionsCol:
         self._repo.extensions_col(sid).order_by(...).stream()
     """
 
-    def __init__(self, student_doc_id: str) -> None:
+    def __init__(self, student_doc_id: str, get_client: ClientGetter) -> None:
         self._student_doc_id = student_doc_id
+        self._get_client = get_client
         self._filters: list[tuple[str, str, Any]] = []
         self._order:   Optional[tuple[str, Any]]  = None
 
     def _col_ref(self):
         return (
-            get_firestore_client()
+            self._get_client()
             .collection(_COL_STUDENTS)
             .document(self._student_doc_id)
             .collection(_COL_EXTENSIONS)
@@ -65,19 +78,19 @@ class _ExtensionsCol:
     # -- fluent API -----------------------------------------------------------
 
     def where(self, field: str, op: str, value: Any) -> "_ExtensionsCol":
-        clone = _ExtensionsCol(self._student_doc_id)
+        clone = _ExtensionsCol(self._student_doc_id, self._get_client)
         clone._filters = self._filters + [(field, op, value)]
         clone._order   = self._order
         return clone
 
     def order_by(self, field: str, direction: Any = None) -> "_ExtensionsCol":
-        clone = _ExtensionsCol(self._student_doc_id)
+        clone = _ExtensionsCol(self._student_doc_id, self._get_client)
         clone._filters = list(self._filters)
         clone._order   = (field, direction)
         return clone
 
     def document(self, doc_id: Optional[str] = None) -> "_DocRef":
-        return _DocRef(self._col_ref, doc_id)
+        return _DocRef(self._col_ref, doc_id, self._get_client)
 
     # -- async stream ---------------------------------------------------------
 
@@ -113,12 +126,20 @@ class _DocRef:
         ref.sync_ref                    → DocumentReference síncrono real (C2)
     """
 
-    def __init__(self, col_ref_factory, doc_id: Optional[str]) -> None:
+    def __init__(
+        self,
+        col_ref_factory,
+        doc_id: Optional[str],
+        get_client: ClientGetter,
+    ) -> None:
         self._col_ref_factory = col_ref_factory
+        self._get_client = get_client
         self._doc_id = doc_id
-        # Se auto-id: gera um id local imediatamente para expor via .id
+        # Se auto-id: gera um id local imediatamente para expor via .id.
+        # Usa o client injetado (não mais o singleton global) para que o
+        # id seja gerado no mesmo projeto/app usado pelo resto da operação.
         if doc_id is None:
-            self._doc_id = get_firestore_client().collection("_").document().id
+            self._doc_id = get_client().collection("_").document().id
 
     @property
     def id(self) -> str:
@@ -195,13 +216,14 @@ class _StudentRef:
     → neste caso, devolvemos o DocumentReference síncrono real via .sync_ref.
     """
 
-    def __init__(self, student_doc_id: str) -> None:
+    def __init__(self, student_doc_id: str, get_client: ClientGetter) -> None:
         self._student_doc_id = student_doc_id
+        self._get_client = get_client
 
     @property
     def sync_ref(self):
         return (
-            get_firestore_client()
+            self._get_client()
             .collection(_COL_STUDENTS)
             .document(self._student_doc_id)
         )
@@ -219,18 +241,19 @@ class _CollectionGroupProxy:
         .where(...).order_by(...).stream()  → async for
     """
 
-    def __init__(self) -> None:
+    def __init__(self, get_client: ClientGetter) -> None:
+        self._get_client = get_client
         self._filters: list[tuple[str, str, Any]] = []
         self._order:   Optional[tuple[str, Any]]  = None
 
     def where(self, field: str, op: str, value: Any) -> "_CollectionGroupProxy":
-        clone = _CollectionGroupProxy()
+        clone = _CollectionGroupProxy(self._get_client)
         clone._filters = self._filters + [(field, op, value)]
         clone._order   = self._order
         return clone
 
     def order_by(self, field: str, direction: Any = None) -> "_CollectionGroupProxy":
-        clone = _CollectionGroupProxy()
+        clone = _CollectionGroupProxy(self._get_client)
         clone._filters = list(self._filters)
         clone._order   = (field, direction)
         return clone
@@ -239,7 +262,7 @@ class _CollectionGroupProxy:
         return _SyncStreamAsAsyncIter(self._run)
 
     def _run(self) -> list:
-        db = get_firestore_client()
+        db = self._get_client()
         q = db.collection_group(_COL_EXTENSIONS)
         for field, op, value in self._filters:
             q = q.where(field, op, value)
@@ -263,39 +286,51 @@ class ExtensionRepository:
 
     Não herda FirebaseRepository porque opera em múltiplas coleções raiz;
     a lógica de to_thread está encapsulada nos proxies acima.
+
+    client: opcional. Permite injetar um google.cloud.firestore.Client já
+    construído (ex: apontando para uma app Firebase de teste nomeada).
+    Sem argumento, mantém o comportamento original: cada operação resolve
+    o client via get_firestore_client() (singleton global de produção/dev).
     """
+
+    def __init__(self, client: Optional[_fs.Client] = None) -> None:
+        self._injected_client = client
+
+    def _get_client(self) -> _fs.Client:
+        if self._injected_client is not None:
+            return self._injected_client
+        return get_firestore_client()
 
     @property
     def _db(self):
         """
         Exposto para o service em list_pending_for_advisor:
             self._repo._db.collection("students").where(...).stream()
-        Devolve o cliente síncrono; o service precisará de ajuste pontual
-        nesse método (ver docstring de list_pending_for_advisor no service).
+        Devolve o client injetado (se houver) ou o singleton global.
         """
-        return get_firestore_client()
+        return self._get_client()
 
     # -- API exigida pelo service --------------------------------------------
 
     def extensions_col(self, student_doc_id: str) -> _ExtensionsCol:
         """Proxy de students/{student_doc_id}/extensions com API fluente async."""
-        return _ExtensionsCol(student_doc_id)
+        return _ExtensionsCol(student_doc_id, self._get_client)
 
     def student_ref(self, student_doc_id: str) -> _StudentRef:
         """Proxy de students/{student_doc_id} com .get() async e .sync_ref síncrono."""
-        return _StudentRef(student_doc_id)
+        return _StudentRef(student_doc_id, self._get_client)
 
     def transaction(self):
         """
-        Devolve o cliente Firestore síncrono.
+        Devolve o client Firestore (injetado ou singleton global).
 
         process_decision no service usa @firestore.transactional + asyncio.to_thread.
         """
-        return get_firestore_client()
+        return self._get_client()
 
     def collection_group_extensions(self) -> _CollectionGroupProxy:
         """Proxy do collection_group('extensions') com API fluente async."""
-        return _CollectionGroupProxy()
+        return _CollectionGroupProxy(self._get_client)
 
     # -- async helpers -------------------------------------------------------
 
@@ -306,7 +341,7 @@ class ExtensionRepository:
         """
         def _read():
             snap = (
-                get_firestore_client()
+                self._get_client()
                 .collection(_COL_CONFIG)
                 .document(_DOC_PROGRAM)
                 .get()
@@ -322,7 +357,7 @@ class ExtensionRepository:
         """
         def _query():
             docs = list(
-                get_firestore_client()
+                self._get_client()
                 .collection(_COL_USERS)
                 .where("uid", "==", uid)
                 .limit(1)
@@ -344,7 +379,7 @@ class ExtensionRepository:
         """
         def _query():
             docs = list(
-                get_firestore_client()
+                self._get_client()
                 .collection(_COL_STUDENTS)
                 .where("uid", "==", uid)
                 .limit(1)
