@@ -20,7 +20,6 @@ const TIPO_MAP: Record<string, string> = {
   prazo_defesa: "Prorrogação de Prazo de Defesa",
   prazo_qualificacao: "Prorrogação de Qualificação",
   trancamento: "Trancamento de Matrícula",
-  mudanca_nivel: "Mudança de Nível",
 };
 
 const DEFAULT_FORM = {
@@ -265,7 +264,7 @@ export function SolicitacoesPage() {
                         <div className="min-w-0">
                           <p className="truncate" style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)" }}>{aluno}</p>
                           <p className="truncate" style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                            {solicitacao.matricula ? `Mat. ${solicitacao.matricula}` : "Matrícula não informada"}{solicitacao.nivel ? ` · ${solicitacao.nivel}` : ""}
+                            {solicitacao.matricula ? `Mat. ${solicitacao.matricula}` : "Matrícula não informada"}
                           </p>
                         </div>
                       </div>

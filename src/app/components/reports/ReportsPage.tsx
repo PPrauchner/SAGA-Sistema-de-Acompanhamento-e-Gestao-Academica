@@ -47,15 +47,15 @@ const STATUS_META: Record<SituacaoRegistrada, { label: string; color: string }> 
 // ─── Mock Data (apenas Prorrogações — fora do escopo da API nesta issue) ─────────
 
 const PRORROGACOES = [
-  { id: "pr1", aluno: "João Pedro Silva", orientador: "Profa. Dra. Ana Lima", nivel: "Mestrado", prazoOriginal: "Dez/2024", novoPrazo: "Jun/2025", motivo: "Afastamento médico (3 meses)", status: "aprovada", protocolo: "12/11/2024", aprovadoPor: "Coordenação", meses: 6 },
-  { id: "pr2", aluno: "Thiago Batista", orientador: "Prof. Dr. Roberto Almeida", nivel: "Doutorado", prazoOriginal: "Jun/2023", novoPrazo: "Jun/2024", motivo: "Produção científica insuficiente", status: "aprovada", protocolo: "05/05/2023", aprovadoPor: "Coordenação", meses: 12 },
-  { id: "pr3", aluno: "Diego Machado", orientador: "Profa. Dra. Ana Lima", nivel: "Mestrado", prazoOriginal: "Dez/2024", novoPrazo: "Jun/2025", motivo: "Créditos insuficientes", status: "aprovada", protocolo: "15/11/2024", aprovadoPor: "Coordenação", meses: 6 },
-  { id: "pr4", aluno: "Marcos Oliveira", orientador: "Prof. Dr. Carlos Ferreira", nivel: "Doutorado", prazoOriginal: "Jul/2025", novoPrazo: "Jul/2026", motivo: "Atraso no plano de trabalho", status: "pendente", protocolo: "10/01/2026", aprovadoPor: "—", meses: 12 },
-  { id: "pr5", aluno: "Rafael Albuquerque", orientador: "Prof. Dr. Roberto Almeida", nivel: "Mestrado", prazoOriginal: "Jun/2025", novoPrazo: "Dez/2025", motivo: "Afastamento médico", status: "aprovada", protocolo: "02/06/2025", aprovadoPor: "Coordenação", meses: 6 },
-  { id: "pr6", aluno: "Isabela Rodrigues", orientador: "Prof. Dr. Carlos Ferreira", nivel: "Doutorado", prazoOriginal: "Jun/2025", novoPrazo: "Dez/2025", motivo: "Produção insuficiente", status: "pendente", protocolo: "15/01/2026", aprovadoPor: "—", meses: 6 },
-  { id: "pr7", aluno: "Fernanda Lima", orientador: "Prof. Dr. Marcos Duarte", nivel: "Mestrado", prazoOriginal: "Mar/2024", novoPrazo: "Set/2024", motivo: "Complexidade do tema", status: "aprovada", protocolo: "20/02/2024", aprovadoPor: "Coord.+Orient.", meses: 6 },
-  { id: "pr8", aluno: "Eduardo Moura", orientador: "Profa. Dra. Sandra Torres", nivel: "Mestrado", prazoOriginal: "Dez/2024", novoPrazo: "Mar/2025", motivo: "Pendências de créditos", status: "negada", protocolo: "05/12/2024", aprovadoPor: "—", meses: 3 },
-  { id: "pr9", aluno: "Bruno Santana", orientador: "Prof. Dr. Roberto Almeida", nivel: "Doutorado", prazoOriginal: "Fev/2024", novoPrazo: "Ago/2024", motivo: "Experimentos adicionais", status: "aprovada", protocolo: "15/01/2024", aprovadoPor: "Coordenação", meses: 6 },
+  { id: "pr1", aluno: "João Pedro Silva", orientador: "Profa. Dra. Ana Lima", prazoOriginal: "Dez/2024", novoPrazo: "Jun/2025", motivo: "Afastamento médico (3 meses)", status: "aprovada", protocolo: "12/11/2024", aprovadoPor: "Coordenação", meses: 6 },
+  { id: "pr2", aluno: "Thiago Batista", orientador: "Prof. Dr. Roberto Almeida", prazoOriginal: "Jun/2023", novoPrazo: "Jun/2024", motivo: "Produção científica insuficiente", status: "aprovada", protocolo: "05/05/2023", aprovadoPor: "Coordenação", meses: 12 },
+  { id: "pr3", aluno: "Diego Machado", orientador: "Profa. Dra. Ana Lima", prazoOriginal: "Dez/2024", novoPrazo: "Jun/2025", motivo: "Créditos insuficientes", status: "aprovada", protocolo: "15/11/2024", aprovadoPor: "Coordenação", meses: 6 },
+  { id: "pr4", aluno: "Marcos Oliveira", orientador: "Prof. Dr. Carlos Ferreira", prazoOriginal: "Jul/2025", novoPrazo: "Jul/2026", motivo: "Atraso no plano de trabalho", status: "pendente", protocolo: "10/01/2026", aprovadoPor: "—", meses: 12 },
+  { id: "pr5", aluno: "Rafael Albuquerque", orientador: "Prof. Dr. Roberto Almeida", prazoOriginal: "Jun/2025", novoPrazo: "Dez/2025", motivo: "Afastamento médico", status: "aprovada", protocolo: "02/06/2025", aprovadoPor: "Coordenação", meses: 6 },
+  { id: "pr6", aluno: "Isabela Rodrigues", orientador: "Prof. Dr. Carlos Ferreira", prazoOriginal: "Jun/2025", novoPrazo: "Dez/2025", motivo: "Produção insuficiente", status: "pendente", protocolo: "15/01/2026", aprovadoPor: "—", meses: 6 },
+  { id: "pr7", aluno: "Fernanda Lima", orientador: "Prof. Dr. Marcos Duarte", prazoOriginal: "Mar/2024", novoPrazo: "Set/2024", motivo: "Complexidade do tema", status: "aprovada", protocolo: "20/02/2024", aprovadoPor: "Coord.+Orient.", meses: 6 },
+  { id: "pr8", aluno: "Eduardo Moura", orientador: "Profa. Dra. Sandra Torres", prazoOriginal: "Dez/2024", novoPrazo: "Mar/2025", motivo: "Pendências de créditos", status: "negada", protocolo: "05/12/2024", aprovadoPor: "—", meses: 3 },
+  { id: "pr9", aluno: "Bruno Santana", orientador: "Prof. Dr. Roberto Almeida", prazoOriginal: "Fev/2024", novoPrazo: "Ago/2024", motivo: "Experimentos adicionais", status: "aprovada", protocolo: "15/01/2024", aprovadoPor: "Coordenação", meses: 6 },
 ];
 
 const PRORR_HISTORICO = [
@@ -144,7 +144,6 @@ function StatusPill({ status, color }: { status: string; color?: string }) {
 function ProrrogStatusPill({ status }: { status: string }) {
   const cfg: Record<string, { bg: string; color: string }> = {
     aprovada: { bg: "#dcfce7", color: "#1F8A70" }, pendente: { bg: "#fef9c3", color: "#D4A017" }, negada: { bg: "#fee2e2", color: "#dc2626" },
-    Doutorado: { bg: "#eef3fc", color: "#123C7A" }, Mestrado: { bg: "#ede9fe", color: "#8b5cf6" },
   };
   const c = cfg[status] ?? { bg: "#f1f5f9", color: "#64748b" };
   return <span className="px-2 py-0.5 rounded-lg" style={{ background: c.bg, color: c.color, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>{status}</span>;
@@ -321,7 +320,6 @@ function AlunosPorStatusReport({ data }: { data: StudentsByStatusResponse }) {
                 <div key={s.student_id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                   <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, background: "#eef3fc" }}><GraduationCap size={14} style={{ color: "#123C7A" }} /></div>
                   <div className="flex-1"><p style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>{s.nome}</p><p style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{s.orientador_nome || "Sem orientador"}</p></div>
-                  {s.nivel && <StatusPill status={s.nivel} color="#123C7A" />}
                 </div>
               ))}
             </div>
@@ -597,7 +595,6 @@ function ProducaoPorOrientadorReport({ data }: { data: ProductionsReportResponse
 
 function HistoricoProrrogacoesReport() {
   const [status, setStatus] = useState("Todos");
-  const [nivel, setNivel] = useState("Todos");
   const [search, setSearch] = useState("");
   const [sortK, setSortK] = useState("meses");
   const [sortD, setSortD] = useState<SortDir>("desc");
@@ -608,11 +605,10 @@ function HistoricoProrrogacoesReport() {
   const filtered = useMemo(() => {
     let d = PRORROGACOES;
     if (status !== "Todos") d = d.filter(p => p.status === status);
-    if (nivel !== "Todos") d = d.filter(p => p.nivel === nivel);
     if (search) d = d.filter(p => p.aluno.toLowerCase().includes(search.toLowerCase()));
     // `as any`: ordenação por chave dinâmica sobre o mock temporário de prorrogações (fora do escopo da API nesta issue).
     return [...d].sort((a, b) => { const av = (a as any)[sortK]; const bv = (b as any)[sortK]; return sortD === "asc" ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1); });
-  }, [status, nivel, search, sortK, sortD]);
+  }, [status, search, sortK, sortD]);
 
   const selItem = PRORROGACOES.find(p => p.id === sel);
   const counts = { aprovada: PRORROGACOES.filter(p => p.status === "aprovada").length, pendente: PRORROGACOES.filter(p => p.status === "pendente").length, negada: PRORROGACOES.filter(p => p.status === "negada").length };
@@ -626,7 +622,6 @@ function HistoricoProrrogacoesReport() {
         <div className="flex gap-3 flex-wrap items-center">
           <SearchBox value={search} onChange={setSearch} />
           <FSelect label="Status" value={status} onChange={setStatus} options={["Todos", "aprovada", "pendente", "negada"]} />
-          <FSelect label="Nível" value={nivel} onChange={setNivel} options={["Todos", "Mestrado", "Doutorado"]} />
         </div>
         <ExportBar title="Histórico de Prorrogações" />
       </div>
@@ -659,7 +654,6 @@ function HistoricoProrrogacoesReport() {
             <tr style={{ background: "var(--muted)" }}>
               <SortTh sKey="aluno" active={sortK} dir={sortD} onSort={onSort}>Aluno</SortTh>
               <th className="px-3 py-2.5 text-left" style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)" }}>Orientador</th>
-              <SortTh sKey="nivel" active={sortK} dir={sortD} onSort={onSort}>Nível</SortTh>
               <th className="px-3 py-2.5 text-left" style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)" }}>Prazo Original</th>
               <th className="px-3 py-2.5 text-left" style={{ fontSize: 10, fontWeight: 700, color: "var(--muted-foreground)" }}>Novo Prazo</th>
               <SortTh sKey="meses" active={sortK} dir={sortD} onSort={onSort}>Meses</SortTh>
@@ -673,7 +667,6 @@ function HistoricoProrrogacoesReport() {
                 <tr onClick={() => setSel(sel === p.id ? null : p.id)} className="cursor-pointer" style={{ borderBottom: "1px solid var(--border)", background: sel === p.id ? "#fff7ed" : "transparent" }}>
                   <td className="px-3 py-2.5" style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>{p.aluno}</td>
                   <td className="px-3 py-2.5" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{p.orientador.split(" ").slice(0, 3).join(" ")}</td>
-                  <td className="px-3 py-2.5"><ProrrogStatusPill status={p.nivel} /></td>
                   <td className="px-3 py-2.5" style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{p.prazoOriginal}</td>
                   <td className="px-3 py-2.5" style={{ fontSize: 12, fontWeight: 600, color: "var(--foreground)" }}>{p.novoPrazo}</td>
                   <td className="px-3 py-2.5"><span style={{ fontSize: 14, fontWeight: 800, color: p.meses >= 12 ? "#dc2626" : p.meses >= 6 ? "#D4A017" : "#1F8A70" }}>+{p.meses}m</span></td>
@@ -681,7 +674,7 @@ function HistoricoProrrogacoesReport() {
                   <td className="px-3 py-2.5"><ChevronRight size={13} style={{ color: "var(--muted-foreground)", transform: sel === p.id ? "rotate(90deg)" : "none", transition: "transform 0.2s" }} /></td>
                 </tr>
                 {sel === p.id && selItem && (
-                  <tr><td colSpan={8} className="px-3 py-0">
+                  <tr><td colSpan={7} className="px-3 py-0">
                     <div className="rounded-xl p-4 my-2" style={{ background: "#fff7ed", border: "1px solid #fdba74" }}>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                         <div><p style={{ fontSize: 10, color: "#ea580c", fontWeight: 600 }}>MOTIVO</p><p style={{ fontSize: 12, color: "var(--foreground)", marginTop: 2 }}>{selItem.motivo}</p></div>
