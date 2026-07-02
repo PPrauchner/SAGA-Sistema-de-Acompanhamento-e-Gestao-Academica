@@ -10,6 +10,26 @@ Contrato de identidade dos parâmetros student_id:
 
 Correção C1: _resolve_student_doc_id removida dos métodos que recebem doc_id
 diretamente, eliminando o 404 que impedia o aluno de ver as próprias prorrogações.
+
+Correção C3: max_prorrogacoes deixou de ser uma única chave de config
+sobrecarregada com dois significados diferentes (nº de aprovações já
+concedidas vs. nº de semestres pedidos em UMA solicitação). Agora são duas
+chaves distintas em config/program:
+  - max_prorrogacoes_aprovadas     → usado em _check_limit
+  - max_semestres_por_solicitacao  → usado em create_extension
+Mantém fallback para a chave antiga "max_prorrogacoes" por compatibilidade
+com documentos de config já existentes, mas o default de
+max_semestres_por_solicitacao passa a ser 2 (não 3), alinhado com o
+validator de ExtensionDocument.semestres_solicitados (que só aceita 1 ou 2)
+— antes, com o default antigo de 3, um pedido com semestres_solicitados=3
+passava pelo gate do service e só quebrava dentro do Pydantic, como
+ValueError não tratado (ver correção C4 abaixo).
+
+Correção C4: ExtensionDocument(...) pode levantar pydantic.ValidationError
+(via o validator de semestres_solicitados) mesmo depois de passar pelos
+gates de negócio do service, caso a config permita um valor que o schema
+do documento não aceita. Antes isso não era capturado e virava 500. Agora
+é convertido em HTTPException 422 com o detail da validação.
 """
 
 import asyncio
@@ -18,6 +38,7 @@ from typing import Optional
 
 from fastapi import HTTPException, status
 from google.cloud import firestore
+from pydantic import ValidationError
 
 from backend.app.models.extension import (
     DecisionRequest,
@@ -28,7 +49,8 @@ from backend.app.models.extension import (
 )
 from backend.app.repositories.extension_repository import ExtensionRepository
 
-DEFAULT_MAX_PRORROGACOES = 3
+DEFAULT_MAX_PRORROGACOES_APROVADAS = 3
+DEFAULT_MAX_SEMESTRES_POR_SOLICITACAO = 2
 DEFAULT_DURACAO_MESES = 6
 
 
@@ -66,7 +88,11 @@ class ExtensionService:
         return doc_id
 
     async def _check_limit(self, student_doc_id: str, program_config: dict) -> None:
-        max_allowed: int = program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES)
+        # C3: chave nova, com fallback para a antiga (compat com config já existente).
+        max_allowed: int = program_config.get(
+            "max_prorrogacoes_aprovadas",
+            program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES_APROVADAS),
+        )
         approved_query = (
             self._repo.extensions_col(student_doc_id)
             .where("status", "==", ExtensionStatus.APROVADA.value)
@@ -106,7 +132,14 @@ class ExtensionService:
 
         program_config = await self._repo.get_program_config()
 
-        max_semestres: int = program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES)
+        # C3: chave nova (semestres por solicitação), com fallback para a
+        # antiga só se ela estiver definida explicitamente na config —
+        # o default agora é DEFAULT_MAX_SEMESTRES_POR_SOLICITACAO (2), que
+        # bate com o validator de ExtensionDocument (aceita apenas 1 ou 2).
+        max_semestres: int = program_config.get(
+            "max_semestres_por_solicitacao",
+            program_config.get("max_prorrogacoes", DEFAULT_MAX_SEMESTRES_POR_SOLICITACAO),
+        )
         if payload.semestres_solicitados > max_semestres:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -116,15 +149,26 @@ class ExtensionService:
         await self._check_no_pending(student_doc_id)
         await self._check_limit(student_doc_id, program_config)
 
-        doc_data = ExtensionDocument(
-            aluno_id=requesting_uid,
-            motivo=payload.motivo,
-            plano_atualizado=payload.plano_atualizado,
-            semestres_solicitados=payload.semestres_solicitados,
-            status=ExtensionStatus.PENDENTE,
-            criado_em=datetime.now(tz=timezone.utc),
-        ).model_dump()
+        # C4: ExtensionDocument tem validação própria (ex: semestres_solicitados
+        # só aceita 1 ou 2) que pode rejeitar um valor que já passou pelos
+        # gates acima (caso a config permita algo fora desse conjunto).
+        # Isso é erro de entrada do cliente, não erro interno — vira 422.
+        try:
+            doc_model = ExtensionDocument(
+                aluno_id=student_doc_id,
+                motivo=payload.motivo,
+                plano_atualizado=payload.plano_atualizado,
+                semestres_solicitados=payload.semestres_solicitados,
+                status=ExtensionStatus.PENDENTE,
+                criado_em=datetime.now(tz=timezone.utc),
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=exc.errors(),
+            ) from exc
 
+        doc_data = doc_model.model_dump()
         doc_data["status"] = doc_data["status"].value
 
         new_ref = self._repo.extensions_col(student_doc_id).document()
