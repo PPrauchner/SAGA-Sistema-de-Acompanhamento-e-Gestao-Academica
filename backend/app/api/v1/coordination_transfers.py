@@ -96,7 +96,7 @@ def _notify_successor_cancel(
     "/coordination-transfers",
     status_code=status.HTTP_201_CREATED,
 )
-@requires_role("adm", "coordenacao")
+@requires_role("coordenacao")
 @audit_operation
 @trigger_alerts(_notify_successor)
 async def start_transfer(
@@ -153,7 +153,7 @@ async def reject_transfer(
 
 
 @router.post("/coordination-transfers/{transfer_id}/cancel")
-@requires_role("adm", "coordenacao")
+@requires_role("coordenacao")
 @audit_operation
 @trigger_alerts(_notify_successor_cancel)
 async def cancel_transfer(
