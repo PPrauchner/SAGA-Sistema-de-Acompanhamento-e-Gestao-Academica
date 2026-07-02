@@ -165,3 +165,40 @@ async def test_orientador_sem_doc_advisors_nao_ve_nada(scope_service: AuditServi
 
     assert page.total == 0
     assert page.items == []
+
+
+# --- Resolução de nome do autor no read path -------------------------------------------
+
+
+class _FakeNames:
+    """Resolver fake de uid→nome (sem I/O)."""
+
+    def __init__(self, mapping: dict[str, str]) -> None:
+        self._mapping = mapping
+
+    async def resolve(self, uids: Any) -> dict[str, str]:
+        return {uid: self._mapping[uid] for uid in uids if uid in self._mapping}
+
+
+async def test_resolve_usuario_nome_na_pagina(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(audit_service_module, "FirebaseRepository", _FakeRepo)
+    service = AuditService(names=_FakeNames({"coord1": "Ana Souza", "orient1": "Bruno Lima"}))
+
+    page = await service.list_audit_logs()
+
+    por_id = {item.id: item for item in page.items}
+    assert por_id["log1"].usuario_nome == "Ana Souza"
+    assert por_id["log3"].usuario_nome == "Bruno Lima"
+    # id permanece canônico e presente na resposta
+    assert por_id["log1"].usuario_id == "coord1"
+
+
+async def test_usuario_nome_none_quando_uid_desconhecido(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(audit_service_module, "FirebaseRepository", _FakeRepo)
+    service = AuditService(names=_FakeNames({}))
+
+    page = await service.list_audit_logs()
+
+    assert all(item.usuario_nome is None for item in page.items)
