@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-CoordinationTransferStatus = Literal["pendente", "aceita", "rejeitada", "cancelada", "concluido"]
+CoordinationTransferStatus = Literal["pendente", "rejeitada", "cancelada", "concluido"]
 
 
 class CoordinationTransferStartRequest(BaseModel):
