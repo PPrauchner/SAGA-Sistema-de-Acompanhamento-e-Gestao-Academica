@@ -192,7 +192,7 @@ erDiagram
 | `orientador_id` | string | →`advisors` (auto-id) | **não** é o uid |
 | `coorientador_id` | string\|null | →`advisors` (0..1) | 2º orientador opcional |
 | `programa_id` | string | →`programs` (soft) | |
-| `nivel` | string | | `mestrado`\|`doutorado` — **MVP foca mestrado** |
+| `nivel` | string | `mestrado` | mantido para compatibilidade futura; **MVP opera apenas como mestrado** |
 | `data_ingresso` | timestamp | | |
 | `prazo_final` | timestamp | | **vigente**; escrito no ingresso **e** por prorrogação aprovada |
 | `situacao_registrada` | string | | enum 7 valores¹; escrito **manual** (coordenação) **e** por transições automáticas |
@@ -669,7 +669,7 @@ erDiagram
 | Campo | Tipo | Ref | Notas |
 |-------|------|-----|-------|
 | `id` | string | | auto-id Firestore do documento em `extensions/` |
-| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`, `mudanca_nivel` |
+| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`; `mudanca_nivel` é escopo futuro |
 | `student_id` | string | →`students` | aluno da solicitação |
 | `aluno_id` | string | →`students` | alias de compatibilidade para `student_id` |
 | `requester_id` | string | →`users.uid` | uid de quem abriu a solicitação |

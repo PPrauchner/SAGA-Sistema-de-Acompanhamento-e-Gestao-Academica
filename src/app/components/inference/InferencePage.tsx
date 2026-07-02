@@ -66,7 +66,7 @@ interface StudentProfile {
 
 const STUDENTS: StudentProfile[] = [
   {
-    id: "s1", name: "Lucas Ferreira Silva", short: "Lucas F.", matricula: "2023001", programa: "PPGCC — Doutorado", overallRisk: "em-risco",
+    id: "s1", name: "Lucas Ferreira Silva", short: "Lucas F.", matricula: "2023001", programa: "PPGCC", overallRisk: "em-risco",
     facts: [
       { id:"f_cred",  label:"Créditos Obtidos",     detail:"Obtidos vs mínimo exigido",         rawValue:"27",      threshold:"60",    value:false, category:"créditos" },
       { id:"f_qual",  label:"Qualificação",          detail:"Exame de qualificação realizado",   rawValue:"Aprovada",               value:true,  category:"qualificação" },
@@ -87,7 +87,7 @@ const STUDENTS: StudentProfile[] = [
     ],
   },
   {
-    id: "s2", name: "Ana Paula Costa", short: "Ana P.", matricula: "2021003", programa: "PPGCC — Doutorado", overallRisk: "apto",
+    id: "s2", name: "Ana Paula Costa", short: "Ana P.", matricula: "2021003", programa: "PPGCC", overallRisk: "apto",
     facts: [
       { id:"f_cred",  label:"Créditos Obtidos",  detail:"Obtidos vs mínimo exigido",       rawValue:"60",          threshold:"60", value:true, category:"créditos" },
       { id:"f_qual",  label:"Qualificação",       detail:"Exame de qualificação realizado", rawValue:"Aprovada",                   value:true, category:"qualificação" },
@@ -108,7 +108,7 @@ const STUDENTS: StudentProfile[] = [
     ],
   },
   {
-    id: "s3", name: "Marcos Oliveira", short: "Marcos O.", matricula: "2023002", programa: "PPGCC — Mestrado", overallRisk: "critico",
+    id: "s3", name: "Marcos Oliveira", short: "Marcos O.", matricula: "2023002", programa: "PPGCC", overallRisk: "critico",
     facts: [
       { id:"f_cred",  label:"Créditos Obtidos",  detail:"Obtidos vs mínimo exigido",       rawValue:"15",        threshold:"60", value:false, category:"créditos" },
       { id:"f_qual",  label:"Qualificação",       detail:"Exame de qualificação realizado", rawValue:"Pendente",               value:false, category:"qualificação" },
