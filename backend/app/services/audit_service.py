@@ -8,6 +8,8 @@ Responsabilidades:
 - Escopa por papel: a coordenação enxerga todos os logs; o orientador enxerga apenas os
   logs cujo `usuario_id` (ator da operação) é um dos seus orientandos — i.e., ações
   executadas pelos próprios orientandos (resolução advisors→students).
+- Resolve `usuario_id`→`usuario_nome` na página retornada (read path), via UserNameResolver;
+  o `usuario_id` persistido permanece a chave canônica.
 - Não escreve em audit_logs/ — a escrita é exclusiva do aspecto @audit_operation.
 - A paginação e os filtros são aplicados em memória: a coleção é apenas anexada (nunca
   deletada) e, no MVP single-tenant, o volume é compatível com leitura completa.
@@ -22,6 +24,7 @@ from backend.app.models.audit import AuditLogPage, AuditLogResponse
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
+from backend.app.services.user_name_resolver import UserNameResolver
 
 _MIN_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -33,12 +36,17 @@ class AuditService:
         self,
         advisors: AdvisorRepository | None = None,
         students: StudentRepository | None = None,
+        names: UserNameResolver | None = None,
     ) -> None:
         self._repo = FirebaseRepository("audit_logs")
         # Resolvem o escopo do orientador (advisors→students). Injetáveis para teste; só
         # são consultados quando o papel é 'orientador', então a construção não faz I/O.
         self._advisors = advisors or AdvisorRepository()
         self._students = students or StudentRepository()
+        # Resolve usuario_id→nome apenas para a página retornada (read path). O repo de
+        # users é construído aqui (não dentro do resolver) para reaproveitar o mesmo
+        # FirebaseRepository do módulo, mantendo a injeção/monkeypatch consistente.
+        self._names = names or UserNameResolver(FirebaseRepository("users"))
 
     @staticmethod
     def _matches(
@@ -135,8 +143,15 @@ class AuditService:
         start = (page - 1) * page_size
         window = filtered[start : start + page_size]
 
+        nomes = await self._names.resolve(log.get("usuario_id") for log in window)
+
         return AuditLogPage(
-            items=[AuditLogResponse.model_validate(log) for log in window],
+            items=[
+                AuditLogResponse.model_validate(
+                    {**log, "usuario_nome": nomes.get(log.get("usuario_id"))}
+                )
+                for log in window
+            ],
             page=page,
             page_size=page_size,
             total=len(filtered),
