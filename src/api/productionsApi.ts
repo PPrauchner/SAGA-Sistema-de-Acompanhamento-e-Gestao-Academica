@@ -36,6 +36,7 @@ export interface Production {
   id: string;
   aluno_id: string;
   aluno_nome: string;
+  orientador_nome: string | null;
   titulo: string;
   doi?: string | null;
   veiculo_nome: string;
@@ -48,6 +49,7 @@ export interface Production {
   pontuacao_calculada: number;
   peso_aplicado: number;
   status_atividade: string;
+  criado_em: string | null;
 }
 
 export interface ProductionCreatePayload {
@@ -90,8 +92,9 @@ async function request<T>(
   return data as T;
 }
 
-export function getProductions(token: string): Promise<Production[]> {
-  return request<Production[]>("/api/v1/productions", token);
+export function getProductions(token: string, status?: string): Promise<Production[]> {
+  const query = status ? `?status=${encodeURIComponent(status)}` : "";
+  return request<Production[]>(`/api/v1/productions${query}`, token);
 }
 
 export function getVehicles(token: string): Promise<Vehicle[]> {

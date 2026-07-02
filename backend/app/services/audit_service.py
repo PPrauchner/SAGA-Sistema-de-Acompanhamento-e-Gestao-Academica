@@ -5,6 +5,9 @@ Responsabilidades:
 - list_audit_logs(): lê a coleção audit_logs/, aplica filtros opcionais (usuario_id,
   operacao, modulo, resultado_status, data_inicio, data_fim), ordena do mais recente ao
   mais antigo e devolve uma página (AuditLogPage) com base em page/page_size.
+- Escopa por papel: a coordenação enxerga todos os logs; o orientador enxerga apenas os
+  logs cujo `usuario_id` (ator da operação) é um dos seus orientandos — i.e., ações
+  executadas pelos próprios orientandos (resolução advisors→students).
 - Não escreve em audit_logs/ — a escrita é exclusiva do aspecto @audit_operation.
 - A paginação e os filtros são aplicados em memória: a coleção é apenas anexada (nunca
   deletada) e, no MVP single-tenant, o volume é compatível com leitura completa.
@@ -14,8 +17,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from backend.app.core.auth import CurrentUser
 from backend.app.models.audit import AuditLogPage, AuditLogResponse
+from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.repositories.student_repository import StudentRepository
 
 _MIN_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -23,8 +29,16 @@ _MIN_TIMESTAMP = datetime.min.replace(tzinfo=timezone.utc)
 class AuditService:
     """Serviço de consulta dos logs de auditoria gerados pelo aspecto A02."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        advisors: AdvisorRepository | None = None,
+        students: StudentRepository | None = None,
+    ) -> None:
         self._repo = FirebaseRepository("audit_logs")
+        # Resolvem o escopo do orientador (advisors→students). Injetáveis para teste; só
+        # são consultados quando o papel é 'orientador', então a construção não faz I/O.
+        self._advisors = advisors or AdvisorRepository()
+        self._students = students or StudentRepository()
 
     @staticmethod
     def _matches(
@@ -62,6 +76,32 @@ class AuditService:
 
         return True
 
+    async def _allowed_usuario_ids(self, user: CurrentUser | None) -> set[str] | None:
+        """Resolve os `usuario_id` que o usuário pode enxergar, conforme o papel.
+
+        Args:
+            user: Usuário autenticado, ou None para consulta irrestrita.
+
+        Returns:
+            None quando o acesso é irrestrito (coordenação ou sem usuário). Para o
+            orientador, o conjunto de uids dos seus orientandos (ações executadas por
+            eles); conjunto vazio se o orientador não tiver doc em advisors/.
+        """
+        if user is None or user.role != "orientador":
+            return None
+
+        advisors = await self._advisors.list_all()
+        advisor = next((item for item in advisors if item.get("uid") == user.uid), None)
+        if advisor is None:
+            return set()
+
+        students = await self._students.list_all()
+        return {
+            student["uid"]
+            for student in students
+            if student.get("orientador_id") == advisor["id"] and student.get("uid")
+        }
+
     async def list_audit_logs(
         self,
         *,
@@ -73,8 +113,10 @@ class AuditService:
         data_fim: datetime | None = None,
         page: int = 1,
         page_size: int = 20,
+        user: CurrentUser | None = None,
     ) -> AuditLogPage:
         logs = await self._repo.list_all()
+        allowed_usuario_ids = await self._allowed_usuario_ids(user)
 
         filtered = [
             log
@@ -88,6 +130,7 @@ class AuditService:
                 data_inicio=data_inicio,
                 data_fim=data_fim,
             )
+            and (allowed_usuario_ids is None or log.get("usuario_id") in allowed_usuario_ids)
         ]
 
         filtered.sort(

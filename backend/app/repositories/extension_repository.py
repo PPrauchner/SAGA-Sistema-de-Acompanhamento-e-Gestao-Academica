@@ -13,6 +13,25 @@ class ExtensionRepository(FirebaseRepository):
     def __init__(self) -> None:
         super().__init__("extensions")
 
+    async def list_by_program(
+        self, programa_id: str, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        """Lista prorrogações de um programa via consulta filtrada no Firestore.
+
+        Args:
+            programa_id: Programa cujas prorrogações devem ser retornadas.
+            status: Quando informado, restringe ao status correspondente
+                (ex.: 'pendente'); caso contrário retorna todos os status.
+
+        Returns:
+            Documentos de extensions/ do programa (com id injetado), filtrados por status
+            quando solicitado — sem ler a coleção inteira e filtrar em memória.
+        """
+        filters: list[tuple] = [("programa_id", "==", programa_id)]
+        if status is not None:
+            filters.append(("status", "==", status))
+        return await self.query(filters=filters)
+
     async def list_by_student_ids(self, student_ids: set[str]) -> list[dict[str, Any]]:
         if not student_ids:
             return []

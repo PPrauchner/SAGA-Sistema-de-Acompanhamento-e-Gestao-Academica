@@ -2,8 +2,11 @@ import { useState, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrientadorDashboard } from "@/hooks/useDashboard";
+import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
+import { useNotifications } from "@/hooks/useNotifications";
+import { useOrientadorUpdates } from "@/hooks/useOrientadorUpdates";
 import {
-  AlertTriangle, X, FileText, Calendar, ChevronRight,
+  AlertTriangle, X, Calendar, ChevronRight,
   CheckCircle2, Bell, Plus, RefreshCw, Star, Send,
   Users, Eye, Clock, GraduationCap, AlertCircle,
   ArrowUpRight, Filter, BookOpen,
@@ -26,20 +29,6 @@ interface Student {
   status: StudentStatus; fase: string;
   ultimaAtual: string; proximo: string; bolsa: string;
 }
-interface Review {
-  id: number; tipo: string; student: string;
-  desc: string; prazo: string; urgency: "critico" | "urgente" | "normal";
-}
-interface Update {
-  id: number; student: string; init: string;
-  action: string; detail: string; time: string;
-  type: "relatorio" | "producao" | "plano" | "credito" | "defesa" | "reuniao";
-}
-interface AcAlert {
-  id: number; student: string;
-  tipo: "critico" | "atencao" | "info";
-  mensagem: string; detalhe: string;
-}
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 const ST: Record<StudentStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -60,31 +49,6 @@ const STUDENTS: Student[] = [
   { id: "6", name: "Ricardo Alves Santos", init: "RA", nivel: "Mestrado", ingresso: "2024", prazo: "Dez/2026", prazoMeses: 18, progress: 25, creditos: 8, creditosMax: 30, producoes: 0, producoesMin: 1, status: "regular", fase: "Revisão Bibliográfica", ultimaAtual: "há 5 dias", proximo: "Atualizar plano 2026/2", bolsa: "CNPq" },
   { id: "7", name: "Patrícia Lima Farias", init: "PL", nivel: "Doutorado", ingresso: "2021", prazo: "Mar/2027", prazoMeses: 21, progress: 62, creditos: 48, creditosMax: 80, producoes: 3, producoesMin: 3, status: "qualificado", fase: "Experimentos", ultimaAtual: "há 4 dias", proximo: "Relatório anual", bolsa: "CNPq" },
   { id: "8", name: "Bruno Carvalho Neves", init: "BC", nivel: "Doutorado", ingresso: "2022", prazo: "Jul/2026", prazoMeses: 13, progress: 48, creditos: 38, creditosMax: 80, producoes: 1, producoesMin: 3, status: "regular", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Reunião orientação", bolsa: "CAPES" },
-];
-
-const REVIEWS: Review[] = [
-  { id: 1, tipo: "Relatório", student: "Carlos Eduardo Lima", desc: "Relatório semestral 2026/1 aguardando avaliação e parecer do orientador", prazo: "20/06/2026", urgency: "urgente" },
-  { id: 2, tipo: "Prorrogação", student: "Marcos Vinícius Oliveira", desc: "Pedido de prorrogação de prazo — mestrado com prazo vencido há 6 meses", prazo: "Vencido!", urgency: "critico" },
-  { id: 3, tipo: "Produção Científica", student: "Juliana Mendes Martins", desc: "Artigo SBES 2026 submetido pelo aluno e aguardando parecer do orientador", prazo: "30/06/2026", urgency: "urgente" },
-  { id: 4, tipo: "Plano de Trabalho", student: "Ricardo Alves Santos", desc: "Plano de trabalho 2026/2 atualizado pelo aluno — aguardando aprovação", prazo: "01/07/2026", urgency: "normal" },
-  { id: 5, tipo: "Banca de Defesa", student: "Fernanda Souza Gomes", desc: "Composição e convites da banca de defesa para aprovação formal do orientador", prazo: "15/07/2026", urgency: "normal" },
-];
-
-const UPDATES: Update[] = [
-  { id: 1, student: "Fernanda Souza", init: "FS", action: "Submeteu tese para avaliação pré-defesa", detail: "Versão final entregue à orientadora para revisão da banca", time: "há 1 dia", type: "defesa" },
-  { id: 2, student: "Juliana Martins", init: "JM", action: "Concluiu disciplina Visão Computacional", detail: "Conceito: A · +4 créditos · Total acumulado: 44/80", time: "há 2 dias", type: "credito" },
-  { id: 3, student: "Ana Paula Costa", init: "AP", action: "Publicou artigo no SBES 2026 (Qualis B1)", detail: "Aguardando validação pelo SAGA · +1 produção científica", time: "há 3 dias", type: "producao" },
-  { id: 4, student: "Ricardo Santos", init: "RA", action: "Atualizou plano de trabalho 2026/2", detail: "Novas metas e cronograma do 2º semestre adicionados", time: "há 5 dias", type: "plano" },
-  { id: 5, student: "Bruno Neves", init: "BC", action: "Entregou relatório semestral 2026/1", detail: "Relatório enviado via SAGA — aguardando avaliação do orientador", time: "há 1 semana", type: "relatorio" },
-  { id: 6, student: "Carlos E. Lima", init: "CE", action: "Solicitou reunião de orientação urgente", detail: "Assunto: andamento da dissertação e risco de não cumprimento do prazo", time: "há 1 semana", type: "reuniao" },
-];
-
-const ALERTS: AcAlert[] = [
-  { id: 1, student: "Marcos V. Oliveira", tipo: "critico", mensagem: "Prazo do mestrado vencido há 6 meses", detalhe: "Prazo oficial: Dez/2024. Prorrogação não formalizada. Contato com secretaria é urgente." },
-  { id: 2, student: "Carlos E. Lima", tipo: "critico", mensagem: "Prazo vence em 1 mês — nenhuma produção publicada", detalhe: "Prazo: Jul/2025. 0 de 1 artigo exigido publicado. Risco alto de não conclusão." },
-  { id: 3, student: "Carlos E. Lima", tipo: "atencao", mensagem: "Progresso acadêmico abaixo do esperado (45%)", detalhe: "Para mestrado em andamento há 3 anos, esperado ~70%. Déficit de 25 pontos." },
-  { id: 4, student: "Juliana M. Martins", tipo: "atencao", mensagem: "Falta 1 produção para cumprir requisito de defesa", detalhe: "2 de 3 artigos publicados. Submissão urgente necessária antes do prazo final." },
-  { id: 5, student: "Bruno C. Neves", tipo: "info", mensagem: "Sem atualização no SAGA há mais de 7 dias", detalhe: "Última atividade registrada: há 1 semana. Recomendado: reunião de acompanhamento." },
 ];
 
 const DISTRIB_DATA = [
@@ -774,145 +738,196 @@ function WorkPlanMonitoring({ onSelect }: { onSelect: (s: Student) => void }) {
   );
 }
 
+// Formata data ISO (date "AAAA-MM-DD" ou datetime) em "DD/MM/AAAA", sem deslocar por fuso.
+function formatDataBR(value?: string | null): string {
+  if (!value) return "—";
+  const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("pt-BR");
+}
+
+const REVIEW_TIPO_CFG: Record<ValidationQueueItem["tipo"], { label: string; color: string; icon: ReactNode }> = {
+  atividade: { label: "Atividade", color: "var(--tint-gold-text)", icon: <BookOpen size={13} /> },
+  producao: { label: "Produção", color: "var(--tint-teal-text)", icon: <Star size={13} /> },
+};
+
 function PendingReviews() {
-  const uc = {
-    critico: { color: "var(--tint-danger-text)", bg: "var(--tint-danger-bg)", border: "var(--tint-danger-border)", label: "CRÍTICO" },
-    urgente: { color: "var(--tint-gold-text)",   bg: "var(--tint-gold-bg)",   border: "var(--tint-gold-border)",   label: "URGENTE" },
-    normal:  { color: "var(--tint-blue-text)",   bg: "var(--tint-blue-bg)",   border: "var(--tint-blue-border)",   label: "NORMAL"  },
-  };
-  const tipoIcon: Record<string, ReactNode> = {
-    "Relatório": <FileText size={13} />,
-    "Prorrogação": <Clock size={13} />,
-    "Produção Científica": <Star size={13} />,
-    "Plano de Trabalho": <RefreshCw size={13} />,
-    "Banca de Defesa": <GraduationCap size={13} />,
-  };
+  const { data, loading, error } = useValidationQueue();
+  const items = data ?? [];
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Avaliações Pendentes"
-        sub={`${REVIEWS.length} itens aguardando seu parecer`}
-        right={
-          <span className="rounded-full px-2 py-0.5" style={{ fontSize: "11px", fontWeight: 700, color: "var(--tint-danger-text)", background: "var(--tint-danger-bg)" }}>
-            {REVIEWS.filter((r) => r.urgency === "critico").length} críticos
-          </span>
-        }
+        sub={loading ? "Carregando…" : `${items.length} ${items.length === 1 ? "item aguardando" : "itens aguardando"} seu parecer`}
       />
-      <div className="space-y-2.5">
-        {REVIEWS.map((r) => {
-          const u = uc[r.urgency];
-          return (
-            <div key={r.id} className="flex items-start gap-3 p-3 rounded-xl"
-              style={{ background: u.bg, border: `1px solid ${u.border}` }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: `${u.color}18`, color: u.color }}>
-                {tipoIcon[r.tipo] || <FileText size={13} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                  <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 800, color: "#fff", background: u.color }}>{u.label}</span>
-                  <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 700, color: u.color, background: `${u.color}15` }}>{r.tipo}</span>
+
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar avaliações pendentes: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando avaliações pendentes…</p>
+      ) : items.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhum item aguardando seu parecer.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {items.map((item) => {
+            const tc = REVIEW_TIPO_CFG[item.tipo];
+            return (
+              <div key={item.id} className="flex items-start gap-3 p-3 rounded-xl"
+                style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: `${tc.color}18`, color: tc.color }}>
+                  {tc.icon}
                 </div>
-                <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{r.student}</p>
-                <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>{r.desc}</p>
-                <p style={{ fontSize: "10px", fontWeight: 700, color: u.color, marginTop: "3px" }}>
-                  <Calendar size={9} className="inline mr-1" />Prazo: {r.prazo}
-                </p>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                    <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 800, color: tc.color, background: `${tc.color}15` }}>{tc.label}</span>
+                  </div>
+                  <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{item.aluno}</p>
+                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>{item.descricao}</p>
+                  <p style={{ fontSize: "10px", fontWeight: 700, color: "var(--muted-foreground)", marginTop: "3px" }}>
+                    <Calendar size={9} className="inline mr-1" />Enviado em: {formatDataBR(item.data)}
+                  </p>
+                </div>
+                <button className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
+                  style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>
+                  Avaliar
+                </button>
               </div>
-              <button className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
-                style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>
-                Avaliar
-              </button>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
+// Mapeia a operação do audit_log (nome da função Python) para rótulo + emoji da timeline.
+const OPERACAO_CFG: Record<string, { label: string; emoji: string; bg: string }> = {
+  submit_activity: { label: "Submeteu atividade para validação", emoji: "📋", bg: "var(--tint-blue-bg)" },
+  create_activity: { label: "Registrou atividade creditável", emoji: "📋", bg: "var(--tint-blue-bg)" },
+  create_production: { label: "Registrou produção científica", emoji: "📄", bg: "var(--tint-teal-bg)" },
+};
+const OPERACAO_DEFAULT = { emoji: "•", bg: "var(--muted)" };
+
+// Fallback humano para operações sem rótulo dedicado: "update_work_plan" → "update work plan".
+function humanizeOperacao(operacao: string | null): string {
+  if (!operacao) return "Registrou uma ação no SAGA";
+  return operacao.replace(/_/g, " ");
+}
+
 function RecentUpdates() {
-  const typeMap: Record<string, { color: string; bg: string; emoji: string }> = {
-    relatorio: { color: "var(--tint-blue-text)",   bg: "var(--tint-blue-bg)",   emoji: "📋" },
-    producao:  { color: "var(--tint-teal-text)",   bg: "var(--tint-teal-bg)",   emoji: "📄" },
-    plano:     { color: "var(--tint-gold-text)",   bg: "var(--tint-gold-bg)",   emoji: "📅" },
-    credito:   { color: "var(--tint-violet-text)", bg: "var(--tint-violet-bg)", emoji: "📚" },
-    defesa:    { color: "var(--tint-blue-text)",   bg: "var(--tint-blue-bg)",   emoji: "🎓" },
-    reuniao:   { color: "var(--tint-orange-text)", bg: "var(--tint-orange-bg)", emoji: "📞" },
-  };
+  const { data, loading, error } = useOrientadorUpdates();
+  const items = data ?? [];
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead title="Atualizações Recentes" sub="Atividades recentes dos orientandos no SAGA" />
-      <div className="space-y-3.5">
-        {UPDATES.map((u, i) => {
-          const tm = typeMap[u.type];
-          const isLast = i === UPDATES.length - 1;
-          return (
-            <div key={u.id} className="flex items-start gap-3">
-              {/* Timeline line */}
-              <div className="flex flex-col items-center flex-shrink-0">
-                <Avt init={u.init} size={32} color={tm.color} />
-                {!isLast && <div style={{ width: 2, flex: 1, background: "var(--border)", minHeight: 16, marginTop: 4 }} />}
-              </div>
-              <div className="flex-1 min-w-0 pb-1">
-                <div className="flex items-start justify-between gap-2 mb-0.5">
-                  <div>
-                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{u.student}</span>
-                    <span className="ml-1.5 rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 700, color: tm.color, background: tm.bg }}>{tm.emoji}</span>
+
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar atualizações: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando atualizações…</p>
+      ) : items.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhuma atualização recente.</p>
+      ) : (
+        <div className="space-y-3.5">
+          {items.map((item, i) => {
+            const cfg = item.operacao ? OPERACAO_CFG[item.operacao] : undefined;
+            const bg = cfg?.bg ?? OPERACAO_DEFAULT.bg;
+            const emoji = cfg?.emoji ?? OPERACAO_DEFAULT.emoji;
+            const label = cfg?.label ?? humanizeOperacao(item.operacao);
+            const isLast = i === items.length - 1;
+            return (
+              <div key={item.id} className="flex items-start gap-3">
+                {/* Timeline line */}
+                <div className="flex flex-col items-center flex-shrink-0">
+                  <div className="rounded-full flex items-center justify-center" style={{ width: 32, height: 32, background: bg, fontSize: 14 }}>
+                    {emoji}
                   </div>
-                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)", flexShrink: 0, whiteSpace: "nowrap" }}>{u.time}</span>
+                  {!isLast && <div style={{ width: 2, flex: 1, background: "var(--border)", minHeight: 16, marginTop: 4 }} />}
                 </div>
-                <p style={{ fontSize: "12px", color: "var(--foreground)", lineHeight: 1.4 }}>{u.action}</p>
-                <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>{u.detail}</p>
+                <div className="flex-1 min-w-0 pb-1">
+                  <div className="flex items-start justify-between gap-2 mb-0.5">
+                    <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{label}</span>
+                    <span style={{ fontSize: "10px", color: "var(--muted-foreground)", flexShrink: 0, whiteSpace: "nowrap" }}>{formatDataBR(item.timestamp)}</span>
+                  </div>
+                  {item.recurso && (
+                    <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, wordBreak: "break-all" }}>{item.recurso}</p>
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
+type AlertSeverity = "critico" | "atencao" | "info";
+
+// Mapeia o tipo da notificação (A05) para a severidade visual do painel. Default: "info".
+const NOTIF_SEVERITY: Record<string, AlertSeverity> = {
+  prazo_critico: "critico",
+  atividade_submetida: "atencao",
+  prorrogacao_aprovada: "atencao",
+  transferencia_orientador: "atencao",
+  transferencia_coordenacao: "atencao",
+  atividade_validada: "info",
+  progresso_task: "info",
+};
+
 function AcademicAlerts() {
-  const alertCfg = {
+  const { notifications, loading } = useNotifications();
+  const alertCfg: Record<AlertSeverity, { color: string; bg: string; border: string; icon: ReactNode; label: string }> = {
     critico: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: <AlertCircle size={14} />, label: "CRÍTICO" },
     atencao: { color: "#D4A017", bg: "#fffbeb", border: "#fde68a", icon: <AlertTriangle size={14} />, label: "ATENÇÃO" },
     info: { color: "#0ea5e9", bg: "#f0f9ff", border: "#bae6fd", icon: <Bell size={14} />, label: "INFO" },
   };
+  const severityOf = (tipo: string): AlertSeverity => NOTIF_SEVERITY[tipo] ?? "info";
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Alertas Acadêmicos"
-        sub="Situações identificadas pelo SAGA"
+        sub={loading ? "Carregando…" : "Situações identificadas pelo SAGA"}
         right={
           <span className="rounded-full px-2 py-0.5" style={{ fontSize: "11px", fontWeight: 700, color: "#dc2626", background: "#fef2f2" }}>
-            {ALERTS.filter((a) => a.tipo === "critico").length} críticos
+            {notifications.filter((n) => severityOf(n.tipo) === "critico").length} críticos
           </span>
         }
       />
-      <div className="space-y-2.5">
-        {ALERTS.map((a) => {
-          const ac = alertCfg[a.tipo];
-          return (
-            <div key={a.id} className="rounded-xl p-3" style={{ background: ac.bg, border: `1px solid ${ac.border}` }}>
-              <div className="flex items-start gap-2.5">
-                <span style={{ color: ac.color, flexShrink: 0, marginTop: 1 }}>{ac.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                    <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "8px", fontWeight: 800, color: "#fff", background: ac.color }}>{ac.label}</span>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: ac.color }}>{a.student}</span>
+
+      {loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando alertas…</p>
+      ) : notifications.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhum alerta no momento.</p>
+      ) : (
+        <div className="space-y-2.5">
+          {notifications.map((n) => {
+            const ac = alertCfg[severityOf(n.tipo)];
+            return (
+              <div key={n.id} className="rounded-xl p-3" style={{ background: ac.bg, border: `1px solid ${ac.border}` }}>
+                <div className="flex items-start gap-2.5">
+                  <span style={{ color: ac.color, flexShrink: 0, marginTop: 1 }}>{ac.icon}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "8px", fontWeight: 800, color: "#fff", background: ac.color }}>{ac.label}</span>
+                      {n.timestamp && (
+                        <span style={{ fontSize: "11px", fontWeight: 700, color: ac.color }}>{n.timestamp.toLocaleDateString("pt-BR")}</span>
+                      )}
+                    </div>
+                    <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", lineHeight: 1.35 }}>{n.titulo}</p>
+                    <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, marginTop: "3px" }}>{n.mensagem}</p>
                   </div>
-                  <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", lineHeight: 1.35 }}>{a.mensagem}</p>
-                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, marginTop: "3px" }}>{a.detalhe}</p>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

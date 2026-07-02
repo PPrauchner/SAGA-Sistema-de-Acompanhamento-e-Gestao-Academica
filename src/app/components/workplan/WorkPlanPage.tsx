@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { AlertCircle, Calendar, CheckCircle2, Circle, Clock3, Loader2, Plus, Send, X } from "lucide-react";
+import { AlertCircle, Calendar, CheckCircle2, Circle, Clock3, Loader2, Plus, Send, Trash2, X } from "lucide-react";
 
 import {
   addProgressUpdate,
   createStage,
   createTask,
   createWorkPlan,
+  deleteTask,
   getWorkPlan,
   updateTaskStatus,
   type TaskPriority,
@@ -25,6 +26,7 @@ type Modal =
   | { kind: "progress"; task: WorkPlanTask }
   | { kind: "plan" }
   | { kind: "stage" }
+  | { kind: "confirmDelete"; task: WorkPlanTask }
   | null;
 
 const TASK_DND_TYPE = "work-plan-task";
@@ -70,7 +72,7 @@ function applyTaskStatus(plan: WorkPlan, taskId: string, status: TaskStatus): Wo
 }
 
 export function WorkPlanPage() {
-  const { currentUser, selectedStudentId } = useApp();
+  const { currentUser, selectedStudentId, activeView } = useApp();
   const { token, studentId } = useAuth();
   const [plan, setPlan] = useState<WorkPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -85,6 +87,10 @@ export function WorkPlanPage() {
   // Aluno dono e orientador/coorientador podem mover (backend autoriza via
   // ownership "status"); coordenacao-pura e revertida pelo 403 do backend.
   const canMove = isAdvisor || isStudent;
+  // Excluir task e edicao do kanban: so quem age como orientador. ADR-0002 trata o
+  // toggle de visao como filtro de UX; coordenacao-pura fica presa em "coordenador"
+  // (kanban read-only, issue #248) e nao ve o botao. O backend ainda garante ownership.
+  const canEdit = activeView === "orientador";
 
   async function load() {
     setLoading(true);
@@ -150,6 +156,21 @@ export function WorkPlanPage() {
       await addProgressUpdate(task.task_id, data, token ?? undefined);
       setModal(null);
       await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteTask(task: WorkPlanTask) {
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteTask(task.task_id, token ?? undefined);
+      setModal(null);
+      // Recarrega para a barra de progresso da etapa/plano refletir o recalculo.
+      await load();
+    } catch {
+      setError("Nao foi possivel excluir a task. Tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -280,8 +301,10 @@ export function WorkPlanPage() {
             saving={saving}
             canMove={canMove}
             canAddProgress={isStudent}
+            canDelete={canEdit}
             onDropTask={changeStatus}
             onProgress={(task) => setModal({ kind: "progress", task })}
+            onDelete={(task) => setModal({ kind: "confirmDelete", task })}
           />
         ))}
       </section>
@@ -289,7 +312,7 @@ export function WorkPlanPage() {
       <section className="rounded-lg p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <div className="mb-3 flex items-center justify-between">
           <h2 style={{ fontSize: 14, fontWeight: 800, color: "var(--foreground)" }}>Etapas</h2>
-          {isAdvisor && (
+          {canEdit && (
             <button
               type="button"
               onClick={() => setModal({ kind: "stage" })}
@@ -310,7 +333,7 @@ export function WorkPlanPage() {
                     {formatDate(stage.data_inicio)} ate {formatDate(stage.data_fim)}
                   </p>
                 </div>
-                {isAdvisor && (
+                {canEdit && (
                   <button
                     type="button"
                     onClick={() => setModal({ kind: "task", stage })}
@@ -338,6 +361,9 @@ export function WorkPlanPage() {
       )}
       {modal?.kind === "plan" && <PlanModal saving={saving} onClose={() => setModal(null)} onSave={handleCreatePlan} />}
       {modal?.kind === "stage" && <StageModal saving={saving} onClose={() => setModal(null)} onSave={handleCreateStage} />}
+      {modal?.kind === "confirmDelete" && (
+        <ConfirmDeleteModal task={modal.task} saving={saving} onClose={() => setModal(null)} onConfirm={() => handleDeleteTask(modal.task)} />
+      )}
     </div>
     </DndProvider>
   );
@@ -349,16 +375,20 @@ function KanbanColumn({
   saving,
   canMove,
   canAddProgress,
+  canDelete,
   onDropTask,
   onProgress,
+  onDelete,
 }: {
   column: { id: TaskStatus; label: string; icon: JSX.Element };
   tasks: (WorkPlanTask & { stage: WorkPlanStage })[];
   saving: boolean;
   canMove: boolean;
   canAddProgress: boolean;
+  canDelete: boolean;
   onDropTask: (taskId: string, status: TaskStatus) => void;
   onProgress: (task: WorkPlanTask) => void;
+  onDelete: (task: WorkPlanTask) => void;
 }) {
   const [{ isOver, canDrop }, dropRef] = useDrop(
     () => ({
@@ -397,7 +427,9 @@ function KanbanColumn({
             draggable={canMove}
             disabled={saving}
             canAddProgress={canAddProgress}
+            canDelete={canDelete}
             onProgress={() => onProgress(task)}
+            onDelete={() => onDelete(task)}
           />
         ))}
       </div>
@@ -411,14 +443,18 @@ function TaskCard({
   draggable,
   disabled,
   canAddProgress,
+  canDelete,
   onProgress,
+  onDelete,
 }: {
   task: WorkPlanTask;
   stage: WorkPlanStage;
   draggable: boolean;
   disabled: boolean;
   canAddProgress: boolean;
+  canDelete: boolean;
   onProgress: () => void;
+  onDelete: () => void;
 }) {
   const [{ isDragging }, dragRef] = useDrag(
     () => ({
@@ -447,9 +483,23 @@ function TaskCard({
           <p style={{ fontSize: 13, fontWeight: 800, color: "var(--foreground)", lineHeight: 1.35 }}>{task.titulo}</p>
           <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 4 }}>{stage.nome}</p>
         </div>
-        <span className="rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "#123C7A", background: "#eef3fc" }}>
-          {PRIORITY_LABEL[task.prioridade]}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "#123C7A", background: "#eef3fc" }}>
+            {PRIORITY_LABEL[task.prioridade]}
+          </span>
+          {canDelete && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onDelete}
+              className="flex h-7 w-7 items-center justify-center rounded-md"
+              style={{ background: "var(--card)", border: "1px solid var(--border)", color: "#dc2626" }}
+              aria-label="Excluir task"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
       {task.descricao && <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 8, lineHeight: 1.45 }}>{task.descricao}</p>}
       <div className="mt-3 flex items-center justify-between" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
@@ -639,6 +689,48 @@ function ProgressModal({
         >
           Enviar progresso
         </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ConfirmDeleteModal({
+  task,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  task: WorkPlanTask;
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ModalShell title="Excluir task" onClose={onClose}>
+      <div className="space-y-4">
+        <p style={{ fontSize: 13, color: "var(--foreground)", lineHeight: 1.5 }}>
+          Excluir <strong>{task.titulo}</strong>? Esta acao nao pode ser desfeita.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onClose}
+            className="rounded-md px-3.5 py-2"
+            style={{ background: "var(--muted)", color: "var(--foreground)", fontSize: 13, fontWeight: 800 }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onConfirm}
+            className="rounded-md px-3.5 py-2"
+            style={{ background: "#dc2626", color: "#fff", fontSize: 13, fontWeight: 800, opacity: saving ? 0.6 : 1 }}
+          >
+            Excluir
+          </button>
+        </div>
       </div>
     </ModalShell>
   );

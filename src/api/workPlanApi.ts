@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost, apiPut } from "@/api/http";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/api/http";
 
 export type StageStatus = "pendente" | "em_andamento" | "concluido" | "atrasado";
 export type TaskStatus = "pendente" | "em_andamento" | "concluido" | "atrasado";
@@ -112,6 +112,10 @@ export function updateTaskStatus(
 
 export function updateTask(taskId: string, data: Partial<TaskCreate> & { status?: TaskStatus }, token?: string): Promise<{ message: string }> {
   return apiPatch(`/tasks/${taskId}`, data, token);
+}
+
+export function deleteTask(taskId: string, token?: string): Promise<{ message: string }> {
+  return apiDelete(`/tasks/${taskId}`, token);
 }
 
 export function addProgressUpdate(

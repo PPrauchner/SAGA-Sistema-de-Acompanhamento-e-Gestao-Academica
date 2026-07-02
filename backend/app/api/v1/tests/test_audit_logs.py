@@ -4,7 +4,7 @@ Testes do endpoint GET /api/v1/audit-logs.
 Usa FastAPI TestClient com app.dependency_overrides[get_current_user] para injetar
 um CurrentUser fake e monkeypatch do AuditService (instância do router) para isolar a
 rota da lógica de negócio e do Firebase. Cobre a autorização por papel (@requires_role
-'coordenacao'), o repasse dos filtros e o envelope de paginação.
+'coordenacao','orientador'), o repasse dos filtros e do usuário e o envelope de paginação.
 """
 
 from __future__ import annotations
@@ -63,6 +63,15 @@ def test_coordenacao_recebe_pagina_e_repassa_filtros(client: TestClient) -> None
     assert body["page"] == 2
     assert body["page_size"] == 5
     assert _FakeAuditService.calls[0]["operacao"] == "create_student"
+
+
+def test_orientador_autorizado_e_repassa_user(client: TestClient) -> None:
+    _override_user("orientador")
+
+    resp = client.get("/api/v1/audit-logs")
+
+    assert resp.status_code == 200
+    assert _FakeAuditService.calls[0]["user"].role == "orientador"
 
 
 def test_papel_insuficiente_403(client: TestClient) -> None:
