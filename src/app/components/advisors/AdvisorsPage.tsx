@@ -219,7 +219,7 @@ export function AdvisorsPage() {
                     <button onClick={() => openEditForm(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ background: "#eef3fc", color: "#123C7A", fontSize: "12px", fontWeight: 600 }}>
                       <Eye size={13} /> Editar
                     </button>
-                    {(role === "adm" || role === "coordenacao") && advisor.uid && (
+                    {role === "coordenacao" && advisor.uid && (
                       <button onClick={() => setConfirmTransferAdvisor(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 600 }}>
                         <ArrowRightLeft size={11} /> Coordenação
                       </button>

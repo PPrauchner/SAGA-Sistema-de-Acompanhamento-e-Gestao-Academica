@@ -68,7 +68,7 @@ export function RequestsPage() {
           }
           await coordinationTransfersApi.accept(token, req.id);
         } else {
-          if (req.payload_original.initiator_uid === currentUser?.id || currentUser?.role === "adm") {
+          if (req.payload_original.initiator_uid === currentUser?.id) {
             if (confirm("Tem certeza que deseja cancelar esta solicitação de transferência?")) {
               await coordinationTransfersApi.cancel(token, req.id);
             }
