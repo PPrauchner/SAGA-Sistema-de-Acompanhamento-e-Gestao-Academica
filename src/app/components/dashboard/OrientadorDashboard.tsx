@@ -856,6 +856,9 @@ function RecentUpdates() {
                   {item.recurso && (
                     <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, wordBreak: "break-all" }}>{item.recurso}</p>
                   )}
+                  {item.autor && (
+                    <p style={{ fontSize: "10px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>por {item.autor}</p>
+                  )}
                 </div>
               </div>
             );

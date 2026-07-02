@@ -242,9 +242,9 @@ export function AuditPage() {
                   {log.resultado_status === "erro" && log.erro_mensagem && (
                     <p style={{ fontSize: "11px", color: "#dc2626", marginTop: "2px" }}>{log.erro_mensagem}</p>
                   )}
-                  {log.usuario_id && (
+                  {(log.usuario_nome ?? log.usuario_id) && (
                     <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>
-                      {log.usuario_id}
+                      {log.usuario_nome ?? log.usuario_id}
                     </p>
                   )}
                 </div>
