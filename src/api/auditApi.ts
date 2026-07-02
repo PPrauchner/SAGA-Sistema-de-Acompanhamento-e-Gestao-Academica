@@ -15,6 +15,7 @@ export type ResultadoStatus = "sucesso" | "erro";
 export interface AuditLog {
   id: string;
   usuario_id?: string | null;
+  usuario_nome?: string | null;
   role?: string | null;
   programa_id?: string | null;
   operacao?: string | null;
