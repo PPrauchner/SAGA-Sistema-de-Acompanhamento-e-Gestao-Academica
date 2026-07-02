@@ -9,6 +9,8 @@ Responsabilidades:
   com items, page, page_size e total.
 - Campos derivados do aspecto são opcionais para tolerar documentos legados anteriores ao
   enriquecimento do advice (sem modulo/recurso/valor_entrada).
+- usuario_nome não é campo do documento: é resolvido pelo AuditService no read path a
+  partir de usuario_id (o id permanece a chave canônica persistida).
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ class AuditLogResponse(BaseModel):
     id: str
 
     usuario_id: str | None = None
+    usuario_nome: str | None = None
     role: str | None = None
     programa_id: str | None = None
 
