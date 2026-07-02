@@ -118,6 +118,19 @@ class WorkPlanService:
         await self._recalculate(plan)
         return {"message": "Task atualizada"}
 
+    async def delete_task(self, task_id: str) -> dict[str, str]:
+        try:
+            plan, _, _ = await self._repo.get_task_context(task_id)
+            await self._repo.delete_task(task_id)
+        except KeyError as exc:
+            raise WorkPlanNotFoundError(str(exc)) from exc
+        # A task removida saiu do plano; relê para recalcular progresso, status e
+        # o fato plano_concluido (RL01) sobre as tasks restantes.
+        updated_plan = await self._repo.get_plan(plan["student_id"])
+        if updated_plan is not None:
+            await self._recalculate(updated_plan)
+        return {"message": "Task removida"}
+
     async def update_task_status(self, task_id: str, status: str) -> TaskStatusResponse:
         try:
             await self._repo.update_task(task_id, {"status": status, "progresso_percentual": 100.0 if status == STATUS_CONCLUIDO else None})

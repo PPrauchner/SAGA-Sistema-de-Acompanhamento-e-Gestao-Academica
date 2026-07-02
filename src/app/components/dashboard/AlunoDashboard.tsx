@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAlunoDashboard } from "@/hooks/useDashboard";
+import { useNotifications, type Notification as ApiNotification } from "@/hooks/useNotifications";
 import type { AlunoDashboardData } from "@/api/dashboardApi";
 import {
   CheckCircle2, X, Calendar, ChevronRight, AlertTriangle,
@@ -18,12 +19,10 @@ interface ChecklistItem { id: string; label: string; icon: string; required: num
 interface WorkPhase { id: number; label: string; start: number; duration: number; color: string; progress: number; }
 interface PendingTask { id: number; title: string; deadline: string; priority: "alta" | "media" | "baixa"; type: string; done: boolean; detail: string; }
 interface Deadline { id: number; label: string; date: string; days: number; type: "urgente" | "importante" | "normal" | "critico"; icon: string; }
-interface CreditActivity { id: number; nome: string; tipo: string; creditos: number; status: "validado" | "pendente" | "planejado"; data: string; conceito: string; }
-interface Notif { id: number; title: string; body: string; type: "alerta" | "orientacao" | "sucesso" | "info" | "lembrete"; time: string; read: boolean; }
+interface Notif { id: string; title: string; body: string; type: "alerta" | "orientacao" | "sucesso" | "info" | "lembrete"; time: string; read: boolean; }
 type ModalData =
   | { type: "checklist"; item: ChecklistItem }
   | { type: "task"; task: PendingTask }
-  | { type: "activity"; activity: CreditActivity }
   | { type: "notif"; notif: Notif }
   | { type: "deadline"; deadline: Deadline }
   | null;
@@ -82,31 +81,6 @@ const DEADLINES: Deadline[] = [
   { id: 4, label: "Plano de Trabalho 2026/2", date: "01/07/2026", days: 29, type: "normal", icon: "📅" },
   { id: 5, label: "Inscrição Disciplina 2026/2", date: "05/07/2026", days: 33, type: "normal", icon: "📚" },
   { id: 6, label: "Prazo Máximo do Doutorado", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
-];
-
-const ACTIVITIES: CreditActivity[] = [
-  { id: 1, nome: "Computação Paralela e Distribuída", tipo: "Disciplina", creditos: 4, status: "validado", data: "Ago/2022", conceito: "A" },
-  { id: 2, nome: "Aprendizado de Máquina Avançado", tipo: "Disciplina", creditos: 4, status: "validado", data: "Fev/2023", conceito: "A" },
-  { id: 3, nome: "Algoritmos em Grafos", tipo: "Disciplina", creditos: 4, status: "validado", data: "Mar/2023", conceito: "A" },
-  { id: 4, nome: "Proficiência em Inglês (TOEFL)", tipo: "Proficiência", creditos: 0, status: "validado", data: "Mar/2023", conceito: "Aprovado" },
-  { id: 5, nome: "Sistemas Distribuídos", tipo: "Disciplina", creditos: 4, status: "validado", data: "Ago/2023", conceito: "B+" },
-  { id: 6, nome: "Tópicos em Segurança Computacional", tipo: "Disciplina", creditos: 4, status: "validado", data: "Fev/2024", conceito: "A" },
-  { id: 7, nome: "Publicação: SBRC 2024 (Qualis A2)", tipo: "Produção Científica", creditos: 6, status: "validado", data: "Jun/2024", conceito: "A2" },
-  { id: 8, nome: "Mineração de Dados e Análise Preditiva", tipo: "Disciplina", creditos: 4, status: "validado", data: "Ago/2024", conceito: "A" },
-  { id: 9, nome: "Qualificação Aprovada", tipo: "Marco Acadêmico", creditos: 0, status: "validado", data: "Ago/2024", conceito: "Aprovado" },
-  { id: 10, nome: "Publicação: WSCAD 2024 (Qualis B1)", tipo: "Produção Científica", creditos: 3, status: "pendente", data: "Nov/2024", conceito: "B1" },
-  { id: 11, nome: "Visão Computacional", tipo: "Disciplina", creditos: 4, status: "validado", data: "Fev/2025", conceito: "A" },
-  { id: 12, nome: "Workshop ERAD 2025", tipo: "Atividade Complementar", creditos: 1, status: "pendente", data: "Mar/2025", conceito: "Participação" },
-  { id: 13, nome: "Seminário Departamental – Jun/2026", tipo: "Atividade Complementar", creditos: 0.5, status: "validado", data: "Jun/2026", conceito: "Participação" },
-  { id: 14, nome: "Tópicos Especiais em IA", tipo: "Disciplina", creditos: 4, status: "planejado", data: "2026/2", conceito: "—" },
-];
-
-const NOTIFS: Notif[] = [
-  { id: 1, title: "Relatório anual vence em 13 dias", body: "Seu relatório anual de progresso vence em 15/06/2026. Não esqueça de enviar via SAGA e protocolar na secretaria do programa.", type: "alerta", time: "há 2h", read: false },
-  { id: 2, title: "Orientadora comentou no plano de trabalho", body: "Profa. Carla Mendes adicionou 3 comentários ao seu plano de trabalho. Acesse o módulo Plano de Trabalho para visualizar e responder.", type: "orientacao", time: "há 5h", read: false },
-  { id: 3, title: "Atividade validada: Seminário Departamental", body: "Sua participação no Seminário Departamental de 08/06/2026 foi validada pela coordenação. +0.5 créditos adicionados ao seu histórico.", type: "sucesso", time: "ontem", read: false },
-  { id: 4, title: "Publicação registrada no SAGA", body: "Publicação WSCAD 2024 registrada com sucesso e aguardando validação pela coordenação do programa.", type: "info", time: "há 3 dias", read: true },
-  { id: 5, title: "Lembrete: matrícula semestral 2026/2", body: "O período de matrícula para 2026/2 inicia em 15/07/2026. Planeje as disciplinas com sua orientadora com antecedência.", type: "lembrete", time: "há 5 dias", read: true },
 ];
 
 const GRAPH_DATA = [
@@ -330,34 +304,6 @@ function Modal({ data, onClose }: { data: ModalData; onClose: () => void }) {
             </div>
             <div className="rounded-xl p-4" style={{ background: "var(--muted)" }}>
               <p style={{ fontSize: "13px", color: "var(--foreground)", lineHeight: 1.7 }}>{task.detail}</p>
-            </div>
-          </div>
-        </>
-      );
-    }
-
-    if (data.type === "activity") {
-      const { activity } = data;
-      const sc = activity.status === "validado" ? { color: "#1F8A70", bg: "#dcfce7", label: "Validado" }
-        : activity.status === "pendente" ? { color: "#D4A017", bg: "#fffbeb", label: "Pendente" }
-        : { color: "#123C7A", bg: "#eef3fc", label: "Planejado" };
-      return (
-        <>
-          <MHead title="Atividade Creditável" onClose={onClose} bg={sc.bg} color={sc.color} />
-          <div className="p-5 space-y-4">
-            <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)", lineHeight: 1.4 }}>{activity.nome}</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { l: "Tipo", v: activity.tipo },
-                { l: "Créditos", v: activity.creditos > 0 ? `+${activity.creditos} créditos` : "—" },
-                { l: "Data / Período", v: activity.data },
-                { l: "Conceito / Resultado", v: activity.conceito },
-              ].map((f) => (
-                <div key={f.l} className="rounded-xl p-3" style={{ background: "var(--muted)" }}>
-                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginBottom: "3px" }}>{f.l}</p>
-                  <p style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{f.v}</p>
-                </div>
-              ))}
             </div>
           </div>
         </>
@@ -942,8 +888,34 @@ function DeadlinesSection({ onOpen }: { onOpen: (d: Deadline) => void }) {
 
 // ─── NOTIFICATIONS SECTION ────────────────────────────────────────────────────
 
+// Mapeia o tipo da notificação (A05) para a categoria visual do painel. Default: "info".
+const NOTIF_TIPO_MAP: Record<string, Notif["type"]> = {
+  prazo_critico: "alerta",
+  atividade_validada: "sucesso",
+  prorrogacao_aprovada: "sucesso",
+  atividade_submetida: "info",
+  progresso_task: "orientacao",
+  transferencia_orientador: "orientacao",
+  transferencia_coordenacao: "info",
+};
+
+// Adapta a notificação real (useNotifications) ao formato Notif consumido pela UI e pelo modal.
+function toNotif(n: ApiNotification): Notif {
+  return {
+    id: n.id,
+    title: n.titulo,
+    body: n.mensagem,
+    type: NOTIF_TIPO_MAP[n.tipo] ?? "info",
+    time: n.timestamp ? n.timestamp.toLocaleDateString("pt-BR") : "",
+    // useNotifications retorna apenas não-lidas (lida == false).
+    read: n.lida,
+  };
+}
+
 function NotificationsSection({ onOpen }: { onOpen: (n: Notif) => void }) {
-  const unread = NOTIFS.filter(n => !n.read).length;
+  const { notifications, loading } = useNotifications();
+  const items = notifications.map(toNotif);
+  const unread = items.filter(n => !n.read).length;
   const typeMap: Record<string, { color: string; bg: string; icon: string }> = {
     alerta: { color: "#dc2626", bg: "#fef2f2", icon: "⚠️" },
     orientacao: { color: "#123C7A", bg: "#eef3fc", icon: "👩‍🏫" },
@@ -956,7 +928,7 @@ function NotificationsSection({ onOpen }: { onOpen: (n: Notif) => void }) {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Notificações"
-        sub={`${unread} não lidas`}
+        sub={loading ? "Carregando…" : `${unread} não lidas`}
         right={unread > 0 && (
           <div className="flex items-center gap-1 rounded-full px-2 py-0.5" style={{ background: "#fef2f2" }}>
             <Bell size={11} style={{ color: "#dc2626" }} />
@@ -964,34 +936,40 @@ function NotificationsSection({ onOpen }: { onOpen: (n: Notif) => void }) {
           </div>
         )}
       />
-      <div className="space-y-2">
-        {NOTIFS.map((n) => {
-          const tm = typeMap[n.type];
-          return (
-            <button key={n.id} onClick={() => onOpen(n)}
-              className="w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all"
-              style={{
-                background: n.read ? "var(--muted)" : `${tm.color}08`,
-                border: `1px solid ${n.read ? "transparent" : `${tm.color}25`}`,
-                minHeight: "52px",
-              }}>
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-sm"
-                style={{ background: n.read ? "var(--muted)" : tm.bg }}>
-                {tm.icon}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start gap-1.5">
-                  <p style={{ fontSize: "12px", fontWeight: n.read ? 400 : 700, color: "var(--foreground)", lineHeight: 1.35, flex: 1 }}>
-                    {n.title}
-                  </p>
-                  {!n.read && <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1" style={{ background: tm.color }} />}
+      {loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando notificações…</p>
+      ) : items.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Sem notificações.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((n) => {
+            const tm = typeMap[n.type];
+            return (
+              <button key={n.id} onClick={() => onOpen(n)}
+                className="w-full flex items-start gap-3 p-3 rounded-xl text-left transition-all"
+                style={{
+                  background: n.read ? "var(--muted)" : `${tm.color}08`,
+                  border: `1px solid ${n.read ? "transparent" : `${tm.color}25`}`,
+                  minHeight: "52px",
+                }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 text-sm"
+                  style={{ background: n.read ? "var(--muted)" : tm.bg }}>
+                  {tm.icon}
                 </div>
-                <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>{n.time}</p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-1.5">
+                    <p style={{ fontSize: "12px", fontWeight: n.read ? 400 : 700, color: "var(--foreground)", lineHeight: 1.35, flex: 1 }}>
+                      {n.title}
+                    </p>
+                    {!n.read && <div className="w-2 h-2 rounded-full flex-shrink-0 mt-1" style={{ background: tm.color }} />}
+                  </div>
+                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>{n.time}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

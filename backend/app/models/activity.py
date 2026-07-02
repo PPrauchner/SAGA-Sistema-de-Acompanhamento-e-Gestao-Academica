@@ -46,6 +46,8 @@ class ActivityCreateResponse(BaseModel):
 class ActivityResponse(BaseModel):
     id: str
     student_id: str | None = None
+    aluno_nome: str | None = None
+    orientador_nome: str | None = None
 
     # None para atividades lastreadas em produção bibliográfica (ver producao_id);
     # obrigatório apenas na criação de atividades regulares (ActivityCreateRequest).

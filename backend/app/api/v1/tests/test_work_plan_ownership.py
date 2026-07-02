@@ -77,6 +77,9 @@ class _FakeWorkPlanService:
     async def update_task_status(self, task_id: str, status: str) -> TaskStatusResponse:
         return TaskStatusResponse(message="Status atualizado")
 
+    async def delete_task(self, task_id: str) -> dict[str, str]:
+        return {"message": "Task removida"}
+
 
 def _override_user(uid: str, role: str) -> None:
     app.dependency_overrides[get_current_user] = lambda: CurrentUser(
@@ -171,4 +174,25 @@ _STATUS_CASES = [
 def test_status_ownership(client: TestClient, uid: str, role: str, expected: int) -> None:
     _override_user(uid, role)
     response = client.patch(f"/api/v1/tasks/{_TASK_ID}/status", json=_TASK_STATUS)
+    assert response.status_code == expected
+
+
+# ------------------------------------------------------------ remover task (edit)
+
+# Remover task exige ownership "edit": so orientador/coorientador do aluno; aluno e
+# barrado ja no gate de papel; coordenacao sem vinculo de orientacao e read-only.
+_DELETE_CASES = [
+    pytest.param("uid-orientador-A", "orientador", 200, id="orientador-do-aluno"),
+    pytest.param("uid-orientador-X", "orientador", 403, id="orientador-de-outro"),
+    pytest.param("uid-coord-pure", "coordenacao", 403, id="coordenacao-read-only"),
+    pytest.param("uid-coord-adv", "coordenacao", 200, id="coordenador-que-orienta"),
+    pytest.param("uid-coorientador-B", "orientador", 200, id="coorientador"),
+    pytest.param("uid-aluno", "aluno", 403, id="aluno-barrado"),
+]
+
+
+@pytest.mark.parametrize("uid, role, expected", _DELETE_CASES)
+def test_delete_ownership(client: TestClient, uid: str, role: str, expected: int) -> None:
+    _override_user(uid, role)
+    response = client.delete(f"/api/v1/tasks/{_TASK_ID}")
     assert response.status_code == expected
