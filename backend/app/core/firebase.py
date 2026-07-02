@@ -1,17 +1,5 @@
 """
 Inicialização do Firebase Admin SDK e utilitários de acesso ao Firestore.
-
-Responsabilidades:
-- Inicializar o firebase_admin com as credenciais lidas de backend/app/core/config.py
-  (FIREBASE_PROJECT_ID, FIREBASE_PRIVATE_KEY, FIREBASE_CLIENT_EMAIL) uma única vez no
-  lifespan do FastAPI.
-- Expor função `get_firestore_client() -> AsyncClient` retornando o cliente Firestore assíncrono
-  reutilizado por todos os repositórios.
-- Expor função `get_auth_client()` retornando o cliente firebase_admin.auth para verificação de
-  tokens e gestão de custom claims.
-- Expor função `get_storage_bucket()` retornando o bucket do Firebase Storage (configurado via
-  FIREBASE_STORAGE_BUCKET) usado pelo upload de comprovantes.
-- Garantir que o SDK seja encerrado corretamente no shutdown do lifespan.
 """
 
 from __future__ import annotations
@@ -19,7 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 import firebase_admin
-from firebase_admin import App, auth, credentials, firestore, storage
+from firebase_admin import auth, credentials, firestore, storage
 from google.cloud.firestore import Client
 from google.cloud.storage import Bucket
 
@@ -58,8 +46,6 @@ def _build_credentials() -> credentials.Certificate:
 
 
 def init_firebase() -> App:
-    """Inicializa o Firebase Admin SDK uma única vez e retorna a app default."""
-
     existing_app = _get_default_app()
     if existing_app is not None:
         return existing_app
@@ -72,8 +58,6 @@ def init_firebase() -> App:
 
 
 def shutdown_firebase() -> None:
-    """Encerra a app default do Firebase Admin SDK, se ela estiver ativa."""
-
     app = _get_default_app()
     if app is not None:
         firebase_admin.delete_app(app)
@@ -83,26 +67,24 @@ def is_initialized() -> bool:
     return _get_default_app() is not None
 
 
-def get_firestore_client() -> Client:
-    """Retorna o cliente Firestore reutilizando a app Firebase inicializada."""
+def get_firestore_client(app: App | None = None) -> Client:
+    """Retorna o cliente Firestore associado à app informada.
 
-    return firestore.client(app=init_firebase())
+    Seam de injeção para testes: passe uma app Firebase nomeada (ex: a app
+    de integração criada pela fixture `firestore_client`) para obter um
+    client apontando para o projeto de teste, sem tocar na app default de
+    produção/dev. Sem argumento, mantém o comportamento original
+    (usa/inicializa a app default via init_firebase()).
+    """
+
+    return firestore.client(app=app or init_firebase())
 
 
 def get_auth_client() -> auth.Client:
-    """Retorna o cliente Firebase Auth associado à app default."""
-
     return auth.Client(init_firebase())
 
 
 def get_storage_bucket() -> Bucket:
-    """Retorna o bucket do Firebase Storage (FIREBASE_STORAGE_BUCKET) da app default.
-
-    Raises:
-        RuntimeError: Se FIREBASE_STORAGE_BUCKET não estiver configurado — falha com
-            mensagem explícita em vez do ValueError opaco do firebase_admin.
-    """
-
     if not settings.firebase_storage_bucket:
         raise RuntimeError(
             "FIREBASE_STORAGE_BUCKET não configurado: upload de arquivos indisponível",
