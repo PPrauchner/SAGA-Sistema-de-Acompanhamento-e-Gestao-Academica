@@ -1,6 +1,6 @@
 import { API_URL } from "@/api/authApi";
 
-export type CoordinationTransferStatus = "pendente" | "aceita" | "rejeitada" | "cancelada" | "concluido";
+export type CoordinationTransferStatus = "pendente" | "rejeitada" | "cancelada" | "concluido";
 
 export interface CoordinationTransfer {
   id: string;
