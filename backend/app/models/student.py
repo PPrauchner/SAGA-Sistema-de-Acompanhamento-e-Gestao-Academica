@@ -40,7 +40,7 @@ class StudentCreateRequest(BaseModel):
     orientador_id: str
     coorientador_id: str | None = None
 
-    nivel: StudentLevel
+    nivel: StudentLevel = "mestrado"
     data_ingresso: datetime
     programa_id: str
 
