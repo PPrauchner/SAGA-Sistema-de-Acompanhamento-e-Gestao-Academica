@@ -214,7 +214,7 @@ async def test_aceite_troca_claims_roles_cria_advisor_e_revoga_tokens() -> None:
 
     resp = await service.accept_transfer("tr1", _advisor())
 
-    assert resp.status == "aceita"
+    assert resp.status == "concluido"
     assert auth.claims["adv"] == {"role": "coordenacao", "programa_id": "prog1"}
     assert auth.claims["coord"] == {"role": "orientador", "programa_id": "prog1"}
     assert users.store["adv"]["role"] == "coordenacao"
