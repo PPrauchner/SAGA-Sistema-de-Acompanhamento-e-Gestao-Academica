@@ -23,13 +23,23 @@ from backend.app.services.qualis_weights_service import QualisWeightsService
 router = APIRouter()
 
 
+def get_qualis_weights_service() -> QualisWeightsService:
+    """Provider do QualisWeightsService.
+
+    O construtor do service tem parâmetros injetáveis (ex.: names), incompatíveis com a
+    inspeção de dependência do FastAPI se usado diretamente em Depends; este provider
+    isola essa construção.
+    """
+    return QualisWeightsService()
+
+
 @router.post("/qualis-weights", status_code=status.HTTP_201_CREATED)
 @requires_role("coordenacao")
 @audit_operation
 async def set_qualis_weights(
     body: QualisWeightsUpdate,
     user: CurrentUser = Depends(get_current_user),
-    service: QualisWeightsService = Depends(QualisWeightsService),
+    service: QualisWeightsService = Depends(get_qualis_weights_service),
 ) -> dict:
     return await service.set_weights(user.programa_id, user.uid, body)
 
@@ -38,7 +48,7 @@ async def set_qualis_weights(
 @requires_role("coordenacao")
 async def get_qualis_weights(
     user: CurrentUser = Depends(get_current_user),
-    service: QualisWeightsService = Depends(QualisWeightsService),
+    service: QualisWeightsService = Depends(get_qualis_weights_service),
 ) -> dict:
     return await service.get_active_weights(user.programa_id)
 
@@ -47,6 +57,6 @@ async def get_qualis_weights(
 @requires_role("coordenacao")
 async def get_qualis_weights_history(
     user: CurrentUser = Depends(get_current_user),
-    service: QualisWeightsService = Depends(QualisWeightsService),
+    service: QualisWeightsService = Depends(get_qualis_weights_service),
 ) -> list[dict]:
     return await service.list_history(user.programa_id)
