@@ -30,7 +30,6 @@ interface ValidationItem {
 interface ExtensionRequest {
   id: string;
   aluno: string;
-  nivel: "Mestrado" | "Doutorado";
   orientador: string;
   motivo: string;
   prazoPrevisto: string;
@@ -87,12 +86,12 @@ const PRODUCAO_DATA = [
 ];
 
 const INTEGRALIZACAO_DATA = [
-  { ano: "2018", mestrado: 26, doutorado: 50, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2019", mestrado: 25, doutorado: 52, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2020", mestrado: 28, doutorado: 54, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2021", mestrado: 24, doutorado: 49, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2022", mestrado: 27, doutorado: 51, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2023", mestrado: 25, doutorado: 48, metaMestrado: 24, metaDoutorado: 48 },
+  { ano: "2018", meses: 26, meta: 24 },
+  { ano: "2019", meses: 25, meta: 24 },
+  { ano: "2020", meses: 28, meta: 24 },
+  { ano: "2021", meses: 24, meta: 24 },
+  { ano: "2022", meses: 27, meta: 24 },
+  { ano: "2023", meses: 25, meta: 24 },
 ];
 
 const VALIDATIONS: ValidationItem[] = [
@@ -105,10 +104,10 @@ const VALIDATIONS: ValidationItem[] = [
 ];
 
 const EXTENSIONS: ExtensionRequest[] = [
-  { id: "e1", aluno: "Marcos Vinícius Oliveira", nivel: "Mestrado", orientador: "Profa. Carla Mendes", motivo: "Problemas de saúde documentados", prazoPrevisto: "Dez/2024", novoPrazo: "Jun/2025", status: "em-analise", dataProtocolo: "20/05/2026" },
-  { id: "e2", aluno: "Patrícia Lima Farias", nivel: "Doutorado", orientador: "Prof. Rafael Costa", motivo: "Coleta de dados comprometida por pandemia", prazoPrevisto: "Mar/2025", novoPrazo: "Set/2025", status: "pendente", dataProtocolo: "25/05/2026" },
-  { id: "e3", aluno: "Diego Almeida Ramos", nivel: "Doutorado", orientador: "Prof. Diego Neri", motivo: "Mudança de escopo aprovada pelo orientador", prazoPrevisto: "Jun/2025", novoPrazo: "Dez/2025", status: "pendente", dataProtocolo: "28/05/2026" },
-  { id: "e4", aluno: "Camila Ferreira Luz", nivel: "Mestrado", orientador: "Profa. Mariana Torres", motivo: "Licença maternidade", prazoPrevisto: "Jul/2025", novoPrazo: "Jan/2026", status: "aprovada", dataProtocolo: "10/04/2026" },
+  { id: "e1", aluno: "Marcos Vinícius Oliveira", orientador: "Profa. Carla Mendes", motivo: "Problemas de saúde documentados", prazoPrevisto: "Dez/2024", novoPrazo: "Jun/2025", status: "em-analise", dataProtocolo: "20/05/2026" },
+  { id: "e2", aluno: "Patrícia Lima Farias", orientador: "Prof. Rafael Costa", motivo: "Coleta de dados comprometida por pandemia", prazoPrevisto: "Mar/2025", novoPrazo: "Set/2025", status: "pendente", dataProtocolo: "25/05/2026" },
+  { id: "e3", aluno: "Diego Almeida Ramos", orientador: "Prof. Diego Neri", motivo: "Mudança de escopo aprovada pelo orientador", prazoPrevisto: "Jun/2025", novoPrazo: "Dez/2025", status: "pendente", dataProtocolo: "28/05/2026" },
+  { id: "e4", aluno: "Camila Ferreira Luz", orientador: "Profa. Mariana Torres", motivo: "Licença maternidade", prazoPrevisto: "Jul/2025", novoPrazo: "Jan/2026", status: "aprovada", dataProtocolo: "10/04/2026" },
 ];
 
 const ALERTS: AlertItem[] = [
@@ -383,10 +382,8 @@ function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose:
               <XAxis dataKey="ano" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
               <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} domain={[20, 60]} unit=" m" />
               <Tooltip formatter={(v: number) => [`${v} meses`, ""]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              <ReferenceLine y={24} stroke="#123C7A" strokeDasharray="4 4" label={{ value: "Meta M", fill: "#123C7A", fontSize: 10 }} />
-              <ReferenceLine y={48} stroke="#8b5cf6" strokeDasharray="4 4" label={{ value: "Meta D", fill: "#8b5cf6", fontSize: 10 }} />
-              <Bar dataKey="mestrado" name="Mestrado (meses)" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-              <Bar dataKey="doutorado" name="Doutorado (meses)" fill="#8b5cf6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <ReferenceLine y={24} stroke="#123C7A" strokeDasharray="4 4" label={{ value: "Meta", fill: "#123C7A", fontSize: 10 }} />
+              <Bar dataKey="meses" name="Meses" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
           <div className="space-y-2">
@@ -395,12 +392,8 @@ function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose:
                 <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{d.ano}</span>
                 <div className="flex items-center gap-4">
                   <span style={{ fontSize: "12px" }}>
-                    <span style={{ color: "var(--muted-foreground)" }}>Mestrado: </span>
-                    <span style={{ fontWeight: 700, color: d.mestrado > d.metaMestrado ? "#dc2626" : "#1F8A70" }}>{d.mestrado}m</span>
-                  </span>
-                  <span style={{ fontSize: "12px" }}>
-                    <span style={{ color: "var(--muted-foreground)" }}>Doutorado: </span>
-                    <span style={{ fontWeight: 700, color: d.doutorado > d.metaDoutorado ? "#dc2626" : "#1F8A70" }}>{d.doutorado}m</span>
+                    <span style={{ color: "var(--muted-foreground)" }}>Tempo médio: </span>
+                    <span style={{ fontWeight: 700, color: d.meses > d.meta ? "#dc2626" : "#1F8A70" }}>{d.meses}m</span>
                   </span>
                 </div>
               </div>
@@ -550,9 +543,7 @@ function IntegralizacaoChart({ onReport }: { onReport: () => void }) {
           <Tooltip key="in-tip" formatter={(v: number) => [`${v} meses`, ""]} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
           <Legend key="in-leg" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
           <ReferenceLine key="in-rl1" y={24} stroke="#123C7A" strokeDasharray="4 4" strokeWidth={1.5} />
-          <ReferenceLine key="in-rl2" y={48} stroke="#8b5cf6" strokeDasharray="4 4" strokeWidth={1.5} />
-          <Bar key="in-b1" dataKey="mestrado" name="Mestrado" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-          <Bar key="in-b2" dataKey="doutorado" name="Doutorado" fill="#8b5cf6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          <Bar key="in-b1" dataKey="meses" name="Tempo médio" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
       </div>
@@ -706,9 +697,6 @@ function ExtensionRequestsSection() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{ext.aluno}</span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: ext.nivel === "Doutorado" ? "var(--tint-blue-bg)" : "var(--tint-violet-bg)", color: ext.nivel === "Doutorado" ? "var(--tint-blue-text)" : "var(--tint-violet-text)", border: `1px solid ${ext.nivel === "Doutorado" ? "var(--tint-blue-border)" : "var(--tint-violet-border)"}` }}>
-                      {ext.nivel}
-                    </span>
                     <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
                   </div>
                   <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>Orient.: {ext.orientador}</p>

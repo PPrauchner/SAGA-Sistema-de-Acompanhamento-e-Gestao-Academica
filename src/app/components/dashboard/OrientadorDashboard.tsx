@@ -19,7 +19,7 @@ type QA = "task" | "plano" | "producao" | "reuniao" | null;
 
 interface Student {
   id: string; name: string; init: string;
-  nivel: "Mestrado" | "Doutorado"; ingresso: string;
+  ingresso: string;
   prazo: string; prazoMeses: number;
   progress: number; creditos: number; creditosMax: number;
   producoes: number; producoesMin: number;
@@ -52,14 +52,14 @@ const ST: Record<StudentStatus, { label: string; color: string; bg: string; bord
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const STUDENTS: Student[] = [
-  { id: "1", name: "Ana Paula Costa", init: "AP", nivel: "Doutorado", ingresso: "2021", prazo: "Mar/2026", prazoMeses: 9, progress: 78, creditos: 52, creditosMax: 80, producoes: 4, producoesMin: 3, status: "qualificado", fase: "Escrita da Tese", ultimaAtual: "há 2 dias", proximo: "Entrega cap. 4", bolsa: "CNPq" },
-  { id: "2", name: "Carlos Eduardo Lima", init: "CE", nivel: "Mestrado", ingresso: "2023", prazo: "Jul/2025", prazoMeses: 1, progress: 45, creditos: 18, creditosMax: 30, producoes: 0, producoesMin: 1, status: "em-risco", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Relatório semestral", bolsa: "CAPES" },
-  { id: "3", name: "Fernanda Souza Gomes", init: "FS", nivel: "Doutorado", ingresso: "2020", prazo: "Dez/2025", prazoMeses: 6, progress: 92, creditos: 72, creditosMax: 80, producoes: 6, producoesMin: 3, status: "fase-defesa", fase: "Defesa", ultimaAtual: "ontem", proximo: "Agendar banca", bolsa: "FAPESP" },
-  { id: "4", name: "Marcos Vinícius Oliveira", init: "MV", nivel: "Mestrado", ingresso: "2022", prazo: "Dez/2024", prazoMeses: -6, progress: 30, creditos: 12, creditosMax: 30, producoes: 0, producoesMin: 1, status: "prorrogacao", fase: "Desenvolvimento", ultimaAtual: "há 3 semanas", proximo: "Formalizar prorrogação", bolsa: "Sem bolsa" },
-  { id: "5", name: "Juliana Mendes Martins", init: "JM", nivel: "Doutorado", ingresso: "2022", prazo: "Ago/2026", prazoMeses: 14, progress: 55, creditos: 44, creditosMax: 80, producoes: 2, producoesMin: 3, status: "regular", fase: "Experimentos", ultimaAtual: "há 3 dias", proximo: "Submissão artigo SBES", bolsa: "CAPES" },
-  { id: "6", name: "Ricardo Alves Santos", init: "RA", nivel: "Mestrado", ingresso: "2024", prazo: "Dez/2026", prazoMeses: 18, progress: 25, creditos: 8, creditosMax: 30, producoes: 0, producoesMin: 1, status: "regular", fase: "Revisão Bibliográfica", ultimaAtual: "há 5 dias", proximo: "Atualizar plano 2026/2", bolsa: "CNPq" },
-  { id: "7", name: "Patrícia Lima Farias", init: "PL", nivel: "Doutorado", ingresso: "2021", prazo: "Mar/2027", prazoMeses: 21, progress: 62, creditos: 48, creditosMax: 80, producoes: 3, producoesMin: 3, status: "qualificado", fase: "Experimentos", ultimaAtual: "há 4 dias", proximo: "Relatório anual", bolsa: "CNPq" },
-  { id: "8", name: "Bruno Carvalho Neves", init: "BC", nivel: "Doutorado", ingresso: "2022", prazo: "Jul/2026", prazoMeses: 13, progress: 48, creditos: 38, creditosMax: 80, producoes: 1, producoesMin: 3, status: "regular", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Reunião orientação", bolsa: "CAPES" },
+  { id: "1", name: "Ana Paula Costa", init: "AP", ingresso: "2021", prazo: "Mar/2026", prazoMeses: 9, progress: 78, creditos: 52, creditosMax: 80, producoes: 4, producoesMin: 3, status: "qualificado", fase: "Escrita da Dissertação", ultimaAtual: "há 2 dias", proximo: "Entrega cap. 4", bolsa: "CNPq" },
+  { id: "2", name: "Carlos Eduardo Lima", init: "CE", ingresso: "2023", prazo: "Jul/2025", prazoMeses: 1, progress: 45, creditos: 18, creditosMax: 30, producoes: 0, producoesMin: 1, status: "em-risco", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Relatório semestral", bolsa: "CAPES" },
+  { id: "3", name: "Fernanda Souza Gomes", init: "FS", ingresso: "2020", prazo: "Dez/2025", prazoMeses: 6, progress: 92, creditos: 72, creditosMax: 80, producoes: 6, producoesMin: 3, status: "fase-defesa", fase: "Defesa", ultimaAtual: "ontem", proximo: "Agendar banca", bolsa: "FAPESP" },
+  { id: "4", name: "Marcos Vinícius Oliveira", init: "MV", ingresso: "2022", prazo: "Dez/2024", prazoMeses: -6, progress: 30, creditos: 12, creditosMax: 30, producoes: 0, producoesMin: 1, status: "prorrogacao", fase: "Desenvolvimento", ultimaAtual: "há 3 semanas", proximo: "Formalizar prorrogação", bolsa: "Sem bolsa" },
+  { id: "5", name: "Juliana Mendes Martins", init: "JM", ingresso: "2022", prazo: "Ago/2026", prazoMeses: 14, progress: 55, creditos: 44, creditosMax: 80, producoes: 2, producoesMin: 3, status: "regular", fase: "Experimentos", ultimaAtual: "há 3 dias", proximo: "Submissão artigo SBES", bolsa: "CAPES" },
+  { id: "6", name: "Ricardo Alves Santos", init: "RA", ingresso: "2024", prazo: "Dez/2026", prazoMeses: 18, progress: 25, creditos: 8, creditosMax: 30, producoes: 0, producoesMin: 1, status: "regular", fase: "Revisão Bibliográfica", ultimaAtual: "há 5 dias", proximo: "Atualizar plano 2026/2", bolsa: "CNPq" },
+  { id: "7", name: "Patrícia Lima Farias", init: "PL", ingresso: "2021", prazo: "Mar/2027", prazoMeses: 21, progress: 62, creditos: 48, creditosMax: 80, producoes: 3, producoesMin: 3, status: "qualificado", fase: "Experimentos", ultimaAtual: "há 4 dias", proximo: "Relatório anual", bolsa: "CNPq" },
+  { id: "8", name: "Bruno Carvalho Neves", init: "BC", ingresso: "2022", prazo: "Jul/2026", prazoMeses: 13, progress: 48, creditos: 38, creditosMax: 80, producoes: 1, producoesMin: 3, status: "regular", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Reunião orientação", bolsa: "CAPES" },
 ];
 
 const REVIEWS: Review[] = [
@@ -171,9 +171,6 @@ function StudentModal({ student: s, onClose }: { student: Student; onClose: () =
             <div>
               <p style={{ fontSize: "18px", fontWeight: 800, color: sc.color }}>{s.name}</p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="rounded-full px-2 py-0.5" style={{ fontSize: "10px", fontWeight: 700, color: sc.color, background: "rgba(255,255,255,0.6)" }}>
-                  {s.nivel}
-                </span>
                 <span style={{ fontSize: "12px", color: sc.color, opacity: 0.75 }}>Ingresso: {s.ingresso} · {s.bolsa}</span>
               </div>
             </div>
@@ -456,12 +453,8 @@ function QuickActionModal({ type, onClose }: { type: Exclude<QA, null>; onClose:
 
 function KpiCards({ total, emRisco, qualificados, defesa, prorrogacao }: OrientadorStatsProps) {
   const atRisk = emRisco + prorrogacao;
-  // Doutorado/Mestrado counts are not returned by the API yet, keeping placeholder logic for sub-text
-  const dout = Math.round(total * 0.6); 
-  const mest = total - dout;
-
   const cards = [
-    { icon: <Users size={20} />, label: "Total de Orientandos", value: total, sub: `${dout} doutorado · ${mest} mestrado`, color: "#123C7A", bg: "#eef3fc" },
+    { icon: <Users size={20} />, label: "Total de Orientandos", value: total, sub: "Orientandos ativos", color: "#123C7A", bg: "#eef3fc" },
     { icon: <AlertTriangle size={20} />, label: "Em Risco / Prorrogação", value: atRisk, sub: "Requerem atenção imediata", color: "#dc2626", bg: "#fef2f2" },
     { icon: <GraduationCap size={20} />, label: "Qualificados", value: qualificados, sub: "Fase avançada de pesquisa", color: "#123C7A", bg: "#eef3fc" },
     { icon: <Star size={20} />, label: "Aptos à Defesa", value: defesa, sub: "Prontos para a banca", color: "#8b5cf6", bg: "#f5f3ff" },
@@ -571,7 +564,7 @@ function StudentTable({ onSelect }: { onSelect: (s: Student) => void }) {
                     <Avt init={s.init} size={32} color={ST[s.status].color} />
                     <div>
                       <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap" }}>{s.name}</p>
-                      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{s.nivel} · {s.ingresso} · {s.bolsa}</p>
+                      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Ingresso {s.ingresso} · {s.bolsa}</p>
                     </div>
                   </div>
                 </td>
@@ -734,7 +727,7 @@ function WorkPlanMonitoring({ onSelect }: { onSelect: (s: Student) => void }) {
                 <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 128 }}>
                   {s.name}
                 </p>
-                <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{s.nivel} · {s.ingresso}</p>
+                <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Ingresso {s.ingresso}</p>
               </div>
 
               <div className="flex items-center gap-1.5" style={{ minWidth: 130, flexShrink: 0 }}>
@@ -943,7 +936,7 @@ function AttentionStudents({
                   <Avt init={s.init} size={40} color={sc.color} />
                   <div>
                     <p style={{ fontSize: "14px", fontWeight: 800, color: sc.color }}>{s.name}</p>
-                    <p style={{ fontSize: "11px", color: sc.color, opacity: 0.75 }}>{s.nivel} · Ingresso {s.ingresso} · {s.bolsa}</p>
+                    <p style={{ fontSize: "11px", color: sc.color, opacity: 0.75 }}>Ingresso {s.ingresso} · {s.bolsa}</p>
                   </div>
                 </div>
                 <SBadge status={s.status} />

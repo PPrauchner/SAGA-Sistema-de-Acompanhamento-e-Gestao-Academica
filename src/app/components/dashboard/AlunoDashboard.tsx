@@ -49,7 +49,7 @@ const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: str
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const CHECKLIST: ChecklistItem[] = [
   { id: "creditos", label: "Créditos", icon: "📚", required: 60, completed: 42, unit: "créditos", details: "42 de 60 créditos integralizados. Faltam 18 créditos para a conclusão. Ritmo atual é adequado para finalizar até Dez/2026 cursando 2 disciplinas por semestre." },
-  { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: 1, unit: "exame", details: "Proficiência em Língua Inglesa aprovada em Março/2023. Resultado TOEFL: 87 pontos (mínimo exigido pelo programa: 60 pontos). Válida para toda a duração do doutorado." },
+  { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: 1, unit: "exame", details: "Proficiência em Língua Inglesa aprovada em Março/2023. Resultado TOEFL: 87 pontos (mínimo exigido pelo programa: 60 pontos). Válida para toda a duração do curso." },
   { id: "qualificacao", label: "Qualificação", icon: "🎤", required: 1, completed: 1, unit: "exame", details: "Exame de Qualificação aprovado em Agosto/2024. Banca: Profa. Dra. Carla Mendes (presidente), Prof. Dr. João Silva, Prof. Dr. Pedro Costa. Resultado: Aprovado com Louvor." },
   { id: "producoes", label: "Produções", icon: "📄", required: 3, completed: 2, unit: "artigos Qualis", details: "2 de 3 artigos obrigatórios publicados. Falta 1 artigo em periódico Qualis A1 ou A2. Este é o principal fator de risco da situação atual — prazo crítico para submissão." },
   { id: "defesa", label: "Defesa", icon: "🏛", required: 1, completed: 0, unit: "defesa", details: "Defesa da tese ainda não agendada. Pré-requisitos: integralizar todos os créditos e publicar os 3 artigos exigidos. Previsão de marcação: Julho/2026." },
@@ -81,7 +81,7 @@ const DEADLINES: Deadline[] = [
   { id: 3, label: "Submissão SBES 2026", date: "30/06/2026", days: 28, type: "urgente", icon: "📄" },
   { id: 4, label: "Plano de Trabalho 2026/2", date: "01/07/2026", days: 29, type: "normal", icon: "📅" },
   { id: 5, label: "Inscrição Disciplina 2026/2", date: "05/07/2026", days: 33, type: "normal", icon: "📚" },
-  { id: 6, label: "Prazo Máximo do Doutorado", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
+  { id: 6, label: "Prazo Máximo do Curso", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
 ];
 
 const ACTIVITIES: CreditActivity[] = [
