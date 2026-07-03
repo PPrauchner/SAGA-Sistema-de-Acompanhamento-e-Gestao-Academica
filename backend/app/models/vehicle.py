@@ -33,14 +33,14 @@ RelevanceLevel = Literal["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "SC"]
 # por programa (vigente_desde/alterado_por/alterado_em).
 PESO_POR_NIVEL: dict[RelevanceLevel, float] = {
     "A1": 1.0,
-    "A2": 0.85,
-    "A3": 0.7,
-    "A4": 0.55,
-    "A5": 0.45,
-    "A6": 0.35,
-    "A7": 0.25,
-    "A8": 0.15,
-    "SC": 0.1,
+    "A2": 0.9,
+    "A3": 0.8,
+    "A4": 0.7,
+    "A5": 0.6,
+    "A6": 0.5,
+    "A7": 0.4,
+    "A8": 0.3,
+    "SC": 0.0,
 }
 
 
