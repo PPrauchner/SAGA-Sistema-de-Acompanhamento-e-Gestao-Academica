@@ -58,7 +58,11 @@ function statusCfg(status: string): StatusConfig {
 function formatDate(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("pt-BR");
+  // data_realizacao e uma data de calendario armazenada a meia-noite UTC; formata em UTC
+  // para nao deslocar um dia em fusos negativos (bug #268).
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 interface FormState {
@@ -156,7 +160,9 @@ export function ActivitiesPage() {
       const result = await createActivity(token, {
         tipo_id: form.tipo_id,
         descricao: form.descricao,
-        data_realizacao: form.data_realizacao,
+        // Envia a data como meia-noite UTC explicita para nao depender da interpretacao
+        // de datetime naive no backend (bug #268).
+        data_realizacao: `${form.data_realizacao}T00:00:00Z`,
         comprovante_url: null,
         status: form.status,
       });
