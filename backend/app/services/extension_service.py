@@ -1,120 +1,98 @@
 """
-Serviço de gerenciamento do ciclo de vida das prorrogações de prazos.
+Serviço de gerenciamento do ciclo de vida das prorrogações de prazo.
 
-Contrato de identidade dos parâmetros student_id:
-- create_extension        → recebe uid (do token JWT via current_user.uid)
-                            → resolve uid→doc_id via _resolve_student_doc_id
-- list_by_student         → recebe doc_id (de /auth/me → studentId no frontend)
-- add_review              → recebe doc_id (montado pelo frontend a partir de /auth/me)
-- process_decision        → recebe doc_id (idem)
+Responsabilidades:
+- Orquestrar solicitação (aluno), parecer (orientador) e decisão (coordenação),
+  usando a coleção raiz `extensions/` (ADR-0006).
+- Recalcular `students.prazo_final` na aprovação a partir da `nova_data` pedida
+  pelo aluno (fluxo orientado a data — data-model §4), de forma idempotente.
+- Respeitar `programs.max_prorrogacoes` (fonte canônica) no gate de limite.
 
-Correção C1: _resolve_student_doc_id removida dos métodos que recebem doc_id
-diretamente, eliminando o 404 que impedia o aluno de ver as próprias prorrogações.
-
-Correção C3: max_prorrogacoes deixou de ser uma única chave de config
-sobrecarregada com dois significados diferentes (nº de aprovações já
-concedidas vs. nº de semestres pedidos em UMA solicitação). Agora são duas
-chaves distintas em config/program:
-  - max_prorrogacoes_aprovadas     → usado em _check_limit
-  - max_semestres_por_solicitacao  → usado em create_extension
-Mantém fallback para a chave antiga "max_prorrogacoes" por compatibilidade
-com documentos de config já existentes, mas o default de
-max_semestres_por_solicitacao passa a ser 2 (não 3), alinhado com o
-validator de ExtensionDocument.semestres_solicitados (que só aceita 1 ou 2)
-— antes, com o default antigo de 3, um pedido com semestres_solicitados=3
-passava pelo gate do service e só quebrava dentro do Pydantic, como
-ValueError não tratado (ver correção C4 abaixo).
-
-Correção C4: ExtensionDocument(...) pode levantar pydantic.ValidationError
-(via o validator de semestres_solicitados) mesmo depois de passar pelos
-gates de negócio do service, caso a config permita um valor que o schema
-do documento não aceita. Antes isso não era capturado e virava 500. Agora
-é convertido em HTTPException 422 com o detail da validação.
+Identidade dos parâmetros:
+- `requester_uid`/`orientador_uid`/`coordinator_uid` são uids do Firebase Auth
+  (de current_user.uid). O aluno é resolvido uid → doc id via StudentRepository;
+  o orientador é resolvido uid → doc id via AdvisorRepository. `students.orientador_id`
+  referencia o doc id de `advisors/` (não o uid).
 """
 
-import asyncio
+from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import Optional
+from enum import Enum
 
 from fastapi import HTTPException, status
-from google.cloud import firestore
-from pydantic import ValidationError
 
+from backend.app.core.auth import CurrentUser
 from backend.app.models.extension import (
     DecisionRequest,
     ExtensionCreateRequest,
     ExtensionDocument,
     ExtensionResponse,
     ExtensionStatus,
+    ReviewRequest,
 )
+from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.extension_repository import ExtensionRepository
+from backend.app.repositories.program_repository import ProgramRepository
+from backend.app.repositories.student_repository import StudentRepository
 
-DEFAULT_MAX_PRORROGACOES_APROVADAS = 3
-DEFAULT_MAX_SEMESTRES_POR_SOLICITACAO = 2
-DEFAULT_DURACAO_MESES = 6
-
-
-def _months_to_timedelta(months: int):
-    from datetime import timedelta
-    return timedelta(days=months * 30)
+DEFAULT_MAX_PRORROGACOES = 1
+DEFAULT_PROGRAMA_ID = "prog_default"
+SITUACAO_EM_PRORROGACAO = "em_prorrogacao"
 
 
-def _to_response(doc_id: str, data: dict) -> ExtensionResponse:
-    return ExtensionResponse(id=doc_id, **data)
+def _dump_for_firestore(doc: ExtensionDocument) -> dict:
+    """Serializa o documento para o Firestore com enums como string."""
+    data = doc.model_dump()
+    for key in ("status", "tipo"):
+        value = data.get(key)
+        data[key] = getattr(value, "value", value)
+    return data
+
+
+def _to_response(data: dict, student_nome: str | None = None) -> ExtensionResponse:
+    """Constrói a resposta pública a partir do documento (que já inclui `id`)."""
+    payload = dict(data)
+    if student_nome is not None:
+        payload["student_nome"] = student_nome
+    return ExtensionResponse(**payload)
+
+
+def _sort_by_created_desc(items: list[dict]) -> list[dict]:
+    """Ordena por created_at desc em memória."""
+    return sorted(items, key=lambda d: d.get("created_at") or "", reverse=True)
 
 
 class ExtensionService:
-    """Serviço de gerenciamento do ciclo de vida das prorrogações de prazos."""
+    """Serviço do ciclo de vida das prorrogações de prazo."""
 
-    def __init__(self, repository: Optional[ExtensionRepository] = None) -> None:
-        self._repo = repository if repository is not None else ExtensionRepository()
+    def __init__(
+        self,
+        repository: ExtensionRepository | None = None,
+        students: StudentRepository | None = None,
+        advisors: AdvisorRepository | None = None,
+        programs: ProgramRepository | None = None,
+    ) -> None:
+        self._repo = repository or ExtensionRepository()
+        self._students = students or StudentRepository()
+        self._advisors = advisors or AdvisorRepository()
+        self._programs = programs or ProgramRepository()
 
     # ------------------------------------------------------------------
     # Helpers internos
     # ------------------------------------------------------------------
 
-    async def _resolve_student_doc_id(self, uid: str) -> str:
-        """
-        Resolve uid → doc id da coleção students (chaveada por auto-id).
-        Usado APENAS em create_extension, onde student_id vem do token JWT.
-        Lança 404 se o aluno não existir.
-        """
-        doc_id = await self._repo.get_student_doc_id_by_uid(uid)
-        if doc_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Aluno não encontrado.",
-            )
-        return doc_id
+    async def _resolve_advisor_id(self, uid: str) -> str | None:
+        """Resolve uid → doc id de `advisors/` (None se o usuário não orienta)."""
+        results = await self._advisors.query(filters=[("uid", "==", uid)], limit=1)
+        return results[0]["id"] if results else None
 
-    async def _check_limit(self, student_doc_id: str, program_config: dict) -> None:
-        # C3: chave nova, com fallback para a antiga (compat com config já existente).
-        max_allowed: int = program_config.get(
-            "max_prorrogacoes_aprovadas",
-            program_config.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES_APROVADAS),
-        )
-        approved_query = (
-            self._repo.extensions_col(student_doc_id)
-            .where("status", "==", ExtensionStatus.APROVADA.value)
-        )
-        approved_docs = [d async for d in approved_query.stream()]
-        if len(approved_docs) >= max_allowed:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Limite de {max_allowed} prorrogacao(oes) aprovada(s) ja atingido.",
-            )
-
-    async def _check_no_pending(self, student_doc_id: str) -> None:
-        pending_query = (
-            self._repo.extensions_col(student_doc_id)
-            .where("status", "==", ExtensionStatus.PENDENTE.value)
-        )
-        pending_docs = [d async for d in pending_query.stream()]
-        if pending_docs:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Ja existe uma solicitacao pendente para este aluno.",
-            )
+    async def _max_prorrogacoes(self, programa_id: str | None) -> int:
+        """Lê `max_prorrogacoes` do programa (fonte canônica), default 1."""
+        program = await self._programs.get_config(programa_id or DEFAULT_PROGRAMA_ID)
+        if not program:
+            return DEFAULT_MAX_PRORROGACOES
+        return program.get("max_prorrogacoes", DEFAULT_MAX_PRORROGACOES)
 
     # ------------------------------------------------------------------
     # Casos de uso
@@ -122,224 +100,187 @@ class ExtensionService:
 
     async def create_extension(
         self,
-        student_id: str,
         payload: ExtensionCreateRequest,
-        requesting_uid: str,
+        requester_uid: str,
     ) -> ExtensionResponse:
-        # Único método que recebe uid (de current_user.uid no router).
-        # _resolve_student_doc_id é correto aqui.
-        student_doc_id = await self._resolve_student_doc_id(student_id)
+        """Cria uma solicitação de prorrogação (status 'pendente') para o aluno.
 
-        program_config = await self._repo.get_program_config()
+        Args:
+            payload: Dados da solicitação (tipo, motivo, plano, nova_data).
+            requester_uid: uid do aluno autenticado.
 
-        # C3: chave nova (semestres por solicitação), com fallback para a
-        # antiga só se ela estiver definida explicitamente na config —
-        # o default agora é DEFAULT_MAX_SEMESTRES_POR_SOLICITACAO (2), que
-        # bate com o validator de ExtensionDocument (aceita apenas 1 ou 2).
-        max_semestres: int = program_config.get(
-            "max_semestres_por_solicitacao",
-            program_config.get("max_prorrogacoes", DEFAULT_MAX_SEMESTRES_POR_SOLICITACAO),
+        Returns:
+            A prorrogação criada.
+
+        Raises:
+            HTTPException: 404 se o aluno não existir; 409 se já houver
+                solicitação pendente ou o limite de prorrogações for atingido.
+        """
+        student = await self._students.get_by_uid(requester_uid)
+        if student is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado.")
+
+        student_id = student["id"]
+        programa_id = student.get("programa_id")
+
+        if await self._repo.has_pending(student_id):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Já existe uma solicitação de prorrogação pendente.",
+            )
+
+        max_allowed = await self._max_prorrogacoes(programa_id)
+        if await self._repo.count_approved(student_id) >= max_allowed:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Limite de {max_allowed} prorrogação(ões) aprovada(s) já atingido.",
+            )
+
+        doc = ExtensionDocument(
+            student_id=student_id,
+            requester_id=requester_uid,
+            programa_id=programa_id,
+            tipo=payload.tipo,
+            motivo=payload.motivo,
+            plano_atualizado=payload.plano_atualizado,
+            status=ExtensionStatus.PENDENTE,
+            nova_data=payload.nova_data,
+            data_atual=student.get("prazo_final"),
+            created_at=datetime.now(tz=timezone.utc),
         )
-        if payload.semestres_solicitados > max_semestres:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"semestres_solicitados excede o máximo permitido pelo programa ({max_semestres}).",
-            )
-
-        await self._check_no_pending(student_doc_id)
-        await self._check_limit(student_doc_id, program_config)
-
-        # C4: ExtensionDocument tem validação própria (ex: semestres_solicitados
-        # só aceita 1 ou 2) que pode rejeitar um valor que já passou pelos
-        # gates acima (caso a config permita algo fora desse conjunto).
-        # Isso é erro de entrada do cliente, não erro interno — vira 422.
-        try:
-            doc_model = ExtensionDocument(
-                aluno_id=student_doc_id,
-                motivo=payload.motivo,
-                plano_atualizado=payload.plano_atualizado,
-                semestres_solicitados=payload.semestres_solicitados,
-                status=ExtensionStatus.PENDENTE,
-                criado_em=datetime.now(tz=timezone.utc),
-            )
-        except ValidationError as exc:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=exc.errors(),
-            ) from exc
-
-        doc_data = doc_model.model_dump()
-        doc_data["status"] = doc_data["status"].value
-
-        new_ref = self._repo.extensions_col(student_doc_id).document()
-        await new_ref.set(doc_data)
-
-        return _to_response(new_ref.id, doc_data)
+        data = _dump_for_firestore(doc)
+        new_id = await self._repo.create_extension(data)
+        return _to_response({**data, "id": new_id})
 
     async def add_review(
         self,
-        student_id: str,
         extension_id: str,
-        parecer: str,
+        payload: ReviewRequest,
         orientador_uid: str,
     ) -> ExtensionResponse:
-        # C1: student_id já é doc_id (vem do frontend via /auth/me).
-        # Resolução uid→doc_id removida — evita 404 espúrio.
-        student_doc_id = student_id
+        """Registra o parecer do orientador (campo, não muda o status).
 
-        student_snap = await self._repo.student_ref(student_doc_id).get()
-        if not student_snap.exists:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
+        Args:
+            extension_id: Doc id da prorrogação.
+            payload: Parecer técnico do orientador.
+            orientador_uid: uid do orientador autenticado.
 
-        student_data: dict = student_snap.to_dict()
-        advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
+        Returns:
+            A prorrogação com o parecer registrado.
 
-        if student_data.get("orientador_id") != advisor_doc_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Voce nao e o orientador deste discente.",
-            )
-
-        ext_ref = self._repo.extensions_col(student_doc_id).document(extension_id)
-        ext_snap = await ext_ref.get()
-        if not ext_snap.exists:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogacao nao encontrada.")
-
-        ext_data: dict = ext_snap.to_dict()
-        if ext_data.get("status") != ExtensionStatus.PENDENTE.value:
+        Raises:
+            HTTPException: 404 se a prorrogação/aluno não existir; 403 se o
+                usuário não for o orientador do aluno; 400 se não estiver pendente.
+        """
+        ext = await self._repo.get_extension(extension_id)
+        if ext is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogação não encontrada.")
+        if ext.get("status") != ExtensionStatus.PENDENTE.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Apenas prorrogacoes pendentes podem receber parecer.",
+                detail="Apenas prorrogações pendentes podem receber parecer.",
             )
 
-        await ext_ref.update({"parecer_orientador": parecer})
-        ext_data["parecer_orientador"] = parecer
+        student = await self._students.get(ext["student_id"])
+        if student is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado.")
 
-        return _to_response(extension_id, ext_data)
+        advisor_id = await self._resolve_advisor_id(orientador_uid)
+        if advisor_id is None or student.get("orientador_id") != advisor_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não é o orientador deste discente.",
+            )
+
+        await self._repo.update_extension(extension_id, {"parecer_orientador": payload.parecer_orientador})
+        return _to_response({**ext, "parecer_orientador": payload.parecer_orientador})
 
     async def process_decision(
         self,
-        student_id: str,
         extension_id: str,
         payload: DecisionRequest,
         coordinator_uid: str,
     ) -> ExtensionResponse:
-        # C1: student_id já é doc_id (vem do frontend via /auth/me).
-        # Resolução uid→doc_id removida — evita 404 espúrio.
-        student_doc_id = student_id
+        """Homologa a decisão da coordenação (aprovar/rejeitar).
 
-        # Resolve referências síncronas reais para uso dentro da transação.
-        ext_ref_sync     = self._repo.extensions_col(student_doc_id).document(extension_id).sync_ref
-        student_ref_sync = self._repo.student_ref(student_doc_id).sync_ref
+        Na aprovação, recalcula `students.prazo_final` = `nova_data` solicitada
+        (idempotente, pois é valor absoluto) e marca o aluno em prorrogação.
 
-        program_config = await self._repo.get_program_config()
-        duracao_meses: int = program_config.get("duracao_prorrogacao_meses", DEFAULT_DURACAO_MESES)
+        Args:
+            extension_id: Doc id da prorrogação.
+            payload: Decisão (aprovar/rejeitar).
+            coordinator_uid: uid da coordenação.
 
-        # @firestore.transactional decora função SÍNCRONA — correto para Admin SDK.
-        @firestore.transactional
-        def _run_transaction(transaction) -> dict:
-            ext_snap     = transaction.get(ext_ref_sync)
-            student_snap = transaction.get(student_ref_sync)
+        Returns:
+            A prorrogação deliberada (aprovada ou rejeitada).
 
-            if not ext_snap.exists:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogacao nao encontrada.")
-            if not student_snap.exists:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado.")
-
-            ext_data:     dict = ext_snap.to_dict()
-            student_data: dict = student_snap.to_dict()
-
-            if ext_data.get("status") != ExtensionStatus.PENDENTE.value:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Apenas prorrogacoes pendentes podem ser deliberadas.",
-                )
-
-            now = datetime.now(tz=timezone.utc)
-
-            if payload.aprovado:
-                semestres: int = ext_data["semestres_solicitados"]
-                delta = _months_to_timedelta(semestres * duracao_meses)
-
-                prazo_anterior: Optional[datetime] = student_data.get("prazo_final")
-                if prazo_anterior is None:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="O aluno nao possui prazo_final definido.",
-                    )
-
-                prazo_novo = prazo_anterior + delta
-
-                ext_updates = {
-                    "status":       ExtensionStatus.APROVADA.value,
-                    "aprovado_por": coordinator_uid,
-                    "aprovado_em":  now,
-                    "prazo_novo":   prazo_novo,
-                }
-                student_updates = {
-                    "situacao_registrada": "em_prorrogacao",
-                    "prazo_final":         prazo_novo,
-                }
-
-                transaction.update(ext_ref_sync,     ext_updates)
-                transaction.update(student_ref_sync, student_updates)
-                ext_data.update(ext_updates)
-            else:
-                ext_updates = {"status": ExtensionStatus.REJEITADA.value}
-                transaction.update(ext_ref_sync, ext_updates)
-                ext_data.update(ext_updates)
-
-            return ext_data
-
-        db = self._repo.transaction()
-        final_data = await asyncio.to_thread(_run_transaction, db.transaction())
-
-        return _to_response(extension_id, final_data)
-
-    async def list_by_student(self, student_doc_id: str) -> list[ExtensionResponse]:
-        # C1: student_doc_id já é o doc_id vindo de /auth/me → studentId no frontend.
-        # Resolução uid→doc_id removida — era a causa do 404 que impedia o aluno
-        # de ver as próprias prorrogações.
-        docs = [
-            d async for d in self._repo.extensions_col(student_doc_id)
-            .order_by("criado_em", direction=firestore.Query.DESCENDING)
-            .stream()
-        ]
-        return [_to_response(d.id, d.to_dict()) for d in docs]
-
-    async def list_pending_for_advisor(self, orientador_uid: str) -> list[ExtensionResponse]:
-        advisor_doc_id = await self._repo.get_advisor_doc_id_by_uid(orientador_uid)
-        if advisor_doc_id is None:
-            return []
-
-        def _fetch_students() -> list:
-            return list(
-                self._repo._db
-                .collection("students")
-                .where("orientador_id", "==", advisor_doc_id)
-                .stream()
+        Raises:
+            HTTPException: 404 se a prorrogação/aluno não existir; 400 se não
+                estiver pendente.
+        """
+        ext = await self._repo.get_extension(extension_id)
+        if ext is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogação não encontrada.")
+        if ext.get("status") != ExtensionStatus.PENDENTE.value:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Apenas prorrogações pendentes podem ser deliberadas.",
             )
 
-        student_docs = await asyncio.to_thread(_fetch_students)
+        student = await self._students.get(ext["student_id"])
+        if student is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado.")
 
-        results: list[ExtensionResponse] = []
-        for student_doc in student_docs:
-            # student_doc.id já é o doc id real — sem necessidade de resolução.
-            pending_docs = [
-                d async for d in
-                self._repo.extensions_col(student_doc.id)
-                .where("status", "==", ExtensionStatus.PENDENTE.value)
-                .stream()
+        now = datetime.now(tz=timezone.utc)
+
+        if payload.acao == "aprovar":
+            nova_data = ext["nova_data"]
+            # Idempotente: prazo_final absoluto (= nova_data), não incremental.
+            await self._students.update(
+                ext["student_id"],
+                {"prazo_final": nova_data, "situacao_registrada": SITUACAO_EM_PRORROGACAO},
+            )
+            updates = {
+                "status": ExtensionStatus.APROVADA.value,
+                "prazo_novo": nova_data,
+                "aprovado_por": coordinator_uid,
+                "aprovado_em": now,
+            }
+        else:
+            updates = {"status": ExtensionStatus.REJEITADA.value}
+
+        await self._repo.update_extension(extension_id, updates)
+        return _to_response({**ext, **updates})
+
+    async def list_for_user(self, user: CurrentUser) -> list[ExtensionResponse]:
+        """Lista prorrogações conforme o papel (Spec 08 — GET /extensions).
+
+        Aluno vê as próprias; orientador vê as dos seus orientandos; coordenação
+        vê todas do seu programa. Cada item é enriquecido com o nome do aluno.
+        """
+        if user.role == "aluno":
+            student = await self._students.get_by_uid(user.uid)
+            if student is None:
+                return []
+            exts = await self._repo.list_by_student(student["id"])
+            nome_by_id = {student["id"]: student.get("nome")}
+        elif user.role == "orientador":
+            advisor_id = await self._resolve_advisor_id(user.uid)
+            if advisor_id is None:
+                return []
+            students = [
+                s for s in await self._students.list_all()
+                if s.get("orientador_id") == advisor_id
             ]
-            for ext_doc in pending_docs:
-                results.append(_to_response(ext_doc.id, ext_doc.to_dict()))
+            nome_by_id = {s["id"]: s.get("nome") for s in students}
+            exts = [
+                e for e in _sort_by_created_desc(await self._repo.list_all())
+                if e.get("student_id") in nome_by_id
+            ]
+        else:  # coordenação / adm
+            nome_by_id = {s["id"]: s.get("nome") for s in await self._students.list_all()}
+            exts = _sort_by_created_desc(await self._repo.list_all())
+            if user.programa_id:
+                exts = [e for e in exts if e.get("programa_id") == user.programa_id]
 
-        return results
-
-    async def list_all_pending(self) -> list[ExtensionResponse]:
-        query = (
-            self._repo.collection_group_extensions()
-            .where("status", "==", ExtensionStatus.PENDENTE.value)
-            .order_by("criado_em", direction=firestore.Query.ASCENDING)
-        )
-        return [_to_response(d.id, d.to_dict()) async for d in query.stream()]
+        return [_to_response(e, nome_by_id.get(e.get("student_id"))) for e in exts]
