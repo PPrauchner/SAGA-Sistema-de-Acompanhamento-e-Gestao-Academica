@@ -1,8 +1,10 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { CheckCircle, ChevronLeft, ChevronRight, Search, XCircle } from "lucide-react";
+import { CheckCircle, ChevronLeft, ChevronRight, XCircle } from "lucide-react";
 
 import {
+  getAuditFilterOptions,
   getAuditLogs,
+  type AuditFilterOptions,
   type AuditLog,
   type AuditLogFilters,
   type AuditLogPage,
@@ -52,6 +54,7 @@ export function AuditPage() {
   const [appliedFilters, setAppliedFilters] = useState<AuditLogFilters>(emptyFilters);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<AuditLogPage | null>(null);
+  const [options, setOptions] = useState<AuditFilterOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -79,6 +82,23 @@ export function AuditPage() {
     if (token) void loadData(token);
   }, [token, loadData]);
 
+  // Carrega as opções de filtro (facetas) uma vez; se falhar, os dropdowns ficam só com a
+  // opção "Todos" e a listagem de logs continua funcionando.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    getAuditFilterOptions(token)
+      .then((opts) => {
+        if (!cancelled) setOptions(opts);
+      })
+      .catch(() => {
+        /* filtros por seleção indisponíveis; não bloqueia a página */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
   function applyFilters(event: FormEvent): void {
     event.preventDefault();
     setPage(1);
@@ -102,70 +122,102 @@ export function AuditPage() {
     color: "var(--foreground)",
   } as const;
 
+  const labelStyle = {
+    fontSize: "11px",
+    fontWeight: 600,
+    color: "var(--muted-foreground)",
+  } as const;
+
   return (
     <div>
       <div className="mb-6">
         <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Logs de Auditoria</h1>
-        <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
-          Registro imutável das operações do sistema (aspecto A02)
-        </p>
       </div>
 
       <form onSubmit={applyFilters} className="flex items-end gap-3 mb-4 flex-wrap">
-        <div className="relative flex-1 min-w-[180px]">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2"
-            style={{ color: "var(--muted-foreground)" }}
-          />
-          <input
-            placeholder="Operação (ex: create_student)"
+        <label className="flex flex-col gap-1" style={labelStyle}>
+          Operação
+          <select
             value={form.operacao}
             onChange={(e) => setForm({ ...form, operacao: e.target.value })}
-            className="w-full rounded-xl pl-9 pr-4 py-2 outline-none"
+            className="rounded-xl px-3 py-2 outline-none min-w-[180px]"
+            style={inputStyle}
+          >
+            <option value="">Todas as operações</option>
+            {options?.operacoes.map((op) => (
+              <option key={op} value={op}>
+                {op}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1" style={labelStyle}>
+          Usuário
+          <select
+            value={form.usuario_id}
+            onChange={(e) => setForm({ ...form, usuario_id: e.target.value })}
+            className="rounded-xl px-3 py-2 outline-none min-w-[160px]"
+            style={inputStyle}
+          >
+            <option value="">Todos os usuários</option>
+            {options?.usuarios.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.nome}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1" style={labelStyle}>
+          Módulo
+          <select
+            value={form.modulo}
+            onChange={(e) => setForm({ ...form, modulo: e.target.value })}
+            className="rounded-xl px-3 py-2 outline-none min-w-[160px]"
+            style={inputStyle}
+          >
+            <option value="">Todos os módulos</option>
+            {options?.modulos.map((m) => (
+              <option key={m} value={m}>
+                {m}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1" style={labelStyle}>
+          Status
+          <select
+            value={form.resultado_status}
+            onChange={(e) =>
+              setForm({ ...form, resultado_status: e.target.value as AuditLogFilters["resultado_status"] })
+            }
+            className="rounded-xl px-3 py-2 outline-none"
+            style={inputStyle}
+          >
+            <option value="">Todos os status</option>
+            <option value="sucesso">Sucesso</option>
+            <option value="erro">Erro</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1" style={labelStyle}>
+          Data inicial
+          <input
+            type="date"
+            value={form.data_inicio}
+            onChange={(e) => setForm({ ...form, data_inicio: e.target.value })}
+            className="rounded-xl px-3 py-2 outline-none"
             style={inputStyle}
           />
-        </div>
-        <input
-          placeholder="usuario_id"
-          value={form.usuario_id}
-          onChange={(e) => setForm({ ...form, usuario_id: e.target.value })}
-          className="rounded-xl px-3 py-2 outline-none min-w-[140px]"
-          style={inputStyle}
-        />
-        <input
-          placeholder="módulo"
-          value={form.modulo}
-          onChange={(e) => setForm({ ...form, modulo: e.target.value })}
-          className="rounded-xl px-3 py-2 outline-none min-w-[140px]"
-          style={inputStyle}
-        />
-        <select
-          value={form.resultado_status}
-          onChange={(e) =>
-            setForm({ ...form, resultado_status: e.target.value as AuditLogFilters["resultado_status"] })
-          }
-          className="rounded-xl px-3 py-2 outline-none"
-          style={inputStyle}
-        >
-          <option value="">Todos os status</option>
-          <option value="sucesso">Sucesso</option>
-          <option value="erro">Erro</option>
-        </select>
-        <input
-          type="date"
-          value={form.data_inicio}
-          onChange={(e) => setForm({ ...form, data_inicio: e.target.value })}
-          className="rounded-xl px-3 py-2 outline-none"
-          style={inputStyle}
-        />
-        <input
-          type="date"
-          value={form.data_fim}
-          onChange={(e) => setForm({ ...form, data_fim: e.target.value })}
-          className="rounded-xl px-3 py-2 outline-none"
-          style={inputStyle}
-        />
+        </label>
+        <label className="flex flex-col gap-1" style={labelStyle}>
+          Data final
+          <input
+            type="date"
+            value={form.data_fim}
+            onChange={(e) => setForm({ ...form, data_fim: e.target.value })}
+            className="rounded-xl px-3 py-2 outline-none"
+            style={inputStyle}
+          />
+        </label>
         <button
           type="submit"
           className="rounded-xl px-4 py-2"
