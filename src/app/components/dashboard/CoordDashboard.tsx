@@ -71,18 +71,18 @@ const ORIENTADOR_DATA = [
 ];
 
 const PRODUCAO_DATA = [
-  { mes: "Jan", A1: 3, A2: 5, B1: 8, livros: 1, conf: 4 },
-  { mes: "Fev", A1: 2, A2: 4, B1: 6, livros: 0, conf: 3 },
-  { mes: "Mar", A1: 5, A2: 6, B1: 9, livros: 1, conf: 6 },
-  { mes: "Abr", A1: 4, A2: 7, B1: 11, livros: 2, conf: 5 },
-  { mes: "Mai", A1: 6, A2: 5, B1: 10, livros: 0, conf: 7 },
-  { mes: "Jun", A1: 8, A2: 9, B1: 13, livros: 1, conf: 9 },
-  { mes: "Jul", A1: 5, A2: 6, B1: 8, livros: 0, conf: 5 },
-  { mes: "Ago", A1: 7, A2: 8, B1: 12, livros: 2, conf: 8 },
-  { mes: "Set", A1: 9, A2: 10, B1: 15, livros: 1, conf: 10 },
-  { mes: "Out", A1: 11, A2: 12, B1: 17, livros: 3, conf: 11 },
-  { mes: "Nov", A1: 8, A2: 9, B1: 14, livros: 1, conf: 9 },
-  { mes: "Dez", A1: 6, A2: 7, B1: 11, livros: 0, conf: 7 },
+  { mes: "Jan", A1: 3, A2: 5, A5: 8, livros: 1, conf: 4 },
+  { mes: "Fev", A1: 2, A2: 4, A5: 6, livros: 0, conf: 3 },
+  { mes: "Mar", A1: 5, A2: 6, A5: 9, livros: 1, conf: 6 },
+  { mes: "Abr", A1: 4, A2: 7, A5: 11, livros: 2, conf: 5 },
+  { mes: "Mai", A1: 6, A2: 5, A5: 10, livros: 0, conf: 7 },
+  { mes: "Jun", A1: 8, A2: 9, A5: 13, livros: 1, conf: 9 },
+  { mes: "Jul", A1: 5, A2: 6, A5: 8, livros: 0, conf: 5 },
+  { mes: "Ago", A1: 7, A2: 8, A5: 12, livros: 2, conf: 8 },
+  { mes: "Set", A1: 9, A2: 10, A5: 15, livros: 1, conf: 10 },
+  { mes: "Out", A1: 11, A2: 12, A5: 17, livros: 3, conf: 11 },
+  { mes: "Nov", A1: 8, A2: 9, A5: 14, livros: 1, conf: 9 },
+  { mes: "Dez", A1: 6, A2: 7, A5: 11, livros: 0, conf: 7 },
 ];
 
 const INTEGRALIZACAO_DATA = [
@@ -358,7 +358,7 @@ function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose:
               { label: "Total A1", value: 74, color: "#123C7A" },
               { label: "Total A2", value: 88, color: "#1F8A70" },
               { label: "Conferências", value: 84, color: "#D4A017" },
-              { label: "B1", value: 124, color: "#8b5cf6" },
+              { label: "A5", value: 124, color: "#8b5cf6" },
               { label: "Livros", value: 12, color: "#f97316" },
               { label: "Média/Aluno", value: "1,8", color: "#123C7A" },
             ].map((s) => (
@@ -498,7 +498,7 @@ function OrientadorPerfChart({ onReport }: { onReport: () => void }) {
 function ProducaoChart({ onReport }: { onReport: () => void }) {
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Produção Científica" sub="Qualis A1, A2 e conferências — 2026" section="Produção Científica" onReport={onReport} isMock />
+      <SectionHeader title="Produção Científica" sub="Qualis A1, A2, A5 e conferências — 2026" section="Produção Científica" onReport={onReport} isMock />
       <div className="overflow-x-auto -mx-1">
       <div style={{ minWidth: 300 }}>
       <ResponsiveContainer width="100%" height={190}>

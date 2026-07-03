@@ -343,7 +343,7 @@ function QuickActionModal({ type, onClose }: { type: Exclude<QA, null>; onClose:
                 <div>
                   <label style={labelSt}>Classificação Qualis</label>
                   <select className={inputCls} style={inputSt}>
-                    {["A1", "A2", "B1", "B2", "B3", "B4", "C"].map((q) => <option key={q}>{q}</option>)}
+                    {["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "SC"].map((q) => <option key={q}>{q}</option>)}
                   </select>
                 </div>
                 <div>
