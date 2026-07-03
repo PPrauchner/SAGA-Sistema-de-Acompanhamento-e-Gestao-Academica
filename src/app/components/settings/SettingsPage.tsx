@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { type FontSizePreference, useApp } from "../../context/AppContext";
+import { type FontSizePreference, type NotificationPreferences, useApp } from "../../context/AppContext";
 import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Building, Plus, CheckCircle2, XCircle, Edit, ArrowRightLeft, Send, Ban } from "lucide-react";
 import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
@@ -65,6 +65,28 @@ const FONT_SIZE_OPTIONS: Array<{ label: string; value: FontSizePreference }> = [
   { label: "Grande", value: "large" },
 ];
 
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  email: true,
+  in_app: true,
+  work_plan: true,
+  transfers: true,
+  activities: true,
+  extensions: true,
+};
+
+const NOTIFICATION_SETTINGS: Array<{
+  key: keyof NotificationPreferences;
+  label: string;
+  desc: string;
+}> = [
+  { key: "in_app", label: "Notificações no Sistema", desc: "Receber avisos dentro do SAGA" },
+  { key: "email", label: "Notificações por E-mail", desc: "Receber comunicações por e-mail quando disponíveis" },
+  { key: "work_plan", label: "Plano de Trabalho", desc: "Atualizações de tarefas, progresso e prazos críticos" },
+  { key: "transfers", label: "Transferências", desc: "Convites e avisos de transferência de orientação ou coordenação" },
+  { key: "activities", label: "Atividades", desc: "Submissões, pareceres e validações de atividades" },
+  { key: "extensions", label: "Prorrogações", desc: "Solicitações e decisões sobre prorrogações" },
+];
+
 export function SettingsPage() {
   const {
     currentUser,
@@ -81,6 +103,7 @@ export function SettingsPage() {
   const [profileName, setProfileName] = useState("");
   const [profileDepartment, setProfileDepartment] = useState("");
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
 
   // Program Config State
   const [programConfig, setProgramConfig] = useState<ProgramConfig | null>(null);
@@ -103,6 +126,13 @@ export function SettingsPage() {
     setProfileDepartment(currentUser?.departamento ?? "");
     setProfileError(null);
   }, [currentUser?.name, currentUser?.departamento]);
+
+  useEffect(() => {
+    setNotificationPreferences({
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      ...(currentUser?.notificationPreferences ?? {}),
+    });
+  }, [currentUser?.notificationPreferences]);
 
   useEffect(() => {
     if (activeTab === "programa" && currentUser?.role === "coordenacao") {
@@ -324,9 +354,31 @@ export function SettingsPage() {
     }
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleToggleNotificationPreference = (key: keyof NotificationPreferences) => {
+    setNotificationPreferences((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
+
+  const handleSaveNotificationPreferences = async () => {
+    if (!token) return;
+
+    setLoading(true);
+    setSaved(false);
+    try {
+      await usersApi.updateProfile(token, {
+        notification_preferences: notificationPreferences,
+      });
+      await retryProfile();
+      setSaved(true);
+      toast.success("Preferências de notificação atualizadas");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      toast.error("Erro ao salvar preferências de notificação");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -486,36 +538,42 @@ export function SettingsPage() {
             <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
               <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)", marginBottom: "24px" }}>Preferências de Notificação</h2>
               <div className="space-y-4">
-                {[
-                  { label: "Notificações por E-mail", desc: "Receber resumos de atividades por e-mail", enabled: true },
-                  { label: "Alertas de Prazo", desc: "Aviso antecipado de vencimentos de prazo", enabled: true },
-                  { label: "Novas Submissões", desc: "Quando alunos submetem documentos", enabled: true },
-                  { label: "Aprovações Pendentes", desc: "Itens aguardando sua aprovação", enabled: true },
-                  { label: "Relatórios do Sistema", desc: "Relatórios automáticos semanais", enabled: false },
-                  { label: "Atualizações do Sistema", desc: "Novas versões e manutenções", enabled: false },
-                ].map((pref) => (
-                  <div key={pref.label} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-                    <div>
-                      <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>{pref.label}</p>
-                      <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{pref.desc}</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" defaultChecked={pref.enabled} className="sr-only" />
-                      <div
-                        className="rounded-full transition-all"
-                        style={{ width: 44, height: 24, background: pref.enabled ? "#123C7A" : "var(--muted)", cursor: "pointer" }}
-                      >
+                {NOTIFICATION_SETTINGS.map((pref) => {
+                  const enabled = notificationPreferences[pref.key];
+                  return (
+                    <div key={pref.key} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+                      <div>
+                        <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>{pref.label}</p>
+                        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{pref.desc}</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          onChange={() => handleToggleNotificationPreference(pref.key)}
+                          className="sr-only"
+                        />
                         <div
                           className="rounded-full transition-all"
-                          style={{ width: 18, height: 18, background: "#fff", margin: "3px", marginLeft: pref.enabled ? "23px" : "3px", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}
-                        />
-                      </div>
-                    </label>
-                  </div>
-                ))}
+                          style={{ width: 44, height: 24, background: enabled ? "#123C7A" : "var(--muted)", cursor: "pointer" }}
+                        >
+                          <div
+                            className="rounded-full transition-all"
+                            style={{ width: 18, height: 18, background: "#fff", margin: "3px", marginLeft: enabled ? "23px" : "3px", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}
+                          />
+                        </div>
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
-              <button onClick={handleSave} className="mt-6 flex items-center gap-2 rounded-xl px-5 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
-                <Save size={15} /> Salvar Preferências
+              <button
+                onClick={handleSaveNotificationPreferences}
+                disabled={loading}
+                className="mt-6 flex items-center gap-2 rounded-xl px-5 py-2.5"
+                style={{ background: saved ? "#1F8A70" : "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px", opacity: loading ? 0.7 : 1 }}
+              >
+                <Save size={15} /> {saved ? "Salvo!" : "Salvar Preferências"}
               </button>
             </div>
           )}
