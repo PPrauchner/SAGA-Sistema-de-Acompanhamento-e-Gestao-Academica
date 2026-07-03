@@ -202,3 +202,47 @@ async def test_usuario_nome_none_quando_uid_desconhecido(
     page = await service.list_audit_logs()
 
     assert all(item.usuario_nome is None for item in page.items)
+
+
+# --- Opções de filtro (facetas) --------------------------------------------------------
+
+
+async def test_filter_options_distintos_ordenados_com_nome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(audit_service_module, "FirebaseRepository", _FakeRepo)
+    service = AuditService(names=_FakeNames({"coord1": "Ana Souza", "orient1": "Bruno Lima"}))
+
+    options = await service.list_filter_options()
+
+    assert options.operacoes == ["create_activity", "create_student", "update_student"]
+    assert options.modulos == [
+        "backend.app.api.v1.activities",
+        "backend.app.api.v1.students",
+    ]
+    # usuários distintos, ordenados por nome, id canônico preservado
+    assert [(u.id, u.nome) for u in options.usuarios] == [
+        ("coord1", "Ana Souza"),
+        ("orient1", "Bruno Lima"),
+    ]
+
+
+async def test_filter_options_usuario_sem_nome_cai_para_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(audit_service_module, "FirebaseRepository", _FakeRepo)
+    service = AuditService(names=_FakeNames({}))
+
+    options = await service.list_filter_options()
+
+    assert {u.id for u in options.usuarios} == {"coord1", "orient1"}
+    assert all(u.nome == u.id for u in options.usuarios)
+
+
+async def test_filter_options_escopo_orientador(scope_service: AuditService) -> None:
+    user = CurrentUser(uid="orient1", role="orientador")
+
+    options = await scope_service.list_filter_options(user=user)
+
+    # orientador só enxerga usuários dos seus orientandos (stu1, stu2)
+    assert {u.id for u in options.usuarios} == {"stu1", "stu2"}
