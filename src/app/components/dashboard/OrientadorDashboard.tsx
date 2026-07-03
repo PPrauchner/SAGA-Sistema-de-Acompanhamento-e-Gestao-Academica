@@ -1039,10 +1039,13 @@ export function OrientadorDashboard() {
   }
 
   if (error || orientandosError) {
+    const mensagens = [error, orientandosError].filter((msg): msg is string => Boolean(msg));
     return (
       <div className="rounded-2xl p-6 text-center" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
         <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--tint-danger-text)" }}>Erro ao carregar dashboard</p>
-        <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{error ?? orientandosError}</p>
+        {mensagens.map((msg) => (
+          <p key={msg} style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{msg}</p>
+        ))}
       </div>
     );
   }
