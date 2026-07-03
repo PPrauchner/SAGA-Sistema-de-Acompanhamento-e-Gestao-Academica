@@ -18,7 +18,7 @@ from firebase_admin import auth as firebase_auth
 from backend.app.core.auth import CurrentUser
 from backend.app.core.config import settings
 from backend.app.core.email import EmailError
-from backend.app.models.user import InviteRequest
+from backend.app.models.user import InviteRequest, NotificationPreferences
 from backend.app.services.auth_service import AuthService
 
 
@@ -190,6 +190,7 @@ async def test_first_access_ativa_conta() -> None:
     assert auth.criados[resp.uid]["password"] == "Senha123"
     assert invites.store[token]["usado"] is True
     assert users.store[resp.uid]["primeiro_acesso_completo"] is True
+    assert users.store[resp.uid]["notification_preferences"] == NotificationPreferences().model_dump()
 
 
 async def test_first_access_token_inexistente_400() -> None:
@@ -233,6 +234,7 @@ async def test_get_me_retorna_perfil() -> None:
     assert resp.uid == "u1"
     assert resp.role == "aluno"
     assert resp.student_id is None
+    assert resp.notification_preferences == NotificationPreferences()
 
 
 async def test_get_me_perfil_inexistente_404() -> None:
