@@ -28,6 +28,7 @@ from fastapi import HTTPException, status
 from backend.app.core.auth import CurrentUser
 from backend.app.models.production import ProductionCreate
 from backend.app.repositories.activity_repository import ActivityRepository
+from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.vehicle_repository import VehicleRepository
@@ -76,6 +77,7 @@ class ProductionService:
     def __init__(self) -> None:
         self._productions = ProductionRepository()
         self._activities = ActivityRepository()
+        self._advisors = AdvisorRepository()
         self._vehicles = VehicleRepository()
         self._students_service = StudentService()
         self._inference = InferenceService(InferenceRepository())
@@ -204,19 +206,39 @@ class ProductionService:
             },
         )
 
-    async def list_productions(self, user: CurrentUser) -> list[dict]:
+    async def list_productions(
+        self, user: CurrentUser, status: str | None = None
+    ) -> list[dict]:
+        """Lista produções visíveis ao usuário, enriquecidas e opcionalmente filtradas.
+
+        Args:
+            user: Usuário autenticado; define a visibilidade (aluno/orientador/coordenação).
+            status: Quando informado, restringe ao status_atividade correspondente
+                (ex.: 'enviado' para a fila de validação da coordenação).
+
+        Returns:
+            Produções com aluno_nome, orientador_nome, data de submissão (criado_em da
+            atividade vinculada) e status_atividade.
+        """
         students = await self._students_service.list_students(user)
         vehicles = await self._vehicles.list_all()
         nome_by_vehicle = {v["id"]: v.get("nome", "") for v in vehicles}
+        advisor_name_by_id = {
+            advisor["id"]: advisor.get("nome", "")
+            for advisor in await self._advisors.list_all()
+        }
 
         result: list[dict] = []
         for student in students:
+            orientador_nome = advisor_name_by_id.get(student.get("orientador_id"))
             # Com a FK invertida, o vínculo aluno↔produção é a atividade (producao_id); o
             # status_atividade é o da própria atividade (fonte do fluxo de validação).
             activities = await self._activities.list_by_student(student["id"])
             for activity in activities:
                 producao_id = activity.get("producao_id")
                 if not producao_id:
+                    continue
+                if status is not None and activity.get("status") != status:
                     continue
                 production = await self._productions.get(producao_id)
                 if production is None:
@@ -226,6 +248,7 @@ class ProductionService:
                         "id": production["id"],
                         "aluno_id": student["id"],
                         "aluno_nome": student.get("nome", ""),
+                        "orientador_nome": orientador_nome,
                         "titulo": production.get("titulo"),
                         "doi": production.get("doi"),
                         "veiculo_nome": nome_by_vehicle.get(production.get("veiculo_id"), ""),
@@ -237,6 +260,7 @@ class ProductionService:
                         "pontuacao_calculada": production.get("pontuacao_calculada", 0.0),
                         "peso_aplicado": production.get("peso_aplicado", 0.0),
                         "status_atividade": activity.get("status", ""),
+                        "criado_em": activity.get("criado_em"),
                     }
                 )
         return result

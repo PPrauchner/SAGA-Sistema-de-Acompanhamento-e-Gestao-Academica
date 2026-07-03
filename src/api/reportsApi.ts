@@ -8,6 +8,8 @@
  * - getStudentsByAdvisor(): GET /api/v1/reports/students-by-advisor.
  * - getCompletionTime(): GET /api/v1/reports/completion-time.
  * - getProductionsReport(): GET /api/v1/reports/productions.
+ * - getProductionsByMonth(): GET /api/v1/reports/productions-by-month — série mensal de
+ *   produções validadas para o gráfico de produção do dashboard da coordenação.
  * - Todas as funções incluem Authorization: Bearer <token> quando fornecido.
  * - Exclusivo da coordenação — useAuth().role deve ser verificado antes de chamar.
  *
@@ -92,8 +94,10 @@ export interface ProductionLevelBreakdown {
     A2: number;
     A3: number;
     A4: number;
-    B1: number;
-    B2: number;
+    A5: number;
+    A6: number;
+    A7: number;
+    A8: number;
     SC: number;
 }
 
@@ -119,6 +123,12 @@ export interface ProductionsReportResponse {
 }
 
 
+export interface ProductionByMonthItem {
+    mes: string;
+    total: number;
+}
+
+
 
 export function getStudentsAtRisk(token?: string): Promise<StudentsAtRiskResponse> {
     return apiGet<StudentsAtRiskResponse>("/reports/students-at-risk", token);
@@ -138,4 +148,12 @@ export function getCompletionTime(token?: string): Promise<CompletionTimeRespons
 
 export function getProductionsReport(token?: string): Promise<ProductionsReportResponse> {
     return apiGet<ProductionsReportResponse>("/reports/productions", token);
+}
+
+export function getProductionsByMonth(
+    token?: string,
+    meses?: number,
+): Promise<ProductionByMonthItem[]> {
+    const query = meses !== undefined ? `?meses=${meses}` : "";
+    return apiGet<ProductionByMonthItem[]>(`/reports/productions-by-month${query}`, token);
 }

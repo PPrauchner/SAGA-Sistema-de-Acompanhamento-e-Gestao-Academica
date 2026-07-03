@@ -1,6 +1,6 @@
 """Router FastAPI para solicitacoes de prorrogacao."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
@@ -20,6 +20,16 @@ async def list_extensions(
 ) -> list[ExtensionResponse]:
     """Lista prorrogacoes visiveis para o usuario autenticado."""
     return await service.list_extensions(user)
+
+
+@router.get("/extensions/pending", response_model=list[ExtensionResponse])
+@requires_role("coordenacao")
+async def list_pending_extensions(
+    status_filtro: str = Query("pendente", alias="status"),
+    user: CurrentUser = Depends(get_current_user),
+) -> list[ExtensionResponse]:
+    """Lista as prorrogacoes do programa da coordenacao (fila de aprovacao)."""
+    return await service.list_pending_for_coordination(user, status_filtro)
 
 
 @router.post(

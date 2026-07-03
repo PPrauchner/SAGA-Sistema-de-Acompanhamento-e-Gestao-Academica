@@ -3,7 +3,9 @@ Router FastAPI para os endpoints de produções bibliográficas.
 
 Responsabilidades:
 - GET /api/v1/productions: lista produções com pontuação calculada pelo motor RL05.
-  Aluno vê as próprias; orientador vê dos orientandos; coordenação vê todas.
+  Aluno vê as próprias; orientador vê dos orientandos; coordenação vê todas. Aceita o
+  filtro opcional `status` (sobre o status da atividade vinculada, ex.: 'enviado' para a
+  fila de validação da coordenação); sem o filtro, retorna todos os status.
 - POST /api/v1/productions: aluno registra produção bibliográfica. Motor RL05 calcula
   pontuação ponderada pelo nível de relevância do veículo imediatamente após o registro.
   Aplica @requires_role('aluno') e @audit_operation. (@check_deadlines deferido até o
@@ -25,10 +27,11 @@ router = APIRouter()
 @router.get("/productions")
 @requires_role("coordenacao", "orientador", "aluno")
 async def list_productions(
+    status: str | None = None,
     user: CurrentUser = Depends(get_current_user),
     service: ProductionService = Depends(ProductionService),
 ) -> list[dict]:
-    return await service.list_productions(user)
+    return await service.list_productions(user, status)
 
 
 @router.post(

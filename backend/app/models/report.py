@@ -139,3 +139,10 @@ class ProductionsReportResponse(BaseModel):
     total_producoes_aprovadas: int
     por_aluno: list[ProductionByStudentItem]
     por_orientador: list[ProductionByAdvisorItem]
+
+
+class ProductionByMonthItem(BaseModel):
+    """Contagem de produções validadas em um mês (chave 'YYYY-MM')."""
+
+    mes: str
+    total: int

@@ -13,6 +13,7 @@ from typing import Any
 
 import pytest
 
+from backend.app.core.auth import CurrentUser
 from backend.app.services import audit_service as audit_service_module
 from backend.app.services.audit_service import AuditService
 
@@ -96,3 +97,71 @@ async def test_pagina_resultados(service: AuditService) -> None:
     assert primeira.total == 3
     assert [item.id for item in primeira.items] == ["log2", "log3"]
     assert [item.id for item in segunda.items] == ["log1"]
+
+
+# --- Escopo por papel (orientador vê apenas os logs dos seus orientandos) ---------------
+
+_SCOPE_LOGS: list[dict[str, Any]] = [
+    {"id": "s1", "usuario_id": "stu1", "timestamp": datetime(2026, 2, 1, tzinfo=timezone.utc)},
+    {"id": "s2", "usuario_id": "stu2", "timestamp": datetime(2026, 2, 2, tzinfo=timezone.utc)},
+    {"id": "other", "usuario_id": "stu3", "timestamp": datetime(2026, 2, 3, tzinfo=timezone.utc)},
+    {"id": "coord", "usuario_id": "coordX", "timestamp": datetime(2026, 2, 4, tzinfo=timezone.utc)},
+]
+
+_SCOPE_ADVISORS: list[dict[str, Any]] = [
+    {"id": "adv1", "uid": "orient1"},
+    {"id": "adv2", "uid": "orient2"},
+]
+
+_SCOPE_STUDENTS: list[dict[str, Any]] = [
+    {"uid": "stu1", "orientador_id": "adv1"},
+    {"uid": "stu2", "orientador_id": "adv1"},
+    {"uid": "stu3", "orientador_id": "adv2"},
+]
+
+
+class _FakeListRepo:
+    """Repositório fake genérico: devolve a lista fixada por list_all()."""
+
+    def __init__(self, items: list[dict[str, Any]]) -> None:
+        self._items = items
+
+    async def list_all(self) -> list[dict[str, Any]]:
+        return [dict(item) for item in self._items]
+
+
+@pytest.fixture
+def scope_service(monkeypatch: pytest.MonkeyPatch) -> AuditService:
+    monkeypatch.setattr(
+        audit_service_module, "FirebaseRepository", lambda collection: _FakeListRepo(_SCOPE_LOGS)
+    )
+    return AuditService(
+        advisors=_FakeListRepo(_SCOPE_ADVISORS),
+        students=_FakeListRepo(_SCOPE_STUDENTS),
+    )
+
+
+async def test_orientador_ve_apenas_logs_dos_seus_orientandos(scope_service: AuditService) -> None:
+    user = CurrentUser(uid="orient1", role="orientador")
+
+    page = await scope_service.list_audit_logs(user=user)
+
+    assert page.total == 2
+    assert {item.id for item in page.items} == {"s1", "s2"}
+
+
+async def test_coordenacao_ve_todos_os_logs(scope_service: AuditService) -> None:
+    user = CurrentUser(uid="coordX", role="coordenacao")
+
+    page = await scope_service.list_audit_logs(user=user)
+
+    assert page.total == 4
+
+
+async def test_orientador_sem_doc_advisors_nao_ve_nada(scope_service: AuditService) -> None:
+    user = CurrentUser(uid="fantasma", role="orientador")
+
+    page = await scope_service.list_audit_logs(user=user)
+
+    assert page.total == 0
+    assert page.items == []

@@ -23,6 +23,7 @@ class _FakeExtensionRepository:
                 "status": "pendente",
                 "motivo": "Ajuste",
                 "nova_data": date(2028, 7, 1),
+                "programa_id": "prog",
             },
             {
                 "id": "ext2",
@@ -31,11 +32,22 @@ class _FakeExtensionRepository:
                 "status": "pendente",
                 "motivo": "Outro",
                 "nova_data": date(2028, 8, 1),
+                "programa_id": "prog",
             },
         ]
 
     async def list_all(self) -> list[dict[str, Any]]:
         return self.extensions
+
+    async def list_by_program(
+        self, programa_id: str, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in self.extensions
+            if item.get("programa_id") == programa_id
+            and (status is None or item.get("status") == status)
+        ]
 
     async def list_by_student_ids(self, student_ids: set[str]) -> list[dict[str, Any]]:
         return [
@@ -77,6 +89,40 @@ class _FakeStudentRepository:
                 "nivel": "doutorado",
                 "orientador_id": "advisor2",
                 "programa_id": "prog",
+            },
+        ]
+
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            student
+            for student in await self.list_all()
+            if student.get("programa_id") == programa_id
+        ]
+
+
+class _MixedExtensionRepository(_FakeExtensionRepository):
+    """Inclui uma prorrogação aprovada e uma de outro programa, para testar o filtro."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.extensions = self.extensions + [
+            {
+                "id": "ext3",
+                "student_id": "student1",
+                "tipo": "prazo_defesa",
+                "status": "aprovada",
+                "motivo": "Aprovada",
+                "nova_data": date(2028, 9, 1),
+                "programa_id": "prog",
+            },
+            {
+                "id": "ext4",
+                "student_id": "studentX",
+                "tipo": "prazo_defesa",
+                "status": "pendente",
+                "motivo": "Outro programa",
+                "nova_data": date(2028, 9, 1),
+                "programa_id": "prog_outro",
             },
         ]
 
@@ -125,6 +171,28 @@ async def test_list_extensions_coordenacao_ve_todas() -> None:
     result = await _service().list_extensions(_user("coordenacao", "uid-coord"))
 
     assert [item["id"] for item in result] == ["ext1", "ext2"]
+
+
+@pytest.mark.asyncio
+async def test_list_pending_for_coordination_filtra_programa_e_status_default() -> None:
+    result = await _service(_MixedExtensionRepository()).list_pending_for_coordination(
+        _user("coordenacao", "uid-coord")
+    )
+
+    # default status=pendente; só do programa "prog" (ext3 é aprovada, ext4 é de outro programa)
+    assert {item["id"] for item in result} == {"ext1", "ext2"}
+    nomes = {item["id"]: item["aluno_nome"] for item in result}
+    assert nomes["ext1"] == "Aluno Um"
+    assert nomes["ext2"] == "Aluno Dois"
+
+
+@pytest.mark.asyncio
+async def test_list_pending_for_coordination_aceita_outro_status() -> None:
+    result = await _service(_MixedExtensionRepository()).list_pending_for_coordination(
+        _user("coordenacao", "uid-coord"), status="aprovada"
+    )
+
+    assert {item["id"] for item in result} == {"ext3"}
 
 
 @pytest.mark.asyncio

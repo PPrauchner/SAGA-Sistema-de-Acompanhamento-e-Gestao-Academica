@@ -4,7 +4,8 @@
  * Responsabilidades:
  * - getAuditLogs(token, filters): consome GET /api/v1/audit-logs com filtros opcionais
  *   (usuario_id, operacao, modulo, resultado_status, data_inicio, data_fim) e paginação
- *   (page, page_size), devolvendo o envelope AuditLogPage. Exclusivo de coordenação.
+ *   (page, page_size), devolvendo o envelope AuditLogPage. O backend escopa por papel:
+ *   coordenação recebe a visão total; orientador recebe apenas os logs dos seus orientandos.
  */
 
 import { API_URL } from "@/api/authApi";
