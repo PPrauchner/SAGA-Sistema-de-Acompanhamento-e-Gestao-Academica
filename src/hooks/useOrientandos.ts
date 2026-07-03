@@ -123,9 +123,13 @@ function yearOf(iso: string | null | undefined): string {
 }
 
 // Fase atual = primeira etapa (por ordem) não concluída; próximo marco = 1ª task pendente.
+// Plano com todas as etapas concluídas é um estado distinto de "em fase de defesa".
 function deriveFaseProximo(plan: WorkPlan | null): { fase: string; proximo: string } {
   if (!plan || plan.stages.length === 0) return { fase: "—", proximo: "—" };
   const stages = [...plan.stages].sort((a, b) => a.ordem - b.ordem);
+  if (stages.every((s) => s.status === "concluido")) {
+    return { fase: "Plano concluído", proximo: "—" };
+  }
   const current =
     stages.find((s) => s.status !== "concluido") ?? stages[stages.length - 1];
   const fase = STAGE_LABEL[current.nome] ?? current.nome;
