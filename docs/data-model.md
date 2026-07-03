@@ -557,7 +557,7 @@ data de publicação ([ADR-0003](./adr/0003-pesos-qualis-versionados-por-program
 
 > **Escala A1–A8 + fallback (ADR-0003, supera R1/R4):** pesos default em
 > `backend/app/models/vehicle.py` → `PESO_POR_NIVEL`
-> (A1=1.0, A2=0.85, A3=0.7, A4=0.55, A5=0.45, A6=0.35, A7=0.25, A8=0.15, SC=0.1),
+> (A1=1.0, A2=0.9, A3=0.8, A4=0.7, A5=0.6, A6=0.5, A7=0.4, A8=0.3, SC=0.0),
 > estritamente decrescente. Esses valores são apenas o **bootstrap**: o peso efetivo da RL05 é o
 > **vigente por programa na data de publicação**, lido de `qualis_weights` (não desta coleção).
 > **Sem nível configurado:** o veículo assume `SC` (fallback).

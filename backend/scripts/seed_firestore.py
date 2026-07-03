@@ -7,9 +7,9 @@ Responsabilidades:
   creditos_grupo_basico_min=12, creditos_grupo_especifico_min=8,
   creditos_grupo_tecnologico_max=4, creditos_total_min=24, max_prorrogacoes=1,
   duracao_prorrogacao_meses=6, meses_ate_qualificacao=12.
-- Popular programs/prog_default/vehicle_levels/ com os níveis de relevância default
-  (escala Qualis Único monotônica A1–A8 + fallback): A1 (1.0), A2 (0.85), A3 (0.7),
-  A4 (0.55), A5 (0.45), A6 (0.35), A7 (0.25), A8 (0.15), SC (0.1).
+- Popular programs/prog_default/qualis_weights/ com os níveis de relevância default
+  (escala Qualis Único monotônica A1–A8 + fallback): A1 (1.0), A2 (0.9), A3 (0.8),
+  A4 (0.7), A5 (0.6), A6 (0.5), A7 (0.4), A8 (0.3), SC (0.0).
 - Criar a versão inicial (bootstrap) de pesos Qualis em
   programs/prog_default/qualis_weights/ a partir de PESO_POR_NIVEL — fonte versionada da
   RL05 (ADR-0003), vigente desde uma data-base que cobre toda produção histórica.
