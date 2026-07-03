@@ -7,6 +7,9 @@ Responsabilidades:
   valor_entrada, resultado_status, erro_mensagem, timestamp e duracao_ms.
 - Definir AuditLogPage como envelope de paginação retornado por GET /api/v1/audit-logs,
   com items, page, page_size e total.
+- Definir AuditFilterOptions (com AuditUserOption) como opções de filtro por seleção
+  retornadas por GET /api/v1/audit-logs/filters: operações, módulos e usuários distintos
+  presentes nos logs (escopados por papel), com o nome do usuário resolvido no read path.
 - Campos derivados do aspecto são opcionais para tolerar documentos legados anteriores ao
   enriquecimento do advice (sem modulo/recurso/valor_entrada).
 - usuario_nome não é campo do documento: é resolvido pelo AuditService no read path a
@@ -52,3 +55,18 @@ class AuditLogPage(BaseModel):
     page: int
     page_size: int
     total: int
+
+
+class AuditUserOption(BaseModel):
+    """Opção de usuário para o filtro por seleção: id canônico + nome de exibição."""
+
+    id: str
+    nome: str
+
+
+class AuditFilterOptions(BaseModel):
+    """Opções distintas de filtro da auditoria, escopadas por papel do solicitante."""
+
+    operacoes: list[str]
+    modulos: list[str]
+    usuarios: list[AuditUserOption]
