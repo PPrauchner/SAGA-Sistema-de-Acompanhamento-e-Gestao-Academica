@@ -10,6 +10,9 @@ Responsabilidades:
   executadas pelos próprios orientandos (resolução advisors→students).
 - Resolve `usuario_id`→`usuario_nome` na página retornada (read path), via UserNameResolver;
   o `usuario_id` persistido permanece a chave canônica.
+- list_filter_options(): devolve as opções distintas de filtro (operações, módulos e
+  usuários com nome) presentes nos logs escopados por papel, para alimentar os dropdowns
+  de seleção da página de Auditoria.
 - Não escreve em audit_logs/ — a escrita é exclusiva do aspecto @audit_operation.
 - A paginação e os filtros são aplicados em memória: a coleção é apenas anexada (nunca
   deletada) e, no MVP single-tenant, o volume é compatível com leitura completa.
@@ -20,7 +23,12 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from backend.app.core.auth import CurrentUser
-from backend.app.models.audit import AuditLogPage, AuditLogResponse
+from backend.app.models.audit import (
+    AuditFilterOptions,
+    AuditLogPage,
+    AuditLogResponse,
+    AuditUserOption,
+)
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
@@ -155,4 +163,41 @@ class AuditService:
             page=page,
             page_size=page_size,
             total=len(filtered),
+        )
+
+    async def list_filter_options(
+        self, user: CurrentUser | None = None
+    ) -> AuditFilterOptions:
+        """Devolve as opções distintas de filtro dos logs escopados por papel.
+
+        Args:
+            user: Usuário autenticado; define o escopo (coordenação vê todos os logs, o
+                orientador apenas os dos seus orientandos).
+
+        Returns:
+            AuditFilterOptions com operações e módulos distintos ordenados, e os usuários
+            distintos presentes nos logs escopados, cada um com id canônico e nome de
+            exibição (nome resolvido no read path; fallback para o próprio id).
+        """
+        logs = await self._repo.list_all()
+        allowed_usuario_ids = await self._allowed_usuario_ids(user)
+
+        scoped = [
+            log
+            for log in logs
+            if allowed_usuario_ids is None or log.get("usuario_id") in allowed_usuario_ids
+        ]
+
+        operacoes = sorted({log["operacao"] for log in scoped if log.get("operacao")})
+        modulos = sorted({log["modulo"] for log in scoped if log.get("modulo")})
+        usuario_ids = {log["usuario_id"] for log in scoped if log.get("usuario_id")}
+
+        nomes = await self._names.resolve(usuario_ids)
+        usuarios = sorted(
+            (AuditUserOption(id=uid, nome=nomes.get(uid, uid)) for uid in usuario_ids),
+            key=lambda option: option.nome.lower(),
+        )
+
+        return AuditFilterOptions(
+            operacoes=operacoes, modulos=modulos, usuarios=usuarios
         )
