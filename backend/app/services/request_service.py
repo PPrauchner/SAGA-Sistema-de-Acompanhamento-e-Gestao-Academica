@@ -104,10 +104,14 @@ class RequestService:
                         )
                     )
 
-        coord_transfers = await self._coord_transfers.query(
+        coord_transfers_as_successor = await self._coord_transfers.query(
             filters=[("successor_uid", "==", user.uid)]
         )
-        coord_transfers = [ct for ct in coord_transfers if ct.get("status") in ["pendente", "concluido"]]
+        coord_transfers_as_initiator = await self._coord_transfers.query(
+            filters=[("initiator_uid", "==", user.uid)]
+        )
+        coord_transfers_map = {ct["id"]: ct for ct in coord_transfers_as_successor + coord_transfers_as_initiator}
+        coord_transfers = [ct for ct in coord_transfers_map.values() if ct.get("status") in ["pendente", "concluido"]]
         for ct in coord_transfers:
             initiator_name = await self._get_user_name(ct.get("initiator_uid"))
             requests.append(
@@ -210,7 +214,7 @@ class RequestService:
 
         coord_transfers = await self._coord_transfers.list_by_program(program_id)
         for ct in coord_transfers:
-            if ct.get("initiator_uid") == user.uid and ct.get("status") in ["pendente", "concluido"]:
+            if (ct.get("initiator_uid") == user.uid or ct.get("successor_uid") == user.uid) and ct.get("status") in ["pendente", "concluido"]:
                 successor_name = await self._get_user_name(ct.get("successor_uid"))
                 requests.append(
                     self._build_request(
