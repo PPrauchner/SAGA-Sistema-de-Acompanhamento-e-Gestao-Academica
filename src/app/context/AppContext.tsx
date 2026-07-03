@@ -1,10 +1,43 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState, ReactNode } from "react";
 
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 
 export type UserRole = "aluno" | "orientador" | "coordenacao";
 export type ActiveView = "aluno" | "orientador" | "coordenador";
+export type FontSizePreference = "small" | "normal" | "large";
+
+const FONT_SIZE_STORAGE_KEY = "saga:fontSizePreference";
+const FONT_SIZE_SCALES: Record<FontSizePreference, string> = {
+  small: "0.94",
+  normal: "1",
+  large: "1.08",
+};
+
+function isFontSizePreference(value: string | null): value is FontSizePreference {
+  return value === "small" || value === "normal" || value === "large";
+}
+
+function getInitialFontSizePreference(): FontSizePreference {
+  if (typeof window === "undefined") return "normal";
+
+  try {
+    const stored = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY);
+    return isFontSizePreference(stored) ? stored : "normal";
+  } catch {
+    return "normal";
+  }
+}
+
+function applyFontSizePreference(preference: FontSizePreference): void {
+  if (typeof document === "undefined") return;
+
+  document.documentElement.style.setProperty(
+    "--app-font-scale",
+    FONT_SIZE_SCALES[preference],
+  );
+  document.documentElement.dataset.fontSize = preference;
+}
 
 export type PageId =
   | "login" | "register" | "password-recovery" | "first-access"
@@ -52,11 +85,10 @@ interface AppContextType {
   profileLoading: boolean;
   isAuthenticated: boolean;
   token: string | null;
-  isAuthenticated: boolean;
-  profileLoading: boolean;
   profileUnavailable: boolean;
   activeView: ActiveView;
   isMultiRoleAdvisor: boolean;
+  fontSizePreference: FontSizePreference;
   retryProfile: () => Promise<void>;
   login: (email: string, senha: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
@@ -65,6 +97,7 @@ interface AppContextType {
   setSelectedStudentId: (id: string | null) => void;
   setSidebarCollapsed: (v: boolean) => void;
   toggleDarkMode: () => void;
+  setFontSizePreference: (preference: FontSizePreference) => void;
   logout: () => void;
   setMobileMenuOpen: (v: boolean) => void;
 }
@@ -93,6 +126,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [darkMode, setDarkMode] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeView, setActiveViewState] = useState<ActiveView>("aluno");
+  const [fontSizePreference, setFontSizePreferenceState] = useState<FontSizePreference>(
+    getInitialFontSizePreference,
+  );
 
   // O perfil vem do backend (GET /auth/me) via useAuth; mapeamos para o formato
   // de exibicao consumido pelo layout. Campos sem origem no backend ficam vazios.
@@ -160,6 +196,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  useLayoutEffect(() => {
+    applyFontSizePreference(fontSizePreference);
+    try {
+      window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSizePreference);
+    } catch {
+      // A preferencia visual ainda funciona na sessao atual mesmo sem storage.
+    }
+  }, [fontSizePreference]);
+
+  const setFontSizePreference = (preference: FontSizePreference) => {
+    setFontSizePreferenceState(preference);
+  };
+
   const logout = () => {
     void signOut();
     setMobileMenuOpen(false);
@@ -178,13 +227,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         mobileMenuOpen,
         loading,
         profileLoading,
-        isAuthenticated: !!firebaseUser,
         token,
         isAuthenticated,
-        profileLoading,
         profileUnavailable,
         activeView,
         isMultiRoleAdvisor,
+        fontSizePreference,
         retryProfile,
         login,
         loginWithGoogle,
@@ -193,6 +241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setSelectedStudentId,
         setSidebarCollapsed,
         toggleDarkMode,
+        setFontSizePreference,
         logout,
         setMobileMenuOpen,
       }}

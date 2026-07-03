@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useApp } from "../../context/AppContext";
+import { type FontSizePreference, useApp } from "../../context/AppContext";
 import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Building, Plus, CheckCircle2, XCircle, Edit, ArrowRightLeft, Send, Ban } from "lucide-react";
 import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
@@ -59,8 +59,22 @@ const BASE_TABS = [
   { id: "sistema", label: "Sistema", icon: <Globe size={16} /> },
 ];
 
+const FONT_SIZE_OPTIONS: Array<{ label: string; value: FontSizePreference }> = [
+  { label: "Pequena", value: "small" },
+  { label: "Normal", value: "normal" },
+  { label: "Grande", value: "large" },
+];
+
 export function SettingsPage() {
-  const { currentUser, darkMode, toggleDarkMode, token, retryProfile } = useApp();
+  const {
+    currentUser,
+    darkMode,
+    toggleDarkMode,
+    token,
+    retryProfile,
+    fontSizePreference,
+    setFontSizePreference,
+  } = useApp();
   const [activeTab, setActiveTab] = useState("perfil");
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -588,11 +602,27 @@ export function SettingsPage() {
                 <div>
                   <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "12px" }}>Tamanho da Fonte</label>
                   <div className="flex gap-3">
-                    {["Pequena", "Normal", "Grande"].map((size) => (
-                      <button key={size} className="px-4 py-2 rounded-xl border-2 transition-all" style={{ borderColor: size === "Normal" ? "#123C7A" : "var(--border)", background: size === "Normal" ? "#eef3fc" : "var(--muted)", color: size === "Normal" ? "#123C7A" : "var(--foreground)", fontWeight: 600, fontSize: "13px" }}>
-                        {size}
-                      </button>
-                    ))}
+                    {FONT_SIZE_OPTIONS.map((size) => {
+                      const selected = fontSizePreference === size.value;
+                      return (
+                        <button
+                          key={size.value}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setFontSizePreference(size.value)}
+                          className="px-4 py-2 rounded-xl border-2 transition-all"
+                          style={{
+                            borderColor: selected ? "#123C7A" : "var(--border)",
+                            background: selected ? "#eef3fc" : "var(--muted)",
+                            color: selected ? "#123C7A" : "var(--foreground)",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                          }}
+                        >
+                          {size.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
