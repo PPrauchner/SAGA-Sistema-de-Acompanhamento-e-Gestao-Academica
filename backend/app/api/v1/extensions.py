@@ -15,7 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from backend.app.aspects.alerts import trigger_alerts, _build_notification_payload
+from backend.app.aspects.alerts import trigger_alerts, build_extension_alert
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
 from backend.app.core.auth import CurrentUser, get_current_user
@@ -98,7 +98,7 @@ async def review_extension(
 )
 @requires_role("coordenacao")
 @audit_operation
-@trigger_alerts(_build_notification_payload)
+@trigger_alerts(build_extension_alert)
 async def decide_extension(
     extension_id: str,
     payload: DecisionRequest,

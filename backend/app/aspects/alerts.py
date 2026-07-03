@@ -153,88 +153,52 @@ async def disparar_alerta_prazo(
         logger.error("[A05] Falha ao gravar alerta de prazo: %s", exc)
 
 
-async def _build_notification_payload(
-    result: Any,
-    args: tuple,
-    kwargs: dict,
-) -> dict | None:
-    """Builder A05 para o domínio de Prorrogações (extensions).
+def _format_extension_date(value: Any) -> str:
+    """Formata a data do novo prazo para a mensagem de notificação."""
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y")
+    return "a definir"
 
-    Usado como argumento de @trigger_alerts nos join points:
-      - POST   /api/v1/extensions              (create_extension)
-      - PATCH  /api/v1/extensions/.../approve  (decide_extension)
 
-    Regras de negócio:
-      - Criação  (status PENDENTE)  → avisa o orientador que há nova solicitação.
-      - Aprovação/Rejeição          → avisa o aluno sobre a decisão.
-      - Qualquer outro status       → sem notificação (retorna None).
+def build_extension_alert(result: Any, args: tuple, kwargs: dict) -> dict | None:
+    """Builder A05 para a decisão de prorrogação (extensions).
 
-    Correções aplicadas:
-      - Bug 1: orientador_id não existe em ExtensionResponse; obtido via
-               StudentRepository.get(aluno_id) → campo orientador_id do documento.
-      - Bug 2: campo correto é aluno_id, não student_id (ExtensionResponse não tem student_id).
-      - Bug 3: enum ExtensionStatus emite "rejeitada", nunca "reprovada" ou "indeferida".
+    Join Point: PATCH /api/v1/extensions/{extension_id}/approve (decide_extension).
+    Advice: After — notifica o aluno com o resultado e, na aprovação, o novo prazo.
+
+    Args:
+        result: ExtensionResponse retornada pelo endpoint de decisão.
+        args: Args posicionais do endpoint (não usados).
+        kwargs: Kwargs do endpoint (não usados).
+
+    Returns:
+        Documento de notificação destinado ao aluno, ou None se não houver decisão.
     """
-    try:
-        status_field = getattr(result, "status", None)
-        if status_field is None:
-            return None
+    status_field = getattr(result, "status", None)
+    status_value = status_field.value if hasattr(status_field, "value") else str(status_field)
+    if status_value not in ("aprovada", "rejeitada"):
+        return None
 
-        status_value = status_field.value if hasattr(status_field, "value") else str(status_field)
+    # requester_id é o uid do aluno (notifications.destinatario_id → users.uid).
+    destinatario_id = getattr(result, "requester_id", None)
+    if not destinatario_id:
+        logger.warning("[A05] requester_id ausente no result; notificação suprimida.")
+        return None
 
-        # --- PENDENTE: notifica o orientador ---
-        if status_value == "pendente":
-            aluno_id = getattr(result, "aluno_id", None)  # Bug 2 corrigido
-            if not aluno_id:
-                logger.warning("[A05] aluno_id ausente no result; notificação pendente suprimida.")
-                return None
+    if status_value == "aprovada":
+        prazo = _format_extension_date(getattr(result, "prazo_novo", None))
+        mensagem = (
+            "Sua solicitação de prorrogação foi deferida pela coordenação. "
+            f"Novo prazo final: {prazo}."
+        )
+    else:
+        mensagem = "Sua solicitação de prorrogação foi indeferida pela coordenação."
 
-            # Bug 1 corrigido: orientador_id não existe em ExtensionResponse → lookup
-            from backend.app.repositories.student_repository import StudentRepository
-            student_data = await StudentRepository().get_by_uid(aluno_id)
-            if not student_data:
-                logger.warning("[A05] Aluno não encontrado para aluno_id=%s; notificação pendente suprimida.", aluno_id)
-                return None
-
-            orientador_id = student_data.get("orientador_id")
-            if not orientador_id:
-                logger.warning("[A05] orientador_id ausente no documento do aluno; notificação pendente suprimida.")
-                return None
-
-            return {
-                "tipo": "nova_prorrogacao",
-                "titulo": "Nova solicitação de prorrogação",
-                "mensagem": (
-                    "Um aluno submeteu uma solicitação de prorrogação de prazo "
-                    "aguardando seu parecer técnico."
-                ),
-                "destinatario_id": orientador_id,
-                "entidade_tipo": "extensions",
-                "entidade_id": getattr(result, "id", ""),
-                "student_id": aluno_id,
-            }
-
-        # --- APROVADA / REJEITADA: notifica o aluno ---
-        # Bug 3 corrigido: enum emite "rejeitada", nunca "reprovada" ou "indeferida"
-        if status_value in ("aprovada", "rejeitada"):
-            destinatario_id = getattr(result, "aluno_id", None)  # Bug 2 corrigido
-            if not destinatario_id:
-                logger.warning("[A05] aluno_id ausente no result; notificação de decisão suprimida.")
-                return None
-
-            decisao = "deferida" if status_value == "aprovada" else "indeferida"
-            return {
-                "tipo": "decisao_prorrogacao",
-                "titulo": "Decisão sobre sua prorrogação",
-                "mensagem": (
-                    f"Sua solicitação de prorrogação foi {decisao} pela coordenação."
-                ),
-                "destinatario_id": destinatario_id,
-                "entidade_tipo": "extensions",
-                "entidade_id": getattr(result, "id", ""),
-            }
-
-    except Exception as exc:
-        logger.error("[A05] _build_notification_payload: erro inesperado: %s", exc)
-
-    return None
+    return {
+        "tipo": "prorrogacao_aprovada",  # único tipo de prorrogação no enum (data-model §4)
+        "titulo": "Decisão sobre sua prorrogação",
+        "mensagem": mensagem,
+        "destinatario_id": destinatario_id,
+        "entidade_tipo": "extensions",
+        "entidade_id": getattr(result, "id", ""),
+    }
