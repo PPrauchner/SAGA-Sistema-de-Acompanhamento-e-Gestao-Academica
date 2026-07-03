@@ -29,20 +29,24 @@ const NIVEL_COLORS: Record<string, { color: string; bg: string }> = {
   A2: { color: "#fff", bg: "#1A56A0" },
   A3: { color: "#fff", bg: "#2C6FB5" },
   A4: { color: "#fff", bg: "#4A89C8" },
-  B1: { color: "#fff", bg: "#D4A017" },
-  B2: { color: "#fff", bg: "#E0B84D" },
+  A5: { color: "#fff", bg: "#6AA3D8" },
+  A6: { color: "#fff", bg: "#D4A017" },
+  A7: { color: "#fff", bg: "#E0B84D" },
+  A8: { color: "#fff", bg: "#B89230" },
   SC: { color: "#fff", bg: "#94a3b8" },
 };
 
-const NIVEIS = ["A1", "A2", "A3", "A4", "B1", "B2", "SC"];
+const NIVEIS = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "SC"];
 
 const NIVEL_LABELS: Record<string, string> = {
   A1: "Nível A1",
   A2: "Nível A2",
   A3: "Nível A3",
   A4: "Nível A4",
-  B1: "Nível B1",
-  B2: "Nível B2",
+  A5: "Nível A5",
+  A6: "Nível A6",
+  A7: "Nível A7",
+  A8: "Nível A8",
   SC: "Sem Classificação",
 };
 
