@@ -120,29 +120,6 @@ class ExtensionService:
     # Casos de uso
     # ------------------------------------------------------------------
 
-    async def list_pending_for_coordination(
-        self,
-        user: CurrentUser,
-        status: str = STATUS_PENDING,
-    ) -> list[dict[str, Any]]:
-        """Lista as prorrogações do programa da coordenação para a fila de aprovação.
-
-        Args:
-            user: Coordenação autenticada; `programa_id` delimita o escopo (tenant).
-            status: Status a filtrar (default 'pendente').
-
-        Returns:
-            Prorrogações do programa com o status indicado, normalizadas (nome e nível do
-            aluno resolvidos), prontas para a seção de prorrogações do CoordDashboard.
-        """
-        extensions = await self._repo.list_by_program(user.programa_id, status)
-        students = await self._students.list_by_program(user.programa_id)
-        students_by_id = {student["id"]: student for student in students}
-        return [
-            self._normalize_response(extension, students_by_id.get(extension.get("student_id")))
-            for extension in extensions
-        ]
-
     async def create_extension(
         self,
         student_id: str,
