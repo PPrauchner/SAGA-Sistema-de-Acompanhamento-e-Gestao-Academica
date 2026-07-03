@@ -6,6 +6,14 @@ import { useNotifications } from "@/hooks/useNotifications";
 export type UserRole = "aluno" | "orientador" | "coordenacao";
 export type ActiveView = "aluno" | "orientador" | "coordenador";
 export type FontSizePreference = "small" | "normal" | "large";
+export interface NotificationPreferences {
+  email: boolean;
+  in_app: boolean;
+  work_plan: boolean;
+  transfers: boolean;
+  activities: boolean;
+  extensions: boolean;
+}
 
 const FONT_SIZE_STORAGE_KEY = "saga:fontSizePreference";
 const FONT_SIZE_SCALES: Record<FontSizePreference, string> = {
@@ -71,6 +79,7 @@ export interface User {
   programa?: string;
   orientador?: string;
   departamento?: string;
+  notificationPreferences: NotificationPreferences;
 }
 
 interface AppContextType {
@@ -144,6 +153,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         matricula: profile.matricula ?? undefined,
         student_id: profile.studentId ?? undefined,
         advisor_id: profile.advisorId ?? undefined,
+        notificationPreferences: profile.notificationPreferences,
       }
     : null;
 
