@@ -44,8 +44,6 @@ class RequestService:
             requests.extend(await self._get_advisor_requests(user))
         elif user.role == "coordenacao":
             requests.extend(await self._get_coordinator_requests(user))
-        elif user.role == "adm":
-            requests.extend(await self._get_adm_requests())
 
         # Ordenar por data_solicitacao DESCENDENTE
         requests.sort(key=lambda req: req.data_solicitacao, reverse=True)
@@ -152,9 +150,14 @@ class RequestService:
                         )
                     )
 
-        coord_transfers = await self._coord_transfers.list_pending_for_successor(
-            user.uid
+        coord_transfers_as_successor = await self._coord_transfers.query(
+            filters=[("successor_uid", "==", user.uid)]
         )
+        coord_transfers_as_initiator = await self._coord_transfers.query(
+            filters=[("initiator_uid", "==", user.uid)]
+        )
+        coord_transfers_map = {ct["id"]: ct for ct in coord_transfers_as_successor + coord_transfers_as_initiator}
+        coord_transfers = [ct for ct in coord_transfers_map.values() if ct.get("status") in ["pendente", "concluido"]]
         for ct in coord_transfers:
             initiator_name = await self._get_user_name(ct.get("initiator_uid"))
             requests.append(
@@ -257,7 +260,7 @@ class RequestService:
 
         coord_transfers = await self._coord_transfers.list_by_program(program_id)
         for ct in coord_transfers:
-            if ct.get("initiator_uid") == user.uid and ct.get("status") == "pendente":
+            if (ct.get("initiator_uid") == user.uid or ct.get("successor_uid") == user.uid) and ct.get("status") in ["pendente", "concluido"]:
                 successor_name = await self._get_user_name(ct.get("successor_uid"))
                 requests.append(
                     self._build_request(
@@ -265,39 +268,11 @@ class RequestService:
                         tipo="transferencia_coordenacao",
                         solicitante=f"Para: {successor_name}",
                         data=ct.get("created_at") or datetime.now(timezone.utc),
-                        status="pendente_aceite",
+                        status=ct.get("status", "pendente"),
                         payload=ct,
                     )
                 )
 
-        return requests
-
-    async def _get_adm_requests(self) -> list[RequestItem]:
-        """
-        Retorna as requisições de transferência de coordenação.
-
-        Returns:
-            List[RequestItem]: Lista de requisições de transferência de coordenação.
-        """
-        requests: list[RequestItem] = []
-        all_coord_transfers = (
-            await self._coord_transfers.list_all()
-            if hasattr(self._coord_transfers, "list_all")
-            else []
-        )
-        for ct in all_coord_transfers:
-            if ct.get("status") == "pendente":
-                initiator_name = await self._get_user_name(ct.get("initiator_uid"))
-                requests.append(
-                    self._build_request(
-                        id=ct.get("id", ""),
-                        tipo="transferencia_coordenacao",
-                        solicitante=initiator_name,
-                        data=ct.get("created_at") or datetime.now(timezone.utc),
-                        status="pendente",
-                        payload=ct,
-                    )
-                )
         return requests
 
     async def _get_advisor_students(self, user: CurrentUser) -> list[dict[str, Any]]:

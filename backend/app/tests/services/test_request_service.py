@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, patch
 
 from backend.app.core.auth import CurrentUser
 from backend.app.services.request_service import RequestService
-from backend.app.models.request import RequestItem
 
 
 @pytest.fixture
@@ -18,7 +17,6 @@ def request_service():
 
         service = RequestService()
 
-        # Mocks para repositorios
         service._activities = mock_act.return_value
         service._extensions = mock_ext.return_value
         service._transfers = mock_trans.return_value
@@ -61,23 +59,29 @@ async def test_get_requests_aluno_agrega_itens_do_proprio_aluno(request_service)
 async def test_get_requests_orientador(request_service):
     user = CurrentUser(uid="uid_orientador", email="adv@test.com", role="orientador")
 
-    # Setup mocks
-    request_service._advisors.list_all = AsyncMock(return_value=[{"uid": "uid_orientador", "id": "adv_1"}])
-    request_service._students.list_all = AsyncMock(return_value=[{"id": "stu_1", "orientador_id": "adv_1", "nome": "Aluno 1"}])
+    request_service._advisors.list_all = AsyncMock(return_value=[
+        {"uid": "uid_orientador", "id": "adv_1"}
+    ])
+    request_service._students.list_all = AsyncMock(return_value=[
+        {"id": "stu_1", "orientador_id": "adv_1", "nome": "Aluno 1"}
+    ])
     request_service._users.list_all = AsyncMock(return_value=[])
 
-    # Atividade pendente para o orientador (sem parecer)
     request_service._activities.list_by_student = AsyncMock(return_value=[
         {"id": "act_1", "status": "enviado", "parecer_orientador": None},
         {"id": "prod_1", "status": "enviado", "parecer_orientador": None, "producao_id": "p1"},
     ])
 
-    # Prorrogacao pendente
     request_service._extensions.list_by_student_ids = AsyncMock(return_value=[
-        {"id": "ext_1", "status": "pendente", "student_id": "stu_1", "parecer_orientador": None, "parecer": None}
+        {
+            "id": "ext_1",
+            "status": "pendente",
+            "student_id": "stu_1",
+            "parecer_orientador": None,
+            "parecer": None,
+        }
     ])
 
-    # Transferencia de coordenacao de destino
     request_service._coord_transfers.list_pending_for_successor = AsyncMock(return_value=[
         {"id": "ct_1", "status": "pendente", "initiator_uid": "uid_coord"}
     ])
@@ -94,30 +98,54 @@ async def test_get_requests_orientador(request_service):
 
 @pytest.mark.asyncio
 async def test_get_requests_coordenacao(request_service):
-    user = CurrentUser(uid="uid_coord", email="coord@test.com", role="coordenacao", programa_id="prog_1")
+    user = CurrentUser(
+        uid="uid_coord",
+        email="coord@test.com",
+        role="coordenacao",
+        programa_id="prog_1",
+    )
 
-    request_service._students.list_all = AsyncMock(return_value=[{"id": "stu_2", "programa_id": "prog_1", "nome": "Aluno Prog 1"}])
+    request_service._students.list_all = AsyncMock(return_value=[
+        {"id": "stu_2", "programa_id": "prog_1", "nome": "Aluno Prog 1"}
+    ])
     request_service._advisors.get = AsyncMock(return_value={"nome": "Orientador"})
     request_service._users.list_all = AsyncMock(return_value=[])
 
-    # Atividade aguardando coordenacao (com parecer)
     request_service._activities.list_by_student = AsyncMock(return_value=[
-        {"id": "act_2", "status": "enviado", "parecer_orientador": "Aprovado", "producao_id": "p2"}
+        {
+            "id": "act_2",
+            "status": "enviado",
+            "parecer_orientador": "Aprovado",
+            "producao_id": "p2",
+        }
     ])
 
-    # Prorrogacao com parecer
     request_service._extensions.list_all = AsyncMock(return_value=[
-        {"id": "ext_2", "status": "pendente", "student_id": "stu_2", "parecer_orientador": "Ok", "tipo": "trancamento"}
+        {
+            "id": "ext_2",
+            "status": "pendente",
+            "student_id": "stu_2",
+            "parecer_orientador": "Ok",
+            "tipo": "trancamento",
+        }
     ])
 
-    # Transferencia de orientando no programa
     request_service._transfers.list_by_program = AsyncMock(return_value=[
-        {"id": "tr_1", "status": "pendente", "student_id": "stu_2", "solicitante_id": "adv_x"}
+        {
+            "id": "tr_1",
+            "status": "pendente",
+            "student_id": "stu_2",
+            "solicitante_id": "adv_x",
+        }
     ])
 
-    # Transferencia de coordenacao criada por este usuario (acompanhamento)
     request_service._coord_transfers.list_by_program = AsyncMock(return_value=[
-        {"id": "ct_2", "status": "pendente", "initiator_uid": "uid_coord", "successor_uid": "uid_outro"}
+        {
+            "id": "ct_2",
+            "status": "pendente",
+            "initiator_uid": "uid_coord",
+            "successor_uid": "uid_outro",
+        }
     ])
 
     requests = await request_service.get_requests(user)
@@ -126,6 +154,8 @@ async def test_get_requests_coordenacao(request_service):
     tipos = {r.tipo for r in requests}
     assert "producao" in tipos
     assert "trancamento" in tipos
+    assert "transferencia" in tipos
+    assert "transferencia_coordenacao" in tipos
 
 
 @pytest.mark.asyncio
