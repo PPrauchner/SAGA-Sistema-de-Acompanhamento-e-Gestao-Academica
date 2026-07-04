@@ -26,9 +26,9 @@ export const programsApi = {
     const response = await fetch(`${API_BASE_URL}/programs/config`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    
+
     if (response.status === 404) return null;
-    
+
     if (!response.ok) throw new Error('Failed to fetch program config');
     return response.json();
   },
