@@ -270,6 +270,13 @@ class TestProductionScoring:
         assert len(results) == 1
         assert results[0]["Score"].value == pytest.approx(3.0)
 
+    def test_producao_SC_base10(self):
+        engine = make_engine(*self._fatos_producao("p1", "v_sc", "SC", 0.2, 10))
+        Score = Variable("Score")
+        results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
+        assert len(results) == 1
+        assert results[0]["Score"].value == pytest.approx(2.0)
+
     def test_producao_A2_base8(self):
         engine = make_engine(*self._fatos_producao("p1", "v4", "A2", 0.9, 8))
         Score = Variable("Score")

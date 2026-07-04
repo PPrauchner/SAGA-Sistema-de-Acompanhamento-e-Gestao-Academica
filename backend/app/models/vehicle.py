@@ -40,7 +40,7 @@ PESO_POR_NIVEL: dict[RelevanceLevel, float] = {
     "A6": 0.5,
     "A7": 0.4,
     "A8": 0.3,
-    "SC": 0.0,
+    "SC": 0.2,
 }
 
 
