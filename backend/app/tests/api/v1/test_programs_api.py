@@ -48,7 +48,7 @@ def test_get_config_success():
 
     # Execute
     response = client.get("/api/v1/programs/config")
-    
+
     # Cleanup
     app.dependency_overrides = {}
 
@@ -95,7 +95,7 @@ def test_update_config_success():
 
     # Execute
     response = client.put("/api/v1/programs/config", json={"creditos_total_min": 30})
-    
+
     # Cleanup
     app.dependency_overrides = {}
 

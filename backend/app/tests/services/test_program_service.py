@@ -135,4 +135,3 @@ async def test_update_config_rejeita_invariante_usando_config_atual(service, moc
         await service.update_config("prog_default", update_data)
 
     mock_repo.update_config.assert_not_called()
-
