@@ -7,6 +7,10 @@ Responsabilidades:
   preliminar imediatamente. Aplica @requires_role('aluno'), @audit_operation,
   @check_deadlines (verifica data_realizacao dentro do período do curso) e @trigger_alerts
   (notifica orientador após submissão).
+- POST /api/v1/activities/orientador: orientador cria atividade para um orientando seu. A
+  criação já é o endosso — nasce em 'enviado' com o parecer preenchido, direto na fila da
+  coordenação. Aplica @requires_role('orientador'), @requires_ownership (A01 por
+  propriedade → 403 para não-orientandos), @audit_operation e @check_deadlines.
 - POST /api/v1/activities/{activity_id}/comprovante: aluno faz upload real do comprovante
   (PDF/JPEG/PNG) ao Firebase Storage. Backend persiste no bucket via Admin SDK e devolve a
   URL de download tokenizada. Aplica @requires_role('aluno') e @audit_operation.
@@ -28,6 +32,7 @@ from backend.app.aspects.authorization import requires_ownership, requires_role
 from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
+    ActivityCreateByAdvisorRequest,
     ActivityCreateRequest,
     ActivityCreateResponse,
     ActivityResponse,
@@ -120,6 +125,50 @@ async def submit_activity(
     Notifica o orientador caso o status inicial seja 'enviado'.
     """
     result = await _activity_service.submit_activity(data=payload, user=user)
+    return ActivityCreateResponse(
+        id=result["id"],
+        elegibilidade_preliminar=result["elegibilidade_preliminar"],
+        notificacao_enviada=result["notificacao_enviada"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /activities/orientador  (orientador cria para orientando — issue #263)
+# ---------------------------------------------------------------------------
+
+def _owner_uid_do_orientando(kwargs: dict[str, Any]):
+    """Resolver do A01 por propriedade: uid do orientador do aluno alvo (via payload).
+
+    Lê o `aluno_id` do corpo da requisição e delega ao service a resolução
+    aluno → orientador. Retorna None (→ 404 no aspecto) quando não há `aluno_id`.
+    """
+    payload = kwargs.get("payload")
+    aluno_id = getattr(payload, "aluno_id", None)
+    if not aluno_id:
+        return None
+    return activity_service.resolve_advisor_uid_for_student(aluno_id)
+
+
+@router.post(
+    "/activities/orientador",
+    response_model=ActivityCreateResponse,
+    status_code=201,
+)
+@requires_role("orientador")
+@requires_ownership(_owner_uid_do_orientando)
+@audit_operation
+@check_deadlines
+async def submit_activity_by_advisor(
+    payload: ActivityCreateByAdvisorRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> ActivityCreateResponse:
+    """
+    Orientador cria atividade creditável para um orientando seu.
+    - Apenas o orientador do próprio aluno pode criar (A01 por propriedade → 403)
+    - A atividade nasce em 'enviado' com o parecer preenchido (pula o passo de parecer)
+    - Créditos só são contabilizados na validação da coordenação (US-CR01 intacto)
+    """
+    result = await _activity_service.submit_activity_for_orientando(data=payload, user=user)
     return ActivityCreateResponse(
         id=result["id"],
         elegibilidade_preliminar=result["elegibilidade_preliminar"],
