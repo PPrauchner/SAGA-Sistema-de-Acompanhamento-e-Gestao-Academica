@@ -318,7 +318,7 @@
             "relevancia_peso('A6', 0.5)",
             "relevancia_peso('A7', 0.4)",
             "relevancia_peso('A8', 0.3)",
-            "relevancia_peso('SC', 0.0)"
+            "relevancia_peso('SC', 0.2)"
           ],
           "casos_de_teste": [
             {
@@ -335,9 +335,9 @@
             },
             {
               "cenario": "producao_SC_base10",
-              "fatos": ["producao_veiculo(p1, v3)", "nivel_relevancia(v3, prog1, 'SC')", "relevancia_peso('SC', 0.0)", "pontuacao_base(p1, 10)"],
+              "fatos": ["producao_veiculo(p1, v3)", "nivel_relevancia(v3, prog1, 'SC')", "relevancia_peso('SC', 0.2)", "pontuacao_base(p1, 10)"],
               "query": "pontuacao_producao(p1, Score)",
-              "esperado": {"Score": 0.0}
+              "esperado": {"Score": 2.0}
             }
           ]
         }
