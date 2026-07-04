@@ -88,9 +88,9 @@ class ProgramService:
         return await self.repository.get_vehicle_levels(programa_id)
 
     async def update_vehicle_level(
-        self, 
-        programa_id: str, 
-        veiculo_id: str, 
+        self,
+        programa_id: str,
+        veiculo_id: str,
         data: VehicleLevelUpdate | VehicleLevelCreate
     ) -> bool:
         """Atualiza ou cria um mapeamento de nível de relevância de veículo.
