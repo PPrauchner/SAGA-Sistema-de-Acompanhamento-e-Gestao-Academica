@@ -21,6 +21,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; color: string; ico
   pendente_aprovacao: { label: "Pendente Aprovação", bg: "#fef9c3", color: "#D4A017", icon: <AlertTriangle size={12} /> },
   pendente_aceite: { label: "Aguardando Aceite", bg: "#eef3fc", color: "#123C7A", icon: <Clock size={12} /> },
   pendente: { label: "Pendente", bg: "#fef9c3", color: "#D4A017", icon: <AlertTriangle size={12} /> },
+  concluido: { label: "Concluído", bg: "#dcfce7", color: "#166534", icon: <CheckCircle size={12} /> },
 };
 
 export function RequestsPage() {
@@ -234,22 +235,26 @@ export function RequestsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm flex gap-2 justify-center">
-                  {!(req.tipo === "transferencia_coordenacao" && req.payload_original.successor_uid !== currentUser?.id) && (
-                    <button
-                      onClick={() => handleAction(req, "approve")}
-                      className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
-                      title="Aprovar / Aceitar"
-                    >
-                      <CheckCircle size={15} />
-                    </button>
+                  {req.status !== "concluido" && (
+                    <>
+                      {!(req.tipo === "transferencia_coordenacao" && req.payload_original.successor_uid !== currentUser?.id) && (
+                        <button
+                          onClick={() => handleAction(req, "approve")}
+                          className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
+                          title="Aprovar / Aceitar"
+                        >
+                          <CheckCircle size={15} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleAction(req, "reject")}
+                        className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                        title={req.tipo === "transferencia_coordenacao" && req.payload_original.initiator_uid === currentUser?.id ? "Cancelar" : "Rejeitar"}
+                      >
+                        <XCircle size={15} />
+                      </button>
+                    </>
                   )}
-                  <button
-                    onClick={() => handleAction(req, "reject")}
-                    className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-                    title="Rejeitar"
-                  >
-                    <XCircle size={15} />
-                  </button>
                   <button
                     onClick={() => alert(`Detalhes da solicitação ${req.id}:\n\n` + JSON.stringify(req.payload_original, null, 2))}
                     className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
