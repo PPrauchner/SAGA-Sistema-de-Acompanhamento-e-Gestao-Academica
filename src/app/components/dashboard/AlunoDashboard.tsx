@@ -2,7 +2,9 @@ import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAlunoDashboard } from "@/hooks/useDashboard";
 import { useNotifications, type Notification as ApiNotification } from "@/hooks/useNotifications";
+import { useAuth } from "@/hooks/useAuth";
 import type { AlunoDashboardData } from "@/api/dashboardApi";
+import { getChecklist, type ChecklistResponse, type RequisitoStatus } from "@/api/checklistApi";
 import {
   CheckCircle2, X, Calendar, ChevronRight, AlertTriangle,
   Bell, Clock, FileText, BookOpen, GraduationCap, Shield,
@@ -15,7 +17,7 @@ import {
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 type AcademicStatus = "regular" | "em-risco" | "qualificado" | "em-prorrogacao" | "fase-defesa";
-interface ChecklistItem { id: string; label: string; icon: string; required: number; completed: number; unit: string; details: string; }
+interface ChecklistItem { id: string; label: string; icon: string; required: number; completed: number; unit: string; details: string; status: RequisitoStatus; }
 interface WorkPhase { id: number; label: string; start: number; duration: number; color: string; progress: number; }
 interface PendingTask { id: number; title: string; deadline: string; priority: "alta" | "media" | "baixa"; type: string; done: boolean; detail: string; }
 interface Deadline { id: number; label: string; date: string; days: number; type: "urgente" | "importante" | "normal" | "critico"; icon: string; }
@@ -46,14 +48,25 @@ const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: str
 // CURRENT_STATUS agora vem dos dados da API (props.dashData.situacao_inferida)
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
-const CHECKLIST: ChecklistItem[] = [
-  { id: "creditos", label: "Créditos", icon: "📚", required: 60, completed: 42, unit: "créditos", details: "42 de 60 créditos integralizados. Faltam 18 créditos para a conclusão. Ritmo atual é adequado para finalizar até Dez/2026 cursando 2 disciplinas por semestre." },
-  { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: 1, unit: "exame", details: "Proficiência em Língua Inglesa aprovada em Março/2023. Resultado TOEFL: 87 pontos (mínimo exigido pelo programa: 60 pontos). Válida para toda a duração do doutorado." },
-  { id: "qualificacao", label: "Qualificação", icon: "🎤", required: 1, completed: 1, unit: "exame", details: "Exame de Qualificação aprovado em Agosto/2024. Banca: Profa. Dra. Carla Mendes (presidente), Prof. Dr. João Silva, Prof. Dr. Pedro Costa. Resultado: Aprovado com Louvor." },
-  { id: "producoes", label: "Produções", icon: "📄", required: 3, completed: 2, unit: "artigos Qualis", details: "2 de 3 artigos obrigatórios publicados. Falta 1 artigo em periódico Qualis A1 ou A2. Este é o principal fator de risco da situação atual — prazo crítico para submissão." },
-  { id: "defesa", label: "Defesa", icon: "🏛", required: 1, completed: 0, unit: "defesa", details: "Defesa da tese ainda não agendada. Pré-requisitos: integralizar todos os créditos e publicar os 3 artigos exigidos. Previsão de marcação: Julho/2026." },
-  { id: "versao-final", label: "Versão Final", icon: "📖", required: 1, completed: 0, unit: "entrega", details: "A versão final da tese deve ser entregue à biblioteca até 90 dias após a aprovação em banca. Formato: PDF/A via sistema SAGA, com ficha catalográfica." },
-];
+
+// Converte a resposta real de GET /checklist/{student_id} nos itens consumidos pela
+// ChecklistSection e pelo Modal. Um item "cumprido" quando completed >= required
+// vale como concluído; a cor final, porém, é dirigida pelo status real (ver
+// ChecklistSection) — incluindo "em_risco", que reaproveita o estado de atenção.
+function buildChecklistItems(data: ChecklistResponse): ChecklistItem[] {
+  const r = data.requisitos;
+  const bool = (status: RequisitoStatus): number => (status === "cumprido" ? 1 : 0);
+  return [
+    { id: "creditos_minimos", label: "Créditos mínimos", icon: "📚", required: r.creditos_minimos.minimo, completed: r.creditos_minimos.obtidos, unit: "créditos", status: r.creditos_minimos.status, details: `${r.creditos_minimos.descricao}. Obtidos ${r.creditos_minimos.obtidos} de ${r.creditos_minimos.minimo} créditos.` },
+    { id: "creditos_grupo_basico", label: "Créditos básicos", icon: "📗", required: r.creditos_grupo_basico.minimo, completed: r.creditos_grupo_basico.obtidos, unit: "créditos", status: r.creditos_grupo_basico.status, details: `${r.creditos_grupo_basico.descricao}. Obtidos ${r.creditos_grupo_basico.obtidos} de ${r.creditos_grupo_basico.minimo} créditos.` },
+    { id: "creditos_grupo_especifico", label: "Créditos específicos", icon: "📘", required: r.creditos_grupo_especifico.minimo, completed: r.creditos_grupo_especifico.obtidos, unit: "créditos", status: r.creditos_grupo_especifico.status, details: `${r.creditos_grupo_especifico.descricao}. Obtidos ${r.creditos_grupo_especifico.obtidos} de ${r.creditos_grupo_especifico.minimo} créditos.` },
+    { id: "creditos_grupo_tecnologico", label: "Créditos tecnológicos", icon: "🔧", required: r.creditos_grupo_tecnologico.maximo, completed: r.creditos_grupo_tecnologico.obtidos, unit: "créditos (máx)", status: r.creditos_grupo_tecnologico.status, details: `${r.creditos_grupo_tecnologico.descricao}. Obtidos ${r.creditos_grupo_tecnologico.obtidos} de no máximo ${r.creditos_grupo_tecnologico.maximo} créditos.` },
+    { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: bool(r.proficiencia.status), unit: "exame", status: r.proficiencia.status, details: r.proficiencia.data_comprovacao ? `Proficiência comprovada em ${r.proficiencia.data_comprovacao}.` : "Proficiência em língua estrangeira ainda não comprovada." },
+    { id: "qualificacao", label: "Qualificação", icon: "🎓", required: 1, completed: bool(r.qualificacao.status), unit: "exame", status: r.qualificacao.status, details: r.qualificacao.data_aprovacao ? `Qualificação aprovada em ${r.qualificacao.data_aprovacao}.` : "Exame de qualificação ainda não aprovado." },
+    { id: "producao_validada", label: "Produção validada", icon: "📄", required: 1, completed: r.producao_validada.quantidade_aprovadas, unit: "produção", status: r.producao_validada.status, details: `${r.producao_validada.quantidade_aprovadas} produção(ões) bibliográfica(s) validada(s). Ao menos 1 é exigida para a defesa.` },
+    { id: "plano_concluido", label: "Plano de trabalho", icon: "📋", required: r.plano_concluido.tasks_total_nao_defesa, completed: r.plano_concluido.tasks_concluidas, unit: "etapas", status: r.plano_concluido.status, details: `${r.plano_concluido.tasks_concluidas} de ${r.plano_concluido.tasks_total_nao_defesa} etapas (não-defesa) concluídas.` },
+  ];
+}
 
 const PHASES: WorkPhase[] = [
   { id: 1, label: "Revisão Bibliográfica", start: 1, duration: 8, color: "#123C7A", progress: 100 },
@@ -246,10 +259,9 @@ function Modal({ data, onClose }: { data: ModalData; onClose: () => void }) {
   const renderBody = () => {
     if (data.type === "checklist") {
       const { item } = data;
-      const done = item.completed >= item.required;
-      const pct = Math.min(Math.round((item.completed / item.required) * 100), 100);
-      const cfg = done ? { color: "#1F8A70", bg: "#dcfce7", label: "Concluído" }
-        : item.completed > 0 ? { color: "#D4A017", bg: "#fef9c3", label: "Em Andamento" }
+      const pct = item.required > 0 ? Math.min(Math.round((item.completed / item.required) * 100), 100) : 0;
+      const cfg = item.status === "cumprido" ? { color: "#1F8A70", bg: "#dcfce7", label: "Concluído" }
+        : item.status === "em_risco" ? { color: "#D4A017", bg: "#fef9c3", label: "Em risco" }
         : { color: "#94a3b8", bg: "#f1f5f9", label: "Pendente" };
       return (
         <>
@@ -641,8 +653,27 @@ function AcademicStatusCard({ situacao, conflito }: { situacao: AcademicStatus; 
 
 // ─── CHECKLIST SECTION ────────────────────────────────────────────────────────
 
-function ChecklistSection({ onOpen }: { onOpen: (item: ChecklistItem) => void }) {
-  const done = CHECKLIST.filter(i => i.completed >= i.required).length;
+function ChecklistSection({ items, loading, error, onOpen }: { items: ChecklistItem[]; loading: boolean; error: string | null; onOpen: (item: ChecklistItem) => void }) {
+  const done = items.filter(i => i.status === "cumprido").length;
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <SecHead title="Checklist de Conclusão" sub="Requisitos para obtenção do título" />
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando checklist…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <SecHead title="Checklist de Conclusão" sub="Requisitos para obtenção do título" />
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
@@ -650,15 +681,15 @@ function ChecklistSection({ onOpen }: { onOpen: (item: ChecklistItem) => void })
         sub="Requisitos para obtenção do título"
         right={
           <span className="rounded-full px-2 py-0.5" style={{ fontSize: "11px", fontWeight: 700, color: "var(--tint-blue-text)", background: "var(--tint-blue-bg)" }}>
-            {done}/{CHECKLIST.length}
+            {done}/{items.length}
           </span>
         }
       />
       <div className="space-y-2">
-        {CHECKLIST.map((item) => {
-          const isDone = item.completed >= item.required;
-          const isPartial = !isDone && item.completed > 0;
-          const pct = Math.min(Math.round((item.completed / item.required) * 100), 100);
+        {items.map((item) => {
+          const isDone = item.status === "cumprido";
+          const isPartial = item.status === "em_risco";
+          const pct = item.required > 0 ? Math.min(Math.round((item.completed / item.required) * 100), 100) : 0;
           const statusColor = isDone ? "var(--tint-teal-text)" : isPartial ? "var(--tint-gold-text)" : "var(--muted-foreground)";
           const statusBg = isDone ? "var(--tint-teal-bg)" : isPartial ? "var(--tint-gold-bg)" : "var(--muted)";
           const statusBorder = isDone ? "var(--tint-teal-border)" : isPartial ? "var(--tint-gold-border)" : "transparent";
@@ -703,10 +734,10 @@ function ChecklistSection({ onOpen }: { onOpen: (item: ChecklistItem) => void })
       <div className="mt-4 rounded-xl p-3" style={{ background: "#eef3fc", border: "1px solid #c7d9f5" }}>
         <div className="flex justify-between mb-1.5">
           <span style={{ fontSize: "12px", fontWeight: 600, color: "#123C7A" }}>Progresso Geral</span>
-          <span style={{ fontSize: "12px", fontWeight: 800, color: "#123C7A" }}>{done}/{CHECKLIST.length}</span>
+          <span style={{ fontSize: "12px", fontWeight: 800, color: "#123C7A" }}>{done}/{items.length}</span>
         </div>
         <div className="rounded-full overflow-hidden" style={{ height: 6, background: "#c7d9f5" }}>
-          <div style={{ height: "100%", width: `${(done / CHECKLIST.length) * 100}%`, background: "#123C7A", borderRadius: 999 }} />
+          <div style={{ height: "100%", width: `${items.length > 0 ? (done / items.length) * 100 : 0}%`, background: "#123C7A", borderRadius: 999 }} />
         </div>
       </div>
     </div>
@@ -1063,9 +1094,13 @@ function MobilePhasesCard() {
 
 export function AlunoDashboard() {
   const { currentUser } = useApp();
+  const { studentId, token } = useAuth();
   const { data: dashData, loading, error } = useAlunoDashboard();
   const [modal, setModal] = useState<ModalData>(null);
   const [tasks, setTasks] = useState<PendingTask[]>([]);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [checklistLoading, setChecklistLoading] = useState(true);
+  const [checklistError, setChecklistError] = useState<string | null>(null);
 
   const openChecklist = (item: ChecklistItem) => setModal({ type: "checklist", item });
   const openTask = (task: PendingTask) => setModal({ type: "task", task });
@@ -1076,6 +1111,18 @@ export function AlunoDashboard() {
   useEffect(() => {
     setTasks(tasksFromDashboard(dashData));
   }, [dashData]);
+
+  useEffect(() => {
+    if (!studentId || !token) return;
+    let active = true;
+    setChecklistLoading(true);
+    setChecklistError(null);
+    getChecklist(studentId, token)
+      .then((res) => { if (active) setChecklistItems(buildChecklistItems(res)); })
+      .catch(() => { if (active) setChecklistError("Não foi possível carregar o checklist."); })
+      .finally(() => { if (active) setChecklistLoading(false); });
+    return () => { active = false; };
+  }, [studentId, token]);
 
   if (loading) {
     return (
@@ -1165,7 +1212,7 @@ export function AlunoDashboard() {
 
       {/* ── Checklist + Progress Graph ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-        <ChecklistSection onOpen={openChecklist} />
+        <ChecklistSection items={checklistItems} loading={checklistLoading} error={checklistError} onOpen={openChecklist} />
         <div className="lg:col-span-2">
           <ProgressGraph />
         </div>
