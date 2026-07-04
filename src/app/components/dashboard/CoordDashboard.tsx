@@ -291,7 +291,7 @@ function ReportModal({ type, onClose, statusData }: { type: ReportType; onClose:
             )})}
           </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-            Total: {statusData.reduce((acc, d) => acc + d.value, 0)} alunos matriculados · Programa PPGCC
+            Total: {statusData.reduce((acc, d) => acc + d.value, 0)} alunos matriculados · Programa acadêmico
           </p>
         </div>
       ),
@@ -836,7 +836,7 @@ export function CoordDashboard() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <GraduationCap size={18} style={{ color: "rgba(255,255,255,0.85)" }} />
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>PPGCC · Coordenação</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>SAGA · Coordenação</span>
             </div>
             <h2 style={{ fontSize: "clamp(16px,4vw,22px)", fontWeight: 800, color: "#fff", lineHeight: 1.2 }}>Painel da Coordenação</h2>
             <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.75)", marginTop: "4px" }}>
