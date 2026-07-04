@@ -31,6 +31,33 @@ def request_service():
 
 
 @pytest.mark.asyncio
+async def test_get_requests_aluno_agrega_itens_do_proprio_aluno(request_service):
+    user = CurrentUser(uid="uid_aluno", email="aluno@test.com", role="aluno")
+
+    request_service._students.list_all = AsyncMock(return_value=[
+        {"id": "stu_0", "uid": "uid_outro", "nome": "Outro"},
+        {"id": "stu_1", "uid": "uid_aluno", "nome": "Aluno 1"},
+    ])
+    request_service._activities.list_by_student = AsyncMock(return_value=[
+        {"id": "act_1", "status": "enviado", "parecer_orientador": None},
+        {"id": "prod_1", "status": "enviado", "parecer_orientador": "Ok", "producao_id": "p1"},
+        {"id": "draft_1", "status": "rascunho"},
+    ])
+    request_service._extensions.list_by_student_ids = AsyncMock(return_value=[
+        {"id": "ext_1", "status": "pendente", "student_id": "stu_1", "tipo": "trancamento"},
+        {"id": "ext_2", "status": "aprovada", "student_id": "stu_1", "tipo": "prorrogacao"},
+    ])
+
+    requests = await request_service.get_requests(user)
+
+    assert len(requests) == 3
+    tipos = {r.tipo for r in requests}
+    assert {"atividade", "producao", "trancamento"} <= tipos
+    request_service._activities.list_by_student.assert_called_once_with("stu_1")
+    request_service._extensions.list_by_student_ids.assert_called_once_with({"stu_1"})
+
+
+@pytest.mark.asyncio
 async def test_get_requests_orientador(request_service):
     user = CurrentUser(uid="uid_orientador", email="adv@test.com", role="orientador")
     
@@ -41,7 +68,8 @@ async def test_get_requests_orientador(request_service):
     
     # Atividade pendente para o orientador (sem parecer)
     request_service._activities.list_by_student = AsyncMock(return_value=[
-        {"id": "act_1", "status": "enviado", "parecer_orientador": None}
+        {"id": "act_1", "status": "enviado", "parecer_orientador": None},
+        {"id": "prod_1", "status": "enviado", "parecer_orientador": None, "producao_id": "p1"},
     ])
     
     # Prorrogacao pendente
@@ -56,9 +84,10 @@ async def test_get_requests_orientador(request_service):
     
     requests = await request_service.get_requests(user)
     
-    assert len(requests) == 3
+    assert len(requests) == 4
     tipos = {r.tipo for r in requests}
     assert "atividade" in tipos
+    assert "producao" in tipos
     assert "prorrogacao" in tipos
     assert "transferencia_coordenacao" in tipos
 
@@ -73,12 +102,12 @@ async def test_get_requests_coordenacao(request_service):
     
     # Atividade aguardando coordenacao (com parecer)
     request_service._activities.list_by_student = AsyncMock(return_value=[
-        {"id": "act_2", "status": "enviado", "parecer_orientador": "Aprovado"}
+        {"id": "act_2", "status": "enviado", "parecer_orientador": "Aprovado", "producao_id": "p2"}
     ])
     
     # Prorrogacao com parecer
     request_service._extensions.list_all = AsyncMock(return_value=[
-        {"id": "ext_2", "status": "pendente", "student_id": "stu_2", "parecer_orientador": "Ok"}
+        {"id": "ext_2", "status": "pendente", "student_id": "stu_2", "parecer_orientador": "Ok", "tipo": "trancamento"}
     ])
     
     # Transferencia de orientando no programa
@@ -94,6 +123,9 @@ async def test_get_requests_coordenacao(request_service):
     requests = await request_service.get_requests(user)
     
     assert len(requests) == 4
+    tipos = {r.tipo for r in requests}
+    assert "producao" in tipos
+    assert "trancamento" in tipos
 
 
 @pytest.mark.asyncio
