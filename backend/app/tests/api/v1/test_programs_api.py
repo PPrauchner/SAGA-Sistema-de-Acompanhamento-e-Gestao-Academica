@@ -24,6 +24,15 @@ from backend.app.services.program_service import ProgramService
 client = TestClient(app)
 
 
+def _override_auth_and_service(mock_service):
+    from backend.app.core.auth import CurrentUser
+
+    app.dependency_overrides[get_current_user] = lambda: CurrentUser(
+        uid="test", role="coordenacao", programa_id="prog_default", email="test@saga.edu"
+    )
+    app.dependency_overrides[ProgramService] = lambda: mock_service
+
+
 def test_get_config_success():
     """Deve retornar 200 e os dados de configuração."""
     # Setup mock service
@@ -93,3 +102,25 @@ def test_update_config_success():
     # Assert
     assert response.status_code == 200
     assert response.json()["message"] == "Configuração atualizada com sucesso"
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"creditos_total_min": -1},
+        {"creditos_total_min": None},
+        {"creditos_total_min": ""},
+        {"creditos_total_min": 1.5},
+        {"meses_ate_qualificacao": 0},
+        {"meses_ate_qualificacao": -1},
+    ],
+)
+def test_update_config_rejects_invalid_payload(payload):
+    mock_service = AsyncMock()
+    _override_auth_and_service(mock_service)
+
+    response = client.put("/api/v1/programs/config", json=payload)
+
+    app.dependency_overrides = {}
+
+    assert response.status_code == 422
+    mock_service.update_config.assert_not_called()
