@@ -16,6 +16,7 @@ from fastapi import HTTPException, status
 
 from backend.app.core.auth import CurrentUser
 from backend.app.models.activity import (
+    ActivityCreateByAdvisorRequest,
     ActivityCreateRequest,
     ActivityResponse,
     ActivityStatus,
@@ -59,11 +60,41 @@ class ActivityService:
         self._advisors = AdvisorRepository()
         self._inference = inference_service or InferenceService(InferenceRepository())
 
-    async def submit_activity(self, data: ActivityCreateRequest, user: CurrentUser) -> dict:
-        student = await self._resolve_student(user)
+    async def _register_activity(
+        self,
+        student: dict,
+        *,
+        tipo_id: str,
+        descricao: str,
+        data_realizacao: datetime,
+        comprovante_url: str | None,
+        status_inicial: str,
+        parecer: str | None,
+    ) -> tuple[str, bool]:
+        """Persiste a atividade e roda a elegibilidade preliminar (RL04).
+
+        Núcleo compartilhado pela submissão do aluno e pela criação do orientador. Não
+        contabiliza créditos: `creditos_gerados` é a `pontuacao_base` do tipo e
+        `creditos_concedidos` fica None até a validação da coordenação.
+
+        Args:
+            student: Documento do aluno dono da atividade (com `id`).
+            tipo_id: Tipo de atividade creditável.
+            descricao: Descrição da atividade.
+            data_realizacao: Data de realização.
+            comprovante_url: URL do comprovante, se houver.
+            status_inicial: Status com que a atividade nasce (`rascunho`/`enviado`).
+            parecer: Parecer do orientador quando a criação já é o endosso; None caso contrário.
+
+        Returns:
+            Tupla (activity_id, elegibilidade_preliminar).
+
+        Raises:
+            HTTPException: 404 se o tipo de atividade não existir.
+        """
         student_id = student["id"]
 
-        activity_type = await self._types.get(data.tipo_id)
+        activity_type = await self._types.get(tipo_id)
         if activity_type is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -81,15 +112,15 @@ class ActivityService:
         activity_id = await self._activities.create_activity(
             student_id,
             {
-                "tipo_id": data.tipo_id,
+                "tipo_id": tipo_id,
                 "aluno_id": student_id,
-                "descricao": data.descricao,
-                "data_realizacao": data.data_realizacao,
-                "comprovante_url": data.comprovante_url,
+                "descricao": descricao,
+                "data_realizacao": data_realizacao,
+                "comprovante_url": comprovante_url,
                 "creditos_gerados": pontuacao_base,
                 "creditos_concedidos": None,
-                "status": data.status,
-                "parecer_orientador": None,
+                "status": status_inicial,
+                "parecer_orientador": parecer,
                 "observacao_coordenacao": None,
                 "validado_por": None,
                 "validado_em": None,
@@ -102,12 +133,26 @@ class ActivityService:
             activity_id=activity_id,
             student_id=student_id,
             data_ingresso=_to_iso_date(student.get("data_ingresso")),
-            data_realizacao=_to_iso_date(data.data_realizacao),
-            tem_comprovante=bool(data.comprovante_url),
+            data_realizacao=_to_iso_date(data_realizacao),
+            tem_comprovante=bool(comprovante_url),
             tipo_ativo=tipo_ativo,
             categoria_creditos_aprovados=creditos_aprovados,
             pontuacao_base=pontuacao_base,
             limite_categoria=None if limite is None else float(limite),
+        )
+        return activity_id, elegibilidade
+
+    async def submit_activity(self, data: ActivityCreateRequest, user: CurrentUser) -> dict:
+        student = await self._resolve_student(user)
+
+        activity_id, elegibilidade = await self._register_activity(
+            student,
+            tipo_id=data.tipo_id,
+            descricao=data.descricao,
+            data_realizacao=data.data_realizacao,
+            comprovante_url=data.comprovante_url,
+            status_inicial=data.status,
+            parecer=None,
         )
 
         orientador_uid = await self._resolve_orientador_uid(student.get("orientador_id"))
@@ -119,6 +164,49 @@ class ActivityService:
             "notificacao_enviada": notificacao_enviada,
             "aluno_nome": student.get("nome", ""),
             "orientador_uid": orientador_uid,
+            "programa_id": student.get("programa_id"),
+        }
+
+    async def submit_activity_for_orientando(
+        self, data: ActivityCreateByAdvisorRequest, user: CurrentUser
+    ) -> dict:
+        """Registra atividade criada pelo orientador para um orientando.
+
+        A criação já é o endosso: a atividade nasce em `enviado` com o parecer preenchido e
+        entra direto na fila da coordenação. A propriedade (orientador do aluno) é garantida
+        pelo A01 no router; aqui só se valida a existência do aluno.
+
+        Args:
+            data: Dados da atividade, incluindo `aluno_id` e o parecer do orientador.
+            user: Orientador autenticado.
+
+        Returns:
+            Dict com id, elegibilidade preliminar e metadados do aluno.
+
+        Raises:
+            HTTPException: 404 se o aluno não existir.
+        """
+        student = await self._students.get(data.aluno_id)
+        if student is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado"
+            )
+
+        activity_id, elegibilidade = await self._register_activity(
+            student,
+            tipo_id=data.tipo_id,
+            descricao=data.descricao,
+            data_realizacao=data.data_realizacao,
+            comprovante_url=data.comprovante_url,
+            status_inicial=ActivityStatus.enviado.value,
+            parecer=data.parecer,
+        )
+
+        return {
+            "id": activity_id,
+            "elegibilidade_preliminar": elegibilidade,
+            "notificacao_enviada": False,
+            "aluno_nome": student.get("nome", ""),
             "programa_id": student.get("programa_id"),
         }
 
@@ -244,6 +332,26 @@ async def resolve_advisor_uid_for_activity(activity_id: str) -> str | None:
     if not activity:
         return None
     student = await _student_repo.get(activity["student_id"])
+    if not student or not student.get("orientador_id"):
+        return None
+    advisor = await _advisor_repo.get(student["orientador_id"])
+    return advisor.get("uid") if advisor else None
+
+
+async def resolve_advisor_uid_for_student(student_id: str) -> str | None:
+    """Resolve o uid do orientador de um aluno (suporte ao A01 por propriedade na criação).
+
+    Usado por POST /activities/orientador: a partir do `aluno_id` do corpo, resolve
+    `students.orientador_id → advisors.uid` para o aspecto comparar com o orientador
+    autenticado.
+
+    Args:
+        student_id: Auto-id do aluno alvo da atividade.
+
+    Returns:
+        O uid do orientador, ou None se o aluno ou o orientador não existirem.
+    """
+    student = await _student_repo.get(student_id)
     if not student or not student.get("orientador_id"):
         return None
     advisor = await _advisor_repo.get(student["orientador_id"])
