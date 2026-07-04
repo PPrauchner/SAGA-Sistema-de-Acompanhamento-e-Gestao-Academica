@@ -7,7 +7,32 @@ Responsabilidades:
 - Permitir mapeamento direto entre documentos Firestore e objetos Python.
 """
 
-from pydantic import BaseModel, ConfigDict
+import math
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+
+
+CREDIT_FIELDS = {
+    "creditos_grupo_basico_min",
+    "creditos_grupo_especifico_min",
+    "creditos_grupo_tecnologico_max",
+    "creditos_total_min",
+}
+
+
+def _validate_required_int(value: Any, *, min_value: int, message: str) -> int:
+    if value is None or value == "":
+        raise ValueError(message)
+    if isinstance(value, bool):
+        raise ValueError(message)
+    if isinstance(value, float) and math.isnan(value):
+        raise ValueError(message)
+    if not isinstance(value, int):
+        raise ValueError(message)
+    if value < min_value:
+        raise ValueError(message)
+    return value
 
 
 class ProgramConfigBase(BaseModel):
@@ -32,6 +57,32 @@ class ProgramConfigBase(BaseModel):
     duracao_prorrogacao_meses: int
     meses_ate_qualificacao: int
 
+    @field_validator(*CREDIT_FIELDS, mode="before")
+    @classmethod
+    def _validate_credit_fields(cls, value: Any) -> int:
+        return _validate_required_int(
+            value,
+            min_value=0,
+            message="Créditos devem ser inteiros maiores ou iguais a zero.",
+        )
+
+    @field_validator("meses_ate_qualificacao", mode="before")
+    @classmethod
+    def _validate_meses_ate_qualificacao(cls, value: Any) -> int:
+        return _validate_required_int(
+            value,
+            min_value=1,
+            message="Meses até qualificação deve ser maior ou igual a 1.",
+        )
+
+    @model_validator(mode="after")
+    def _validate_creditos_total_min(self) -> "ProgramConfigBase":
+        if self.creditos_total_min < self.creditos_grupo_basico_min + self.creditos_grupo_especifico_min:
+            raise ValueError(
+                "Créditos totais mínimos não podem ser menores que a soma dos créditos básico e específico."
+            )
+        return self
+
 
 class ProgramConfigCreate(ProgramConfigBase):
     """Schema para criar uma nova configuração de programa."""
@@ -51,6 +102,24 @@ class ProgramConfigUpdate(BaseModel):
     duracao_meses: int | None = None
     duracao_prorrogacao_meses: int | None = None
     meses_ate_qualificacao: int | None = None
+
+    @field_validator(*CREDIT_FIELDS, mode="before")
+    @classmethod
+    def _validate_credit_fields(cls, value: Any) -> int:
+        return _validate_required_int(
+            value,
+            min_value=0,
+            message="Créditos devem ser inteiros maiores ou iguais a zero.",
+        )
+
+    @field_validator("meses_ate_qualificacao", mode="before")
+    @classmethod
+    def _validate_meses_ate_qualificacao(cls, value: Any) -> int:
+        return _validate_required_int(
+            value,
+            min_value=1,
+            message="Meses até qualificação deve ser maior ou igual a 1.",
+        )
 
 
 class ProgramConfig(ProgramConfigBase):

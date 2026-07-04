@@ -8,6 +8,8 @@ Responsabilidades:
 """
 
 from typing import Any
+from fastapi import HTTPException, status
+
 from backend.app.models.program_config import ProgramConfigUpdate
 from backend.app.models.vehicle_level import VehicleLevelUpdate, VehicleLevelCreate
 from backend.app.repositories.program_repository import ProgramRepository
@@ -23,6 +25,22 @@ class ProgramService:
             repository: Uma instância de ProgramRepository. Se None, uma nova é criada.
         """
         self.repository = repository or ProgramRepository()
+
+    @staticmethod
+    def _validate_creditos_total_min(config: dict[str, Any]) -> None:
+        basico = config.get("creditos_grupo_basico_min")
+        especifico = config.get("creditos_grupo_especifico_min")
+        total = config.get("creditos_total_min")
+        if basico is None or especifico is None or total is None:
+            return
+        if total < basico + especifico:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "Créditos totais mínimos não podem ser menores que a soma "
+                    "dos créditos básico e específico."
+                ),
+            )
 
     async def list_programs(self) -> list[dict[str, Any]]:
         """Lista todos os programas cadastrados no sistema.
@@ -54,6 +72,8 @@ class ProgramService:
             True se a atualização foi bem-sucedida.
         """
         update_dict = data.model_dump(exclude_unset=True)
+        current_config = await self.repository.get_config(programa_id) or {}
+        self._validate_creditos_total_min({**current_config, **update_dict})
         return await self.repository.update_config(programa_id, update_dict)
 
     async def get_vehicle_levels(self, programa_id: str) -> list[dict[str, Any]]:
