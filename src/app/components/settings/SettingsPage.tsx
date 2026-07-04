@@ -51,6 +51,39 @@ export interface VehicleLevel {
 const formatMetric = (value: number | null | undefined): string | number =>
   value == null ? "—" : value;
 
+const CREDIT_CONFIG_FIELDS = [
+  "creditos_grupo_basico_min",
+  "creditos_grupo_especifico_min",
+  "creditos_grupo_tecnologico_max",
+  "creditos_total_min",
+] as const;
+
+function parseIntegerInput(value: string): number {
+  return value === "" ? Number.NaN : Number(value);
+}
+
+function inputNumberValue(value: number | undefined): number | "" {
+  return value == null || Number.isNaN(value) ? "" : value;
+}
+
+function validateProgramConfig(config: ProgramConfig | null): string | null {
+  if (!config) return "Configuração do programa não carregada.";
+  const hasInvalidCredits = CREDIT_CONFIG_FIELDS.some((field) => {
+    const value = config[field];
+    return !Number.isInteger(value) || value < 0;
+  });
+  if (hasInvalidCredits) {
+    return "Créditos devem ser inteiros maiores ou iguais a zero.";
+  }
+  if (!Number.isInteger(config.meses_ate_qualificacao) || config.meses_ate_qualificacao < 1) {
+    return "Meses até qualificação deve ser maior ou igual a 1.";
+  }
+  if (config.creditos_total_min < config.creditos_grupo_basico_min + config.creditos_grupo_especifico_min) {
+    return "Créditos totais mínimos não podem ser menores que a soma dos créditos básico e específico.";
+  }
+  return null;
+}
+
 const BASE_TABS = [
   { id: "perfil", label: "Perfil", icon: <User size={16} /> },
   { id: "notificacoes", label: "Notificações", icon: <Bell size={16} /> },
@@ -107,6 +140,7 @@ export function SettingsPage() {
 
   // Program Config State
   const [programConfig, setProgramConfig] = useState<ProgramConfig | null>(null);
+  const [programConfigError, setProgramConfigError] = useState<string | null>(null);
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
   const [vehicleLevels, setVehicleLevels] = useState<VehicleLevel[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -157,6 +191,7 @@ export function SettingsPage() {
         getVehicles(token)
       ]);
       setProgramConfig(config);
+      setProgramConfigError(null);
       setActivityTypes(types);
       setVehicleLevels(vLevels);
       setVehicles(vehicleList);
@@ -189,6 +224,13 @@ export function SettingsPage() {
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    const validationError = validateProgramConfig(programConfig);
+    if (validationError) {
+      setProgramConfigError(validationError);
+      toast.error(validationError);
+      return;
+    }
+    setProgramConfigError(null);
     setLoading(true);
     try {
       await programsApi.updateProgramConfig(token, programConfig);
@@ -196,7 +238,9 @@ export function SettingsPage() {
       toast.success("Configurações atualizadas");
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      toast.error("Erro ao salvar configurações");
+      const message = error instanceof Error ? error.message : "Erro ao salvar configurações";
+      setProgramConfigError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -822,12 +866,19 @@ export function SettingsPage() {
                   <p>Carregando...</p>
                 ) : (
                   <form onSubmit={handleSaveConfig} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {programConfigError && (
+                      <p className="sm:col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                        {programConfigError}
+                      </p>
+                    )}
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Básicos</label>
                       <input 
                         type="number"
-                        value={programConfig?.creditos_grupo_basico_min || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_basico_min: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_grupo_basico_min)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_basico_min: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -835,8 +886,10 @@ export function SettingsPage() {
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Específicos</label>
                       <input 
                         type="number"
-                        value={programConfig?.creditos_grupo_especifico_min || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_especifico_min: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_grupo_especifico_min)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_especifico_min: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -844,8 +897,10 @@ export function SettingsPage() {
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Máximo Créditos Tecnológicos</label>
                       <input 
                         type="number"
-                        value={programConfig?.creditos_grupo_tecnologico_max || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_tecnologico_max: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_grupo_tecnologico_max)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_tecnologico_max: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -853,8 +908,10 @@ export function SettingsPage() {
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Total de Créditos</label>
                       <input 
                         type="number"
-                        value={programConfig?.creditos_total_min || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_total_min: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_total_min)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_total_min: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
@@ -862,8 +919,10 @@ export function SettingsPage() {
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Meses até Qualificação</label>
                       <input 
                         type="number"
-                        value={programConfig?.meses_ate_qualificacao || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), meses_ate_qualificacao: parseInt(e.target.value)}))}
+                        min={1}
+                        step={1}
+                        value={inputNumberValue(programConfig?.meses_ate_qualificacao)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), meses_ate_qualificacao: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
