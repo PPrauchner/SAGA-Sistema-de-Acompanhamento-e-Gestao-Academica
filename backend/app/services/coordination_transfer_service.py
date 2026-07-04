@@ -21,7 +21,7 @@ from backend.app.repositories.coordination_transfer_repository import (
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
 _PENDING = "pendente"
-_ACCEPTED = "aceita"
+_ACCEPTED = "concluido"
 
 
 class CoordinationTransferService:

@@ -283,7 +283,7 @@ com aceite obrigatorio do sucessor. Nao gera A03 porque nao altera historico de 
 | `programa_id` | string | ->`programs` (soft) | programa da coordenacao transferida |
 | `initiator_uid` | string | ->`users.uid` | coordenacao atual que iniciou o convite |
 | `successor_uid` | string | ->`users.uid` | orientador convidado para assumir coordenacao |
-| `status` | string | | `pendente`\|`aceita`\|`rejeitada`\|`cancelada` |
+| `status` | string | | `pendente`\|`concluido`\|`rejeitada`\|`cancelada` |
 | `created_at` / `updated_at` | timestamp | | |
 | `decided_at` | timestamp\|null | | preenchido em aceite/rejeicao |
 | `accepted_at` | timestamp\|null | | preenchido no aceite |
@@ -293,7 +293,7 @@ com aceite obrigatorio do sucessor. Nao gera A03 porque nao altera historico de 
 > Swap no aceite: valida pendencia e vinculo ao mesmo programa; troca `set_custom_user_claims`
 > do sucessor e do iniciador; atualiza `users/{uid}.role` dos dois; cria `advisors/` para o
 > ex-coordenador com `limite_orientandos=5` se ainda nao existir; revoga refresh tokens dos dois;
-> marca a transferencia como `aceita`. Se houver falha parcial, repetir o aceite e seguro desde
+> marca a transferencia como `concluido`. Se houver falha parcial, repetir o aceite e seguro desde
 > que a transferencia continue `pendente`: claims e roles sao regravados com os mesmos valores,
 > o documento `advisors/` e reutilizado/criado com id estavel, e tokens podem ser revogados
 > novamente sem alterar o resultado final.

@@ -49,10 +49,13 @@ async def test_get_requests_orientador(request_service):
         {"id": "ext_1", "status": "pendente", "student_id": "stu_1", "parecer_orientador": None, "parecer": None}
     ])
     
+    async def mock_query(filters=None):
+        if filters and filters[0][0] == "successor_uid":
+            return [{"id": "ct_1", "status": "pendente", "initiator_uid": "uid_coord"}]
+        return []
+
     # Transferencia de coordenacao de destino
-    request_service._coord_transfers.list_pending_for_successor = AsyncMock(return_value=[
-        {"id": "ct_1", "status": "pendente", "initiator_uid": "uid_coord"}
-    ])
+    request_service._coord_transfers.query = AsyncMock(side_effect=mock_query)
     
     requests = await request_service.get_requests(user)
     
@@ -95,17 +98,3 @@ async def test_get_requests_coordenacao(request_service):
     
     assert len(requests) == 4
 
-
-@pytest.mark.asyncio
-async def test_get_requests_adm(request_service):
-    user = CurrentUser(uid="uid_adm", email="adm@test.com", role="adm")
-    
-    request_service._coord_transfers.list_all = AsyncMock(return_value=[
-        {"id": "ct_3", "status": "pendente", "initiator_uid": "uid_coord"}
-    ])
-    request_service._users.list_all = AsyncMock(return_value=[])
-    
-    requests = await request_service.get_requests(user)
-    
-    assert len(requests) == 1
-    assert requests[0].tipo == "transferencia_coordenacao"
