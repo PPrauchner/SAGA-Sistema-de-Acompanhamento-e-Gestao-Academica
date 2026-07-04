@@ -7,7 +7,7 @@ import pytest
 from fastapi import HTTPException
 
 from backend.app.core.auth import CurrentUser
-from backend.app.models.activity import ActivityCreateRequest
+from backend.app.models.activity import ActivityCreateByAdvisorRequest, ActivityCreateRequest
 from backend.app.services import activity_service as activity_module
 from backend.app.services.activity_service import ActivityService
 
@@ -33,6 +33,9 @@ class _FakeStudentRepository:
 
     async def list_all(self) -> list[dict[str, Any]]:
         return [dict(item) for item in type(self).store]
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        return next((dict(item) for item in type(self).store if item.get("id") == doc_id), None)
 
 
 class _FakeActivityTypeRepository:
@@ -288,3 +291,59 @@ async def test_list_coordenacao_filtra_por_status_e_categoria() -> None:
 
     tecnologicas = await service.list_activities(_coord(), categoria="tecnologico")
     assert tecnologicas == []
+
+
+# -- Criação pelo orientador (issue #263) -----------------------------------------------
+
+
+def _advisor_activity_payload(**overrides: Any) -> ActivityCreateByAdvisorRequest:
+    data: dict[str, Any] = {
+        "aluno_id": "student1",
+        "tipo_id": "t1",
+        "descricao": "Curso registrado pelo orientador",
+        "data_realizacao": datetime(2024, 6, 1, tzinfo=timezone.utc),
+        "comprovante_url": "https://x/c.pdf",
+        "parecer": "Endosso do orientador",
+    }
+    data.update(overrides)
+    return ActivityCreateByAdvisorRequest(**data)
+
+
+async def test_orientador_cria_atividade_enviada_com_parecer() -> None:
+    service = _service()
+
+    result = await service.submit_activity_for_orientando(_advisor_activity_payload(), _orientador())
+
+    assert result["id"] == "act1"
+    assert result["elegibilidade_preliminar"] is True
+    assert result["notificacao_enviada"] is False
+    assert result["aluno_nome"] == "Maria"
+
+    stored = _FakeActivityRepository.store["student1"][0]
+    assert stored["status"] == "enviado"
+    assert stored["parecer_orientador"] == "Endosso do orientador"
+    # Créditos não são contabilizados antes da aprovação da coordenação (US-CR01)
+    assert stored["creditos_gerados"] == 4.0
+    assert stored["creditos_concedidos"] is None
+
+
+async def test_orientador_cria_para_aluno_inexistente_404() -> None:
+    service = _service()
+
+    with pytest.raises(HTTPException) as exc:
+        await service.submit_activity_for_orientando(
+            _advisor_activity_payload(aluno_id="fantasma"), _orientador()
+        )
+
+    assert exc.value.status_code == 404
+
+
+async def test_resolve_advisor_uid_for_student(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A resolução aluno -> orientador sustenta o 403 do A01 por propriedade no router.
+    monkeypatch.setattr(activity_module, "_student_repo", _FakeStudentRepository())
+    monkeypatch.setattr(activity_module, "_advisor_repo", _FakeAdvisorRepository())
+
+    uid = await activity_module.resolve_advisor_uid_for_student("student1")
+    assert uid == "uid-orient"
+
+    assert await activity_module.resolve_advisor_uid_for_student("fantasma") is None
