@@ -75,14 +75,14 @@ def check_dashboard_ownership() -> Callable[[_F], _F]:
                         status_code=status.HTTP_404_NOT_FOUND,
                         detail="Aluno não encontrado",
                     )
-                
+
                 if user.role == "aluno":
                     if student.get("uid") != user.uid:
                         raise HTTPException(
                             status_code=status.HTTP_403_FORBIDDEN,
                             detail="Acesso negado: aluno só pode acessar próprio dashboard",
                         )
-                
+
                 elif user.role == "orientador":
                     advisors_repo = FirebaseRepository("advisors")
                     advisors = await advisors_repo.query(filters=[("uid", "==", user.uid)])
