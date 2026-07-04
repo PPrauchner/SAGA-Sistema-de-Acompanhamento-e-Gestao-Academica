@@ -74,8 +74,10 @@ function parseYMD(iso: string): { year: number; month: number; day: number } | n
   if (match) {
     return { year: Number(match[1]), month: Number(match[2]) - 1, day: Number(match[3]) };
   }
+
   const date = new Date(iso);
   if (isNaN(date.getTime())) return null;
+
   return { year: date.getFullYear(), month: date.getMonth(), day: date.getDate() };
 }
 
@@ -87,12 +89,16 @@ function formatMesAno(iso: string | null | undefined): string {
 
 function monthsUntil(iso: string | null | undefined): number {
   if (!iso) return 0;
+
   const target = parseYMD(iso);
   if (!target) return 0;
+
   const now = new Date();
   let months =
     (target.year - now.getFullYear()) * 12 + (target.month - now.getMonth());
+
   if (target.day < now.getDate()) months -= 1;
+
   return months;
 }
 
@@ -103,16 +109,23 @@ function yearOf(iso: string | null | undefined): string {
 }
 
 function deriveFaseProximo(plan: WorkPlan | null): { fase: string; proximo: string } {
-  if (!plan || plan.stages.length === 0) return { fase: "-", proximo: "-" };
+  if (!plan || plan.stages.length === 0) {
+    return { fase: "-", proximo: "-" };
+  }
+
   const stages = [...plan.stages].sort((a, b) => a.ordem - b.ordem);
+
   if (stages.every((s) => s.status === "concluido")) {
     return { fase: "Plano concluido", proximo: "-" };
   }
+
   const current =
     stages.find((s) => s.status !== "concluido") ?? stages[stages.length - 1];
+
   const fase = STAGE_LABEL[current.nome] ?? current.nome;
 
   let proximo = current.tasks.find((t) => t.status !== "concluido")?.titulo ?? "-";
+
   if (proximo === "-") {
     for (const stage of stages) {
       const pending = stage.tasks.find((t) => t.status !== "concluido");
@@ -122,25 +135,33 @@ function deriveFaseProximo(plan: WorkPlan | null): { fase: string; proximo: stri
       }
     }
   }
+
   return { fase, proximo };
 }
 
 function deriveUltimaAtual(plan: WorkPlan | null): string {
   if (!plan) return "-";
+
   let latest = 0;
+
   for (const stage of plan.stages) {
     for (const task of stage.tasks) {
       const criado = task.ultima_atualizacao?.criado_em;
       if (!criado) continue;
+
       const ts = new Date(criado).getTime();
       if (!isNaN(ts) && ts > latest) latest = ts;
     }
   }
+
   if (latest === 0) return "-";
+
   const days = Math.floor((Date.now() - latest) / 86_400_000);
+
   if (days <= 0) return "hoje";
   if (days === 1) return "ontem";
   if (days < 7) return `ha ${days} dias`;
+
   const weeks = Math.floor(days / 7);
   return weeks === 1 ? "ha 1 semana" : `ha ${weeks} semanas`;
 }
@@ -152,6 +173,7 @@ function buildView(
 ): OrientandoView {
   const situacao = dash?.situacao_inferida ?? student.situacao_inferida;
   const { fase, proximo } = deriveFaseProximo(plan);
+
   return {
     id: student.id,
     name: student.nome,
@@ -184,7 +206,9 @@ export function useOrientandos(advisorId: string | undefined): UseOrientandosRes
       setLoading(false);
       return;
     }
+
     let cancelled = false;
+
     setLoading(true);
     setError(null);
 
@@ -193,15 +217,18 @@ export function useOrientandos(advisorId: string | undefined): UseOrientandosRes
         const orientandos = advisorId
           ? students.filter((s) => s.orientador_id === advisorId)
           : students;
+
         const views = await Promise.all(
           orientandos.map(async (student) => {
             const [dash, plan] = await Promise.all([
               getAlunoDashboard(student.id, token).catch(() => null),
               getWorkPlan(student.id, token).catch(() => null),
             ]);
+
             return buildView(student, dash, plan);
           }),
         );
+
         if (!cancelled) setData(views);
       })
       .catch((err: Error) => {

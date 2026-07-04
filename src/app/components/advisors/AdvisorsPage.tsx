@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { BookOpen, Eye, Plus, Search, Users } from "lucide-react";
+import { ArrowRightLeft, BookOpen, Eye, Plus, Search, Users } from "lucide-react";
 
 import {
   createAdvisor,
@@ -9,6 +9,7 @@ import {
   updateAdvisor,
 } from "@/api/advisorsApi";
 import { programsApi, type Program } from "@/api/programsApi";
+import { coordinationTransfersApi } from "@/api/coordinationTransfersApi";
 import { useAuth } from "@/hooks/useAuth";
 
 const emptyForm: AdvisorCreatePayload = {
@@ -40,6 +41,7 @@ export function AdvisorsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [confirmTransferAdvisor, setConfirmTransferAdvisor] = useState<Advisor | null>(null);
 
   async function loadData(authToken: string): Promise<void> {
     setLoading(true);
@@ -127,6 +129,22 @@ export function AdvisorsPage() {
     }
   }
 
+  async function handleTransferCoordination(): Promise<void> {
+    if (!token || !confirmTransferAdvisor?.uid) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await coordinationTransfersApi.start(token, confirmTransferAdvisor.uid);
+      setConfirmTransferAdvisor(null);
+      await loadData(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao enviar solicitação de transferência");
+      setConfirmTransferAdvisor(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const activeCount = advisors.length;
   const studentCount = advisors.reduce((sum, advisor) => sum + advisor.orientandos_ativos, 0);
   const capacity = advisors.reduce((sum, advisor) => sum + advisor.limite_orientandos, 0);
@@ -198,10 +216,15 @@ export function AdvisorsPage() {
                 <div className="grid grid-cols-3 gap-3 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
                   <Metric icon={<Users size={13} />} label="Orientandos" value={`${advisor.orientandos_ativos}/${advisor.limite_orientandos}`} color="#123C7A" />
                   <Metric icon={<BookOpen size={13} />} label="Programa" value={advisor.programa_id} color="#1F8A70" />
-                  <div className="text-center">
-                    <button onClick={() => openEditForm(advisor)} className="flex items-center justify-center gap-1 mx-auto px-3 py-1.5 rounded-lg transition-colors" style={{ background: "#eef3fc", color: "#123C7A", fontSize: "12px", fontWeight: 600 }}>
+                  <div className="flex flex-col gap-1 items-center justify-center">
+                    <button onClick={() => openEditForm(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ background: "#eef3fc", color: "#123C7A", fontSize: "12px", fontWeight: 600 }}>
                       <Eye size={13} /> Editar
                     </button>
+                    {role === "coordenacao" && advisor.uid && (
+                      <button onClick={() => setConfirmTransferAdvisor(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 600 }}>
+                        <ArrowRightLeft size={11} /> Coordenação
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -232,6 +255,21 @@ export function AdvisorsPage() {
               <button disabled={saving} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>{saving ? "Salvando..." : editingAdvisor ? "Salvar" : "Cadastrar"}</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {confirmTransferAdvisor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="rounded-2xl p-6 w-full max-w-sm mx-4" style={{ background: "var(--card)" }}>
+            <h2 className="mb-4" style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>Confirmar Transferência</h2>
+            <p className="mb-6" style={{ fontSize: "14px", color: "var(--muted-foreground)" }}>
+              Tem certeza que deseja solicitar a transferência de coordenação para <strong>{confirmTransferAdvisor.nome}</strong>? Se o receptor aceitar, essa ação é irreversível.
+            </p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setConfirmTransferAdvisor(null)} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
+              <button onClick={handleTransferCoordination} disabled={saving} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>{saving ? "Enviando..." : "Confirmar Solicitação"}</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
