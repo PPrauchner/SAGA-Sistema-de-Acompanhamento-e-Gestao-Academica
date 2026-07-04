@@ -4,38 +4,52 @@ import { useAuth } from "@/hooks/useAuth";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+export type ExtensionStatus = "pendente" | "em_analise" | "aprovada" | "rejeitada";
+export type ExtensionTipo =
+  | "prazo_defesa"
+  | "prazo_qualificacao"
+  | "trancamento"
+  | "mudanca_nivel";
+
 export interface Extension {
   id: string;
-  aluno_id: string;
-  aluno_nome?: string;
+  student_id: string;
+  student_nome?: string | null;
+  requester_id: string;
+  programa_id?: string | null;
+  tipo: ExtensionTipo;
   motivo: string;
   plano_atualizado: string;
   parecer_orientador: string | null;
-  semestres_solicitados: number;
-  status: "pendente" | "aprovada" | "rejeitada";
-  prazo_novo?: string;
-  criado_em: string;
+  status: ExtensionStatus;
+  nova_data: string;
+  data_atual?: string | null;
+  prazo_novo?: string | null;
+  aprovado_por?: string | null;
+  aprovado_em?: string | null;
+  created_at: string;
+}
+
+export interface CreateExtensionInput {
+  tipo: ExtensionTipo;
+  motivo: string;
+  plano_atualizado: string;
+  nova_data: string; // ISO 8601
 }
 
 export const useExtensionsApi = () => {
-  const { token, currentUser, role, studentId } = useAuth();
+  const { token, currentUser, role } = useAuth();
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const getHeaders = () => ({
-    headers: { Authorization: `Bearer ${token}` }
-  });
+  const getHeaders = () => ({ headers: { Authorization: `Bearer ${token}` } });
 
+  // Escopo por papel é resolvido no backend (Spec 08 — GET /extensions).
   const loadExtensions = async () => {
     if (!token) return;
     setLoading(true);
     try {
-      // Correção C4: Mapeamento exato das URLs criadas no backend FastAPI
-      const url = role === "aluno" && studentId
-        ? `${API_URL}/api/v1/extensions/students/${studentId}`
-        : `${API_URL}/api/v1/extensions/dashboard`;
-      
-      const response = await axios.get(url, getHeaders());
+      const response = await axios.get<Extension[]>(`${API_URL}/api/v1/extensions`, getHeaders());
       setExtensions(response.data);
     } catch (err) {
       console.error("Erro ao carregar prorrogações:", err);
@@ -46,32 +60,32 @@ export const useExtensionsApi = () => {
 
   useEffect(() => {
     if (token) loadExtensions();
-  }, [token, role, studentId]);
+  }, [token, role]);
 
-  // Correção m2: Remoção do campo morto tipo_solicitacao do contrato
-  const createRequest = async (data: { motivo: string; plano_atualizado: string; semestres_solicitados: number }) => {
-    const response = await axios.post(`${API_URL}/api/v1/extensions`, data, getHeaders());
+  const createRequest = async (data: CreateExtensionInput): Promise<Extension> => {
+    const response = await axios.post<Extension>(`${API_URL}/api/v1/extensions`, data, getHeaders());
     await loadExtensions();
     return response.data;
   };
 
-  const submitReview = async (studentIdParam: string, extensionId: string, parecer: string) => {
-    const response = await axios.patch(
-      `${API_URL}/api/v1/extensions/${studentIdParam}/${extensionId}/review`, 
-      { parecer_orientador: parecer }, 
-      getHeaders()
+  const submitReview = async (extensionId: string, parecer: string): Promise<Extension> => {
+    const response = await axios.patch<Extension>(
+      `${API_URL}/api/v1/extensions/${extensionId}/review`,
+      { parecer_orientador: parecer },
+      getHeaders(),
     );
     await loadExtensions();
     return response.data;
   };
 
-  // Correção C4/M1: Alinhado rota para /approve e payload para { aprovado: boolean }
-  const submitDecision = async (studentIdParam: string, extensionId: string, decision: "aprovada" | "rejeitada") => {
-    const isApproved = decision === "aprovada";
-    const response = await axios.patch(
-      `${API_URL}/api/v1/extensions/${studentIdParam}/${extensionId}/approve`, 
-      { aprovado: isApproved }, 
-      getHeaders()
+  const submitDecision = async (
+    extensionId: string,
+    acao: "aprovar" | "rejeitar",
+  ): Promise<Extension> => {
+    const response = await axios.patch<Extension>(
+      `${API_URL}/api/v1/extensions/${extensionId}/approve`,
+      { acao },
+      getHeaders(),
     );
     await loadExtensions();
     return response.data;
@@ -82,10 +96,9 @@ export const useExtensionsApi = () => {
     loading,
     role,
     currentUser,
-    studentId,
     createRequest,
     submitReview,
     submitDecision,
-    refresh: loadExtensions
+    refresh: loadExtensions,
   };
 };

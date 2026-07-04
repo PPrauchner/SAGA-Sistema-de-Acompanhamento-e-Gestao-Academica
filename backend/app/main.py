@@ -86,14 +86,22 @@ app.include_router(activities.router, prefix=_PREFIX, tags=["activities"])
 app.include_router(activity_types.router, prefix=_PREFIX, tags=["activity-types"])
 app.include_router(productions.router, prefix=_PREFIX, tags=["productions"])
 app.include_router(vehicles.router, prefix=_PREFIX, tags=["vehicles"])
-app.include_router(extensions.router, prefix=f"{_PREFIX}/extensions", tags=["Prorrogações"])
+app.include_router(extensions.router, prefix=_PREFIX, tags=["Prorrogações"])
 app.include_router(checklist.router, prefix=_PREFIX, tags=["checklist"])
 app.include_router(coordination_transfers.router, prefix=_PREFIX, tags=["coordination-transfers"])
 app.include_router(programs.router, prefix=_PREFIX, tags=["programs"])
+app.include_router(qualis_weights.router, prefix=_PREFIX, tags=["qualis-weights"])
+app.include_router(
+    registration_requests.router,
+    prefix=_PREFIX,
+    tags=["registration-requests"],
+)
 app.include_router(inference.router, prefix=_PREFIX, tags=["inference"])
 app.include_router(reports.router, prefix=_PREFIX, tags=["reports"])
 app.include_router(dashboard.router, prefix=_PREFIX, tags=["dashboard"])
 app.include_router(audit_logs.router, prefix=_PREFIX, tags=["audit-logs"])
 app.include_router(notifications.router, prefix=_PREFIX, tags=["notifications"])
 app.include_router(transfers.router, prefix=_PREFIX, tags=["transfers"])
+app.include_router(users.router, prefix=_PREFIX, tags=["users"])
+app.include_router(requests.router, prefix=_PREFIX, tags=["requests"])
 app.include_router(transfer_cross_router)

@@ -1,58 +1,96 @@
-import { useState } from "react";
-import { Plus, Clock, CheckCircle, XCircle, AlertTriangle, FileText, Calendar } from "lucide-react";
-import { useExtensionsApi } from "@/api/extensions";
+import { useState, type FocusEvent, type ReactNode } from "react";
+import { Plus, Clock, CheckCircle, XCircle, FileText, Calendar } from "lucide-react";
+import { toast } from "sonner";
+import { useExtensionsApi, type Extension, type ExtensionTipo } from "@/api/extensions";
 
-const STATUS_MAP = {
+const STATUS_MAP: Record<string, { label: string; color: string; bg: string; icon: ReactNode }> = {
   pendente: { label: "Pendente", color: "#D4A017", bg: "#fef9c3", icon: <Clock size={14} /> },
-  aprovada: { label: "Aprovado", color: "#1F8A70", bg: "#dcfce7", icon: <CheckCircle size={14} /> },
-  rejeitada: { label: "Reprovado", color: "#dc2626", bg: "#fee2e2", icon: <XCircle size={14} /> },
+  aprovada: { label: "Aprovada", color: "#1F8A70", bg: "#dcfce7", icon: <CheckCircle size={14} /> },
+  rejeitada: { label: "Rejeitada", color: "#dc2626", bg: "#fee2e2", icon: <XCircle size={14} /> },
 };
 
-const TIPO_MAP: Record<string, string> = {
+const TIPO_MAP: Record<ExtensionTipo, string> = {
   prazo_defesa: "Prorrogação de Prazo de Defesa",
   prazo_qualificacao: "Prorrogação de Qualificação",
   trancamento: "Trancamento de Matrícula",
   mudanca_nivel: "Mudança de Nível",
 };
 
+const formatDate = (value?: string | null): string =>
+  value ? new Date(value).toLocaleDateString("pt-BR") : "—";
+
 export function ExtensionsPage() {
-  const { 
-    extensions, 
-    loading, 
-    role, 
-    createRequest, 
-    submitReview, 
-    submitDecision 
-  } = useExtensionsApi();
+  const { extensions, loading, role, createRequest, submitReview, submitDecision } = useExtensionsApi();
 
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Estados para capturar os dados dos SEUS inputs originais do modal
-  const [tipoSol, setTipoSol] = useState("prazo_defesa");
-  const [dataAtual, setDataAtual] = useState("");
+  // Estados do modal de nova solicitação.
+  const [tipoSol, setTipoSol] = useState<ExtensionTipo>("prazo_defesa");
   const [novaData, setNovaData] = useState("");
   const [motivo, setMotivo] = useState("");
+  const [planoAtualizado, setPlanoAtualizado] = useState("");
   const [parecerTexto, setParecerTexto] = useState("");
 
-  // Handler de envio conectado ao seu botão "Enviar Solicitação"
   const handleCreateRequest = async () => {
-    if (!motivo.trim()) return alert("Por favor, preencha a justificativa.");
+    if (!motivo.trim() || motivo.trim().length < 10) {
+      toast.error("Descreva a justificativa (mínimo 10 caracteres).");
+      return;
+    }
+    if (!novaData) {
+      toast.error("Informe a nova data solicitada.");
+      return;
+    }
+    if (!planoAtualizado.trim()) {
+      toast.error("Descreva o plano de trabalho atualizado.");
+      return;
+    }
     try {
       await createRequest({
-        motivo: motivo,
-        plano_atualizado: `Prazo atual: ${dataAtual} -> Novo prazo pretendido: ${novaData}`,
-        semestres_solicitados: 1, 
+        tipo: tipoSol,
+        motivo: motivo.trim(),
+        plano_atualizado: planoAtualizado.trim(),
+        nova_data: new Date(novaData).toISOString(),
       });
-      setMotivo(""); setDataAtual(""); setNovaData("");
+      setMotivo("");
+      setNovaData("");
+      setPlanoAtualizado("");
       setShowForm(false);
-    } catch (err) {
-      alert("Erro ao criar a solicitação.");
+      toast.success("Solicitação de prorrogação enviada.");
+    } catch {
+      toast.error("Erro ao criar a solicitação.");
+    }
+  };
+
+  const handleReview = async (extensionId: string) => {
+    if (!parecerTexto.trim() || parecerTexto.trim().length < 10) {
+      toast.error("Escreva o parecer (mínimo 10 caracteres).");
+      return;
+    }
+    try {
+      await submitReview(extensionId, parecerTexto.trim());
+      setParecerTexto("");
+      toast.success("Parecer registrado.");
+    } catch {
+      toast.error("Erro ao registrar o parecer.");
+    }
+  };
+
+  const handleDecision = async (extensionId: string, acao: "aprovar" | "rejeitar") => {
+    try {
+      await submitDecision(extensionId, acao);
+      toast.success(acao === "aprovar" ? "Prorrogação deferida." : "Prorrogação indeferida.");
+    } catch {
+      toast.error("Erro ao homologar a decisão.");
     }
   };
 
   if (loading) {
-    return <div className="p-6 text-center" style={{ color: "var(--muted-foreground)" }}>Carregando solicitações...</div>;
+    return (
+      <div className="p-6 text-center" style={{ color: "var(--muted-foreground)" }}>
+        Carregando solicitações...
+      </div>
+    );
   }
 
   return (
@@ -62,7 +100,7 @@ export function ExtensionsPage() {
           <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Prorrogações e Solicitações</h1>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>Gerenciamento de solicitações de extensão de prazo</p>
         </div>
-        
+
         {role === "aluno" && (
           <button onClick={() => setShowForm(true)} className="flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 flex-shrink-0 self-start sm:self-auto" style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontWeight: 600, fontSize: "14px" }}>
             <Plus size={16} /> <span className="whitespace-nowrap">Nova Solicitação</span>
@@ -77,7 +115,7 @@ export function ExtensionsPage() {
             <span className="flex-shrink-0" style={{ color: val.color }}>{val.icon}</span>
             <div className="min-w-0">
               <p style={{ fontSize: "22px", fontWeight: 800, color: val.color, lineHeight: 1.1 }}>
-                {extensions.filter(e => e.status === key).length}
+                {extensions.filter((e) => e.status === key).length}
               </p>
               <p className="truncate" style={{ fontSize: "12px", color: val.color, fontWeight: 600 }}>{val.label}</p>
             </div>
@@ -87,12 +125,10 @@ export function ExtensionsPage() {
 
       {/* Lista de Extensões */}
       <div className="space-y-3">
-        {extensions.map((ext: any) => { // 👈 Corrigido: 'ext' explicitamente tipado como any ou seu tipo Extension
-          const status = STATUS_MAP[ext.status as keyof typeof STATUS_MAP] || STATUS_MAP.pendente;
+        {extensions.map((ext: Extension) => {
+          const status = STATUS_MAP[ext.status] || STATUS_MAP.pendente;
           const isExpanded = expandedId === ext.id;
-
-          const displayDataAtual = ext.criado_em; 
-          const displayNovaData = ext.prazo_novo || ext.criado_em;
+          const nomeAluno = ext.student_nome || "Aluno";
 
           return (
             <div
@@ -105,20 +141,20 @@ export function ExtensionsPage() {
                   <div className="flex-1 min-w-0 w-full">
                     <div className="flex items-center gap-3 mb-2 min-w-0">
                       <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 36, height: 36, background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "13px", fontWeight: 700 }}>
-                        {(ext.aluno_nome || "Aluno").charAt(0)}
+                        {nomeAluno.charAt(0)}
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate" style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)" }}>{ext.aluno_nome || `ID Aluno: ${ext.aluno_id}`}</p>
-                        <p className="truncate" style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Ref. Semestres: {ext.semestres_solicitados}</p>
+                        <p className="truncate" style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)" }}>{nomeAluno}</p>
+                        <p className="truncate" style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Novo prazo solicitado: {formatDate(ext.nova_data)}</p>
                       </div>
                     </div>
                     <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--tint-blue-text)", marginBottom: "8px", wordBreak: "break-word" }}>
-                      Prorrogação de Prazo
+                      {TIPO_MAP[ext.tipo] || "Prorrogação"}
                     </p>
                     <div className="flex items-center gap-2 flex-wrap">
                       <div className="flex items-center gap-1.5 min-w-0">
                         <Calendar size={12} style={{ color: "var(--muted-foreground)", flexShrink: 0 }} />
-                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Solicitado em: {new Date(displayDataAtual).toLocaleDateString("pt-BR")}</span>
+                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Solicitado em: {formatDate(ext.created_at)}</span>
                       </div>
                     </div>
                   </div>
@@ -127,7 +163,7 @@ export function ExtensionsPage() {
                       {status.icon} {status.label}
                     </span>
                     <span className="truncate" style={{ fontSize: "10px", color: "var(--muted-foreground)", whiteSpace: "nowrap" }}>
-                      {new Date(ext.criado_em).toLocaleDateString("pt-BR")}
+                      {formatDate(ext.created_at)}
                     </span>
                   </div>
                 </div>
@@ -146,6 +182,13 @@ export function ExtensionsPage() {
                       </p>
                     </div>
 
+                    <div className="flex items-center gap-6 flex-wrap" style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                      <span>Novo prazo solicitado: <strong style={{ color: "var(--foreground)" }}>{formatDate(ext.nova_data)}</strong></span>
+                      {ext.status === "aprovada" && (
+                        <span>Prazo homologado: <strong style={{ color: "#1F8A70" }}>{formatDate(ext.prazo_novo)}</strong></span>
+                      )}
+                    </div>
+
                     {ext.parecer_orientador && (
                       <div>
                         <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>
@@ -161,21 +204,17 @@ export function ExtensionsPage() {
                       <div className="flex flex-col gap-2 pt-2">
                         {role === "orientador" && !ext.parecer_orientador && (
                           <div className="w-full mb-2">
-                            <input 
-                              type="text" 
-                              placeholder="Escreva o parecer antes de aprovar..." 
-                              className="w-full rounded-xl px-3 py-2 outline-none mb-2" 
+                            <input
+                              type="text"
+                              placeholder="Escreva o parecer técnico..."
+                              className="w-full rounded-xl px-3 py-2 outline-none mb-2"
                               style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}
                               value={parecerTexto}
                               onChange={(e) => setParecerTexto(e.target.value)}
                             />
-                            <button 
-                              onClick={async () => {
-                                if(!parecerTexto) return alert("Insira um texto para o parecer.");
-                                await submitReview(ext.aluno_id, ext.id, parecerTexto);
-                                setParecerTexto("");
-                              }}
-                              className="flex items-center gap-2 px-4 py-2 rounded-xl" 
+                            <button
+                              onClick={() => handleReview(ext.id)}
+                              className="flex items-center gap-2 px-4 py-2 rounded-xl"
                               style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "13px" }}
                             >
                               <FileText size={14} /> Salvar Parecer do Orientador
@@ -185,11 +224,11 @@ export function ExtensionsPage() {
 
                         {role === "coordenacao" && (
                           <div className="flex gap-3">
-                            <button onClick={() => submitDecision(ext.aluno_id, ext.id, "aprovada")} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#dcfce7", color: "#1F8A70", fontWeight: 600, fontSize: "13px" }}>
+                            <button onClick={() => handleDecision(ext.id, "aprovar")} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#dcfce7", color: "#1F8A70", fontWeight: 600, fontSize: "13px" }}>
                               <CheckCircle size={14} /> Deferir (Aprovar)
                             </button>
-                            <button onClick={() => submitDecision(ext.aluno_id, ext.id, "rejeitada")} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#fee2e2", color: "#dc2626", fontWeight: 600, fontSize: "13px" }}>
-                              <XCircle size={14} /> Indeferir (Reprovar)
+                            <button onClick={() => handleDecision(ext.id, "rejeitar")} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#fee2e2", color: "#dc2626", fontWeight: 600, fontSize: "13px" }}>
+                              <XCircle size={14} /> Indeferir (Rejeitar)
                             </button>
                           </div>
                         )}
@@ -214,19 +253,13 @@ export function ExtensionsPage() {
             <div className="space-y-4">
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Tipo de Solicitação</label>
-                <select value={tipoSol} onChange={(e) => setTipoSol(e.target.value)} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
-                  {Object.entries(TIPO_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <select value={tipoSol} onChange={(e) => setTipoSol(e.target.value as ExtensionTipo)} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
+                  {(Object.entries(TIPO_MAP) as [ExtensionTipo, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Data Prazo Atual</label>
-                  <input type="date" value={dataAtual} onChange={(e) => setDataAtual(e.target.value)} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
-                </div>
-                <div>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Nova Data Solicitada</label>
-                  <input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
-                </div>
+              <div>
+                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Nova Data Solicitada</label>
+                <input type="date" value={novaData} onChange={(e) => setNovaData(e.target.value)} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
               </div>
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Justificativa Detalhada</label>
@@ -237,16 +270,20 @@ export function ExtensionsPage() {
                   style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value)}
-                  // 👈 Corrigido: 'e' explicitamente tipado para os eventos de Focus
-                  onFocus={(e: React.FocusEvent<HTMLTextAreaElement>) => { e.currentTarget.style.borderColor = "#123C7A"; }}
-                  onBlur={(e: React.FocusEvent<HTMLTextAreaElement>) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                  onFocus={(e: FocusEvent<HTMLTextAreaElement>) => { e.currentTarget.style.borderColor = "#123C7A"; }}
+                  onBlur={(e: FocusEvent<HTMLTextAreaElement>) => { e.currentTarget.style.borderColor = "var(--border)"; }}
                 />
               </div>
               <div>
-                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Documentos Comprobatórios</label>
-                <div className="rounded-xl p-4 text-center border-2 border-dashed cursor-pointer" style={{ borderColor: "var(--border)" }}>
-                  <p style={{ color: "var(--muted-foreground)", fontSize: "13px" }}>Anexar documentos (opcional)</p>
-                </div>
+                <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Plano de Trabalho Atualizado</label>
+                <textarea
+                  rows={3}
+                  placeholder="Descreva o plano de trabalho revisado (ou cole o link do documento)..."
+                  className="w-full rounded-xl px-3 py-2.5 outline-none resize-none"
+                  style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}
+                  value={planoAtualizado}
+                  onChange={(e) => setPlanoAtualizado(e.target.value)}
+                />
               </div>
             </div>
             <div className="flex gap-3 mt-6">

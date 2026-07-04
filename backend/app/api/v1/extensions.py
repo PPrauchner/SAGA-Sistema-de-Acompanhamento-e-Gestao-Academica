@@ -1,34 +1,33 @@
 """
-Router FastAPI para os endpoints de solicitações de prorrogação de prazo.
+Router FastAPI para os endpoints de prorrogação de prazo (Spec 08).
 
 Responsabilidades:
-- Gerenciar rotas de criação, parecer técnico e homologação final de prazos.
-- Aplicar decoradores AOP estritamente nos join points definidos pelas especificações.
+- Expor as rotas de solicitação, parecer, decisão e listagem, delegando toda a
+  lógica ao ExtensionService.
+- Aplicar os aspectos AOP nos join points da Spec 08, na ordem canônica.
+
+Nota sobre A04: `@check_deadlines` não é aplicado aqui. O aspecto A04 é específico
+do fluxo de tasks do plano de trabalho (`WorkPlanService.add_progress_update`) —
+depende de `_repo.get_task_context(task_id)`, inexistente no domínio de prorrogações.
 """
 
-# C1: imports que faltavam → NameError na carga do módulo / API não subia
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
+from backend.app.aspects.alerts import trigger_alerts, build_extension_alert
 from backend.app.aspects.audit import audit_operation
-from backend.app.aspects.deadline_validation import check_deadlines
-from backend.app.aspects.alerts import trigger_alerts, _build_notification_payload
 from backend.app.aspects.authorization import requires_role
-from backend.app.core.auth import get_current_user, CurrentUser
-
+from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.extension import (
-    ExtensionCreateRequest,
-    ReviewRequest,
     DecisionRequest,
+    ExtensionCreateRequest,
     ExtensionResponse,
+    ReviewRequest,
 )
-# C2: removido import de módulo de teste (test_notification_service)
 from backend.app.services.extension_service import ExtensionService
 
-router = APIRouter(
-    tags=["Prorrogações"],
-)
+router = APIRouter(prefix="/extensions", tags=["Prorrogações"])
 
 
 async def get_extension_service() -> ExtensionService:
@@ -36,121 +35,79 @@ async def get_extension_service() -> ExtensionService:
 
 
 AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
-Service  = Annotated[ExtensionService, Depends(get_extension_service)]
+Service = Annotated[ExtensionService, Depends(get_extension_service)]
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/extensions
-# ---------------------------------------------------------------------------
 @router.post(
     "",
     response_model=ExtensionResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Criar solicitação de prorrogação (aluno)",
+    summary="Solicitar prorrogação (aluno)",
 )
 @requires_role("aluno")
 @audit_operation
-@check_deadlines
-@trigger_alerts(_build_notification_payload)  # C3: argumento build obrigatório
 async def create_extension(
     payload: ExtensionCreateRequest,
     current_user: AuthUser,
     service: Service,
 ) -> ExtensionResponse:
-    """Cria uma nova solicitação de prorrogação com status 'pendente'."""
-    return await service.create_extension(
-        student_id=current_user.uid,
-        payload=payload,
-        requesting_uid=current_user.uid,
-    )
+    """Cria uma solicitação de prorrogação com status 'pendente'."""
+    return await service.create_extension(payload=payload, requester_uid=current_user.uid)
 
 
-# ---------------------------------------------------------------------------
-# PATCH /api/v1/extensions/{student_id}/{extension_id}/review
-# ---------------------------------------------------------------------------
+@router.get(
+    "",
+    response_model=list[ExtensionResponse],
+    summary="Listar prorrogações (escopo por papel)",
+)
+@requires_role("aluno", "orientador", "coordenacao")
+async def list_extensions(
+    current_user: AuthUser,
+    service: Service,
+) -> list[ExtensionResponse]:
+    """Lista prorrogações conforme o papel: aluno (próprias), orientador
+    (orientandos), coordenação (programa)."""
+    return await service.list_for_user(current_user)
+
+
 @router.patch(
-    "/{student_id}/{extension_id}/review",
+    "/{extension_id}/review",
     response_model=ExtensionResponse,
     summary="Emitir parecer técnico (orientador)",
 )
 @requires_role("orientador")
 @audit_operation
 async def review_extension(
-    student_id: str,
     extension_id: str,
     payload: ReviewRequest,
     current_user: AuthUser,
     service: Service,
 ) -> ExtensionResponse:
-    """Permite ao orientador emitir o parecer técnico de uma prorrogação."""
+    """Registra o parecer técnico do orientador sobre a solicitação."""
     return await service.add_review(
-        student_id=student_id,
         extension_id=extension_id,
-        parecer=payload.parecer_orientador,
+        payload=payload,
         orientador_uid=current_user.uid,
     )
 
 
-# ---------------------------------------------------------------------------
-# PATCH /api/v1/extensions/{student_id}/{extension_id}/approve
-# ---------------------------------------------------------------------------
 @router.patch(
-    "/{student_id}/{extension_id}/approve",
+    "/{extension_id}/approve",
     response_model=ExtensionResponse,
-    summary="Homologar decisão de prorrogação (coordenação)",
+    summary="Homologar decisão (coordenação)",
 )
 @requires_role("coordenacao")
 @audit_operation
-@check_deadlines
-@trigger_alerts(_build_notification_payload)  # C3: argumento build obrigatório
+@trigger_alerts(build_extension_alert)
 async def decide_extension(
-    student_id: str,
     extension_id: str,
     payload: DecisionRequest,
     current_user: AuthUser,
     service: Service,
 ) -> ExtensionResponse:
-    """Processa o deferimento/indeferimento baseado na Spec 08 e contrato booleano."""
-    # C4: chama process_decision (não add_review) com payload.aprovado (não parecer_orientador)
+    """Homologa a decisão (aprovar/rejeitar); na aprovação recalcula o prazo."""
     return await service.process_decision(
-        student_id=student_id,
         extension_id=extension_id,
         payload=payload,
         coordinator_uid=current_user.uid,
     )
-
-
-# ---------------------------------------------------------------------------
-# GET — Listagens e Dashboard
-# ---------------------------------------------------------------------------
-@router.get(
-    "/students/{student_id}",
-    response_model=list[ExtensionResponse],
-    summary="Listar prorrogações do aluno",
-)
-@requires_role("aluno", "coordenacao")
-@audit_operation
-async def list_student_extensions(
-    student_id: str,
-    current_user: AuthUser,
-    service: Service,
-) -> list[ExtensionResponse]:
-    """Retorna o histórico completo de prorrogações de um discente."""
-    return await service.list_by_student(student_id)
-
-
-@router.get(
-    "/dashboard",
-    response_model=list[ExtensionResponse],
-    summary="Dashboard de prorrogações pendentes",
-)
-@requires_role("orientador", "coordenacao")
-@audit_operation
-async def get_dashboard_extensions(
-    current_user: AuthUser,
-    service: Service,
-) -> list[ExtensionResponse]:
-    """Retorna as prorrogações aplicáveis ao contexto do painel do avaliador."""
-    if current_user.role == "orientador":
-        return await service.list_pending_for_advisor(current_user.uid)
-    return await service.list_all_pending()

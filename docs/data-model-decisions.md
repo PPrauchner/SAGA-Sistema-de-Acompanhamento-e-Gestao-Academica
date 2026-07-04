@@ -101,6 +101,12 @@ Caso de borda: usuário **só coordenador** que perde a coordenação → desati
 - As três numa seção **"Infraestrutura / Auditoria / Derivadas"**; escrita exclusiva via aspecto.
 
 ### Q12 — `extensions` (prorrogações) e `students.prazo_final`
+
+> **⚠️ Estrutura reconciliada por [ADR-0006](./adr/0006-extensions-colecao-raiz.md) (ver R5).**
+> A "composição (1:N)" abaixo é a notação **lógica** do ER, não sub-coleção física: `extensions`
+> é **coleção raiz** com `student_id`/`programa_id` como campos. As invariantes de `prazo_final`
+> e a contagem de prorrogações permanecem válidas.
+
 **Decisão:**
 - `students ||--o{ extensions` (1:N, composição) — aluno pode solicitar mais de uma ao longo do tempo, mesmo que o limite aprovável seja `programs.max_prorrogacoes` (default 1).
 - `students.prazo_final` tem **duas origens de escrita**: inicial (`data_ingresso` + duração) **e** aprovação de prorrogação (vira `prazo_novo`).
@@ -176,3 +182,16 @@ mais que um inferior. Canonizada em **um único lugar de verdade** no código
 (`backend/app/models/vehicle.py` → `RelevanceLevel` + `PESO_POR_NIVEL`), consumida por
 `inference_repository`, `fixtures` e `seed_firestore`. Aplicada também em `data-model.md`,
 specs 01 e 03, e nos casos RL05 dos testes. R1 deixa de ter pendência.
+
+### R5 — `extensions` é coleção raiz (reconcilia Q12)
+
+> Formalizada em [ADR-0006](./adr/0006-extensions-colecao-raiz.md) (revisão do PR #174, achado M3).
+
+**Contexto:** a Q12 descreveu `extensions` como "composição (1:N)" a partir de `students`,
+lida por parte da implementação (PR #174) como sub-coleção `students/{id}/extensions/`. Já o
+schema canônico (`03_firebase_schema.json`: "na coleção raiz `extensions/`"), o `data-model.md §4`
+("coleção raiz") e o contrato da Spec 08 (paths sem `student_id`) apontam para coleção raiz.
+**Decisão:** `extensions` é **coleção raiz** chaveada por auto-id, com `student_id`/`aluno_id`,
+`requester_id` e `programa_id` como campos. Análogo à R3 (`productions` raiz): a "composição" do
+ER é notação lógica, não sub-coleção física. O código do PR #174 (sub-coleção +
+`collection_group`) deve ser ajustado à estrutura raiz.
