@@ -223,7 +223,7 @@ def check_work_plan_ownership(access: str) -> Callable[[_F], _F]:
             if access == "read":
                 allowed = is_owner_aluno or is_advisor or user.role == "coordenacao"
             elif access == "edit":
-                allowed = is_advisor
+                allowed = is_advisor or user.role == "coordenacao"
             else:  # "status"
                 allowed = is_owner_aluno or is_advisor
 

@@ -29,7 +29,7 @@ export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClos
         // Se for orientador, só pode transferir os seus orientandos
         if (currentUser?.role === "orientador") {
            // Encontrar o advisor logado
-           const me = advs.find(a => a.uid === currentUser.uid);
+           const me = advs.find(a => a.uid === currentUser.id);
            if (me) {
              setStudents(studs.filter(s => s.orientador_id === me.id));
            }
@@ -47,7 +47,7 @@ export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClos
   }, [token, currentUser, activeView]);
 
   const selectedStudent = students.find(s => s.id === studentId);
-  const selectedStudentTerminal = selectedStudent?.status === "jubilado" || selectedStudent?.status === "titulado" || selectedStudent?.status === "desligado";
+  const selectedStudentTerminal = selectedStudent?.situacao_registrada === "concluido" || selectedStudent?.situacao_registrada === "desligado";
   const selectedAdvisor = advisors.find(a => a.id === advisorId);
   const selectedAdvisorHasCapacity = selectedAdvisor ? (selectedAdvisor.orientandos_ativos < selectedAdvisor.limite_orientandos) : false;
 
