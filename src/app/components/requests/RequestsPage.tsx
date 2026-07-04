@@ -8,8 +8,9 @@ import { approveTransferRequest, rejectTransferRequest } from "@/api/transfersAp
 import { TransferModal } from "../transfers/TransferModal";
 
 const TYPE_LABELS: Record<string, string> = {
-  atividade: "Atividade Creditável",
+  atividade: "Validação de atividade",
   prorrogacao: "Prorrogação",
+  trancamento: "Trancamento de matrícula",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",
   producao: "Validação de Produção",
@@ -103,6 +104,18 @@ export function RequestsPage() {
     });
   }, [requests, filterTipo, filterStatus, filterPeriodo]);
 
+  const typeOptions = useMemo(() => {
+    const receivedTypes = new Set(requests.map((request) => request.tipo));
+    return Object.entries(TYPE_LABELS).filter(([tipo]) => requests.length === 0 || receivedTypes.has(tipo as RequestItem["tipo"]));
+  }, [requests]);
+
+  const statusOptions = useMemo(() => {
+    return Array.from(new Set(requests.map((request) => request.status))).map((status) => [
+      status,
+      STATUS_MAP[status]?.label || status,
+    ] as const);
+  }, [requests]);
+
   if (loading) {
     return <div className="p-8 text-center">Carregando solicitações...</div>;
   }
@@ -141,7 +154,7 @@ export function RequestsPage() {
           style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)", height: "42px" }}
         >
           <option value="">Todos os Tipos</option>
-          {Object.entries(TYPE_LABELS).map(([k, v]) => (
+          {typeOptions.map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
@@ -152,8 +165,8 @@ export function RequestsPage() {
           style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)", height: "42px" }}
         >
           <option value="">Todos os Status</option>
-          {Object.entries(STATUS_MAP).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
+          {statusOptions.map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
           ))}
         </select>
         <select
