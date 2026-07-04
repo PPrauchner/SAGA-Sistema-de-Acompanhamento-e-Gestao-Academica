@@ -77,27 +77,32 @@ async def test_request_service_visibility_for_initiator(mock_repos):
     service = RequestService()
     
     mock_repos["stud"].list_all.return_value = []
-    mock_repos["ext"].list_all.return_value = []
-    mock_repos["tr"].list_by_program.return_value = []
+    mock_repos["adv"].list_all.return_value = [{"uid": "coord", "id": "advisor-coord"}]
     
-    mock_repos["coord_tr"].list_by_program.return_value = [
-        {
-            "id": "ct2",
-            "initiator_uid": "coord",
-            "successor_uid": "adv",
-            "status": "concluido",
-            "created_at": datetime.now(timezone.utc)
-        }
-    ]
+    async def mock_query(filters=None):
+        if filters and filters[0][0] == "initiator_uid" and filters[0][2] == "coord":
+            return [
+                {
+                    "id": "ct2",
+                    "initiator_uid": "coord",
+                    "successor_uid": "adv",
+                    "status": "concluido",
+                    "created_at": datetime.now(timezone.utc)
+                }
+            ]
+        return []
+
+    mock_repos["coord_tr"].query.side_effect = mock_query
     
     mock_repos["fb"].list_all.return_value = [
-        {"uid": "adv", "nome": "O Orientador"}
+        {"uid": "coord", "nome": "O Ex-Coordenador"}
     ]
     
-    requests = await service.get_requests(_coord())
+    user_ex_coord = CurrentUser(uid="coord", role="orientador", programa_id="prog1", email="c@x.com")
+    requests = await service.get_requests(user_ex_coord)
     
     assert len(requests) == 1
     assert requests[0].tipo == "transferencia_coordenacao"
-    assert requests[0].solicitante_nome == "Para: O Orientador"
+    assert requests[0].solicitante_nome == "O Ex-Coordenador"
     assert requests[0].status == "concluido"
     assert requests[0].payload_original["id"] == "ct2"
