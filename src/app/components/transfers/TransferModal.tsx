@@ -9,7 +9,7 @@ export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClos
   const { token, currentUser, activeView } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
-  
+
   const [studentId, setStudentId] = useState(initialStudentId || "");
   const [advisorId, setAdvisorId] = useState("");
   const [motivo, setMotivo] = useState("");
@@ -148,12 +148,12 @@ export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClos
                   type="submit"
                   disabled={loading || !studentId || !advisorId || selectedStudentTerminal || !selectedAdvisorHasCapacity}
                   className="w-full inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 transition-opacity"
-                  style={{ 
-                    background: "#123C7A", 
-                    color: "#fff", 
-                    fontSize: "14px", 
-                    fontWeight: 700, 
-                    opacity: (loading || !studentId || !advisorId || selectedStudentTerminal || !selectedAdvisorHasCapacity) ? 0.5 : 1 
+                  style={{
+                    background: "#123C7A",
+                    color: "#fff",
+                    fontSize: "14px",
+                    fontWeight: 700,
+                    opacity: (loading || !studentId || !advisorId || selectedStudentTerminal || !selectedAdvisorHasCapacity) ? 0.5 : 1
                   }}
                 >
                   {isCoord ? <UserCheck size={16} /> : <Send size={16} />}

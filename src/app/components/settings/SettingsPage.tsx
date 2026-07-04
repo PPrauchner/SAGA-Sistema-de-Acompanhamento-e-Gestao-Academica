@@ -151,7 +151,7 @@ export function SettingsPage() {
   // Modal States
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [currentActivity, setCurrentActivity] = useState<ActivityType | null>(null);
-  
+
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [currentVehicle, setCurrentVehicle] = useState<VehicleLevel | null>(null);
 
@@ -861,7 +861,7 @@ export function SettingsPage() {
             <div className="space-y-6">
               <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                 <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)", marginBottom: "24px" }}>Regras Acadêmicas do Programa</h2>
-                
+
                 {loading && !programConfig ? (
                   <p>Carregando...</p>
                 ) : (
@@ -873,7 +873,7 @@ export function SettingsPage() {
                     )}
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Básicos</label>
-                      <input 
+                      <input
                         type="number"
                         min={0}
                         step={1}
@@ -884,7 +884,7 @@ export function SettingsPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Específicos</label>
-                      <input 
+                      <input
                         type="number"
                         min={0}
                         step={1}
@@ -895,7 +895,7 @@ export function SettingsPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Máximo Créditos Tecnológicos</label>
-                      <input 
+                      <input
                         type="number"
                         min={0}
                         step={1}
@@ -906,7 +906,7 @@ export function SettingsPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Total de Créditos</label>
-                      <input 
+                      <input
                         type="number"
                         min={0}
                         step={1}
@@ -917,7 +917,7 @@ export function SettingsPage() {
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Meses até Qualificação</label>
-                      <input 
+                      <input
                         type="number"
                         min={1}
                         step={1}
@@ -926,7 +926,7 @@ export function SettingsPage() {
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
-                    
+
                     <div className="col-span-full">
                       <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-xl px-5 py-2.5 bg-[#123C7A] text-white font-semibold text-sm">
                         <Save size={15} /> {saved ? "Salvo!" : "Salvar Regras"}
