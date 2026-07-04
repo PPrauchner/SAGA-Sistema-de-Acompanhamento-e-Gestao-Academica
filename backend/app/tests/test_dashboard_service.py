@@ -782,3 +782,319 @@ async def test_orientador_dashboard_shows_orientando_progress():
 
     assert len(result.orientandos) == 1
     assert result.orientandos[0].progresso_plano == 50.0
+
+# ─── US-AN03: Índice de Produção + Posição Relativa Anônima ──────────────────
+
+def _make_production(id: str, pontuacao: float) -> dict:
+    return {"id": id, "pontuacao_calculada": pontuacao, "programa_id": "prog_default"}
+
+
+def _make_activity_producao(id: str, student_id: str, producao_id: str) -> dict:
+    return {
+        "id": id,
+        "status": "aprovado",
+        "producao_id": producao_id,
+        "creditos_concedidos": 3.0,
+        "tipo_id": "t_basico",
+    }
+
+
+@pytest.mark.asyncio
+async def test_indice_soma_total_single_advisor():
+    """soma_total retorna a soma das pontuacoes aprovadas dos orientandos."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade
+
+    advisor = _make_advisor()
+    students = [
+        _make_student({"id": "s1", "orientador_id": "adv_001"}),
+        _make_student({"id": "s2", "orientador_id": "adv_001"}),
+    ]
+    prods = [
+        _make_production("p1", 1.0),
+        _make_production("p2", 2.5),
+    ]
+
+    async def mock_list_by_student(student_id: str):
+        if student_id == "s1":
+            return [_make_activity_producao("a1", "s1", "p1")]
+        if student_id == "s2":
+            return [_make_activity_producao("a2", "s2", "p2")]
+        return []
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=advisor)
+        MockAdvR.return_value.list_all = AsyncMock(return_value=[advisor])
+        MockSR.return_value.list_all = AsyncMock(return_value=students)
+        MockAR.return_value.list_by_student = AsyncMock(side_effect=mock_list_by_student)
+        MockFBR.return_value.list_all = AsyncMock(return_value=prods)
+
+        service = DashboardService()
+        result = await service.get_dashboard_indice_orientador(
+            "adv_001", IndiceModalidade.soma_total
+        )
+
+    assert result.indice.indice == 3.5
+    assert result.indice.total_orientandos == 2
+    assert result.indice.total_pontuacao == 3.5
+    assert result.indice.modalidade == IndiceModalidade.soma_total
+
+
+@pytest.mark.asyncio
+async def test_indice_media_por_orientando():
+    """media_por_orientando divide a soma total pelo numero de orientandos."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade
+
+    advisor = _make_advisor()
+    students = [
+        _make_student({"id": "s1", "orientador_id": "adv_001"}),
+        _make_student({"id": "s2", "orientador_id": "adv_001"}),
+    ]
+    prods = [_make_production("p1", 4.0), _make_production("p2", 2.0)]
+
+    async def mock_list_by_student(student_id: str):
+        if student_id == "s1":
+            return [_make_activity_producao("a1", "s1", "p1")]
+        if student_id == "s2":
+            return [_make_activity_producao("a2", "s2", "p2")]
+        return []
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=advisor)
+        MockAdvR.return_value.list_all = AsyncMock(return_value=[advisor])
+        MockSR.return_value.list_all = AsyncMock(return_value=students)
+        MockAR.return_value.list_by_student = AsyncMock(side_effect=mock_list_by_student)
+        MockFBR.return_value.list_all = AsyncMock(return_value=prods)
+
+        service = DashboardService()
+        result = await service.get_dashboard_indice_orientador(
+            "adv_001", IndiceModalidade.media_por_orientando
+        )
+
+    # (4.0 + 2.0) / 2 orientandos = 3.0
+    assert result.indice.indice == 3.0
+
+
+@pytest.mark.asyncio
+async def test_indice_zero_orientandos_nao_divide_por_zero():
+    """Orientador sem orientandos retorna indice=0.0, sem ZeroDivisionError."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade
+
+    advisor = _make_advisor()
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=advisor)
+        MockAdvR.return_value.list_all = AsyncMock(return_value=[advisor])
+        MockSR.return_value.list_all = AsyncMock(return_value=[])
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_dashboard_indice_orientador(
+            "adv_001", IndiceModalidade.media_por_orientando
+        )
+
+    assert result.indice.indice == 0.0
+    assert result.indice.total_orientandos == 0
+
+
+@pytest.mark.asyncio
+async def test_indice_ignora_atividades_nao_aprovadas():
+    """Atividades com status != 'aprovado' nao entram no calculo do indice."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade
+
+    advisor = _make_advisor()
+    students = [_make_student({"id": "s1", "orientador_id": "adv_001"})]
+    prods = [_make_production("p1", 5.0)]
+
+    activities = [
+        {"id": "a1", "status": "enviado", "producao_id": "p1",
+         "creditos_concedidos": 3.0, "tipo_id": "t_basico"},  # pendente, não conta
+        {"id": "a2", "status": "rejeitado", "producao_id": "p1",
+         "creditos_concedidos": 3.0, "tipo_id": "t_basico"},  # rejeitado, não conta
+    ]
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=advisor)
+        MockAdvR.return_value.list_all = AsyncMock(return_value=[advisor])
+        MockSR.return_value.list_all = AsyncMock(return_value=students)
+        MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
+        MockFBR.return_value.list_all = AsyncMock(return_value=prods)
+
+        service = DashboardService()
+        result = await service.get_dashboard_indice_orientador(
+            "adv_001", IndiceModalidade.soma_total
+        )
+
+    assert result.indice.indice == 0.0
+
+
+@pytest.mark.asyncio
+async def test_posicao_relativa_anonima_nao_expoe_dados_de_colegas():
+    """posicao_relativa nao contem UIDs, nomes ou indices individuais de outros orientadores."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade, PosicaoRelativaResponse
+
+    advisor = _make_advisor()
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=advisor)
+        MockAdvR.return_value.list_all = AsyncMock(return_value=[advisor])
+        MockSR.return_value.list_all = AsyncMock(return_value=[])
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_dashboard_indice_orientador(
+            "adv_001", IndiceModalidade.soma_total
+        )
+
+    # Verifica que posicao_relativa e do tipo correto e nao tem campos extras
+    pos = result.posicao_relativa
+    assert isinstance(pos, PosicaoRelativaResponse)
+    campos = set(pos.model_fields.keys())
+    # Garante que nao ha campo com lista de colegas ou dados identificadores
+    assert "orientadores" not in campos
+    assert "indices" not in campos
+    assert "nomes" not in campos
+
+
+@pytest.mark.asyncio
+async def test_posicao_relativa_percentil_unico_orientador():
+    """Com apenas 1 orientador no programa, percentil deve ser 100.0."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade
+
+    advisor = _make_advisor()
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=advisor)
+        MockAdvR.return_value.list_all = AsyncMock(return_value=[advisor])
+        MockSR.return_value.list_all = AsyncMock(return_value=[])
+        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+
+        service = DashboardService()
+        result = await service.get_dashboard_indice_orientador(
+            "adv_001", IndiceModalidade.soma_total
+        )
+
+    assert result.posicao_relativa.percentil == 100.0
+    assert result.posicao_relativa.total_orientadores == 1
+
+
+@pytest.mark.asyncio
+async def test_posicao_relativa_media_programa_multiplos_orientadores():
+    """media_programa e calculada sobre todos os orientadores do programa."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade
+
+    advisor1 = _make_advisor({"id": "adv_001"})
+    advisor2 = _make_advisor({"id": "adv_002", "uid": "uid_002", "nome": "Prof. Ana"})
+    students = [
+        _make_student({"id": "s1", "orientador_id": "adv_001"}),
+        _make_student({"id": "s2", "orientador_id": "adv_002"}),
+    ]
+    prods = [_make_production("p1", 2.0), _make_production("p2", 6.0)]
+
+    async def mock_list_by_student(student_id: str):
+        if student_id == "s1":
+            return [_make_activity_producao("a1", "s1", "p1")]  # adv_001 -> 2.0
+        if student_id == "s2":
+            return [_make_activity_producao("a2", "s2", "p2")]  # adv_002 -> 6.0
+        return []
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
+        patch("backend.app.services.dashboard_service.ActivityRepository") as MockAR,
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=advisor1)
+        MockAdvR.return_value.list_all = AsyncMock(return_value=[advisor1, advisor2])
+        MockSR.return_value.list_all = AsyncMock(return_value=students)
+        MockAR.return_value.list_by_student = AsyncMock(side_effect=mock_list_by_student)
+        MockFBR.return_value.list_all = AsyncMock(return_value=prods)
+
+        service = DashboardService()
+        result = await service.get_dashboard_indice_orientador(
+            "adv_001", IndiceModalidade.soma_total
+        )
+
+    # adv_001 = 2.0, adv_002 = 6.0 -> media = 4.0
+    assert result.posicao_relativa.media_programa == 4.0
+    assert result.posicao_relativa.total_orientadores == 2
+    # adv_001 tem indice 2.0, abaixo de adv_002 (6.0) -> percentil < 50
+    assert result.posicao_relativa.percentil < 50.0
+
+
+@pytest.mark.asyncio
+async def test_indice_raises_404_if_advisor_not_found():
+    """get_dashboard_indice_orientador lanca HTTPException(404) se orientador nao existir."""
+    from backend.app.services.dashboard_service import DashboardService
+    from backend.app.models.dashboard import IndiceModalidade
+
+    with (
+        patch("backend.app.services.dashboard_service.StudentRepository"),
+        patch("backend.app.services.dashboard_service.ActivityRepository"),
+        patch("backend.app.services.dashboard_service.ActivityTypeRepository"),
+        patch("backend.app.services.dashboard_service.WorkPlanRepository"),
+        patch("backend.app.services.dashboard_service.AdvisorRepository") as MockAdvR,
+        patch("backend.app.services.dashboard_service.FirebaseRepository"),
+    ):
+        MockAdvR.return_value.get = AsyncMock(return_value=None)
+
+        service = DashboardService()
+        with pytest.raises(HTTPException) as exc_info:
+            await service.get_dashboard_indice_orientador(
+                "adv_inexistente", IndiceModalidade.soma_total
+            )
+
+    assert exc_info.value.status_code == 404
