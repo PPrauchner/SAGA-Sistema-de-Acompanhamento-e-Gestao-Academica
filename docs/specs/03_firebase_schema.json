@@ -49,7 +49,7 @@
           "campos": {
             "veiculo_id": "string",
             "nivel": "string ('A1'|'A2'|'A3'|'A4'|'A5'|'A6'|'A7'|'A8'|'SC') — Qualis Único; SC = Sem Classificação",
-            "peso": "float (A1=1.0, A2=0.9, A3=0.8, A4=0.7, A5=0.6, A6=0.5, A7=0.4, A8=0.3, SC=0.0) — escala monotônica",
+            "peso": "float (A1=1.0, A2=0.9, A3=0.8, A4=0.7, A5=0.6, A6=0.5, A7=0.4, A8=0.3, SC=0.2) — escala monotônica",
             "atualizado_em": "Timestamp",
             "atualizado_por": "string (uid)"
           }
@@ -545,7 +545,7 @@
       {"veiculo_id": "v_placeholder_a6", "nivel": "A6", "peso": 0.5},
       {"veiculo_id": "v_placeholder_a7", "nivel": "A7", "peso": 0.4},
       {"veiculo_id": "v_placeholder_a8", "nivel": "A8", "peso": 0.3},
-      {"veiculo_id": "v_placeholder_sc", "nivel": "SC", "peso": 0.0}
+      {"veiculo_id": "v_placeholder_sc", "nivel": "SC", "peso": 0.2}
     ],
     "activity_types_default": [
       {"nome": "Artigo Publicado",    "categoria": "especifico",   "pontuacao_base": 10, "ativo": true},
