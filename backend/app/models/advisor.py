@@ -14,6 +14,8 @@ Responsabilidades:
 from __future__ import annotations
 
 from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
 
 
 class AdvisorCreateRequest(BaseModel):
@@ -29,11 +31,12 @@ class AdvisorCreateRequest(BaseModel):
 
 
 class AdvisorUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     nome: str | None = None
-    departamento: str | None = None
 
     lattes: str | None = None
-    limite_orientandos: int | None = None
+    limite_orientandos: int | None = Field(default=None, ge=0)
 
 
 class AdvisorResponse(BaseModel):

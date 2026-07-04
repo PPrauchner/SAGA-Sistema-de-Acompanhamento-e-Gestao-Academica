@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useApp } from "../../context/AppContext";
+import { type FontSizePreference, type NotificationPreferences, useApp } from "../../context/AppContext";
 import { User, Bell, Shield, Palette, Globe, Key, Save, Camera, Mail, Building, Plus, CheckCircle2, XCircle, Edit, ArrowRightLeft, Send, Ban } from "lucide-react";
 import { programsApi } from "../../../api/programsApi";
 import { activityTypesApi } from "../../../api/activityTypesApi";
@@ -51,6 +51,39 @@ export interface VehicleLevel {
 const formatMetric = (value: number | null | undefined): string | number =>
   value == null ? "—" : value;
 
+const CREDIT_CONFIG_FIELDS = [
+  "creditos_grupo_basico_min",
+  "creditos_grupo_especifico_min",
+  "creditos_grupo_tecnologico_max",
+  "creditos_total_min",
+] as const;
+
+function parseIntegerInput(value: string): number {
+  return value === "" ? Number.NaN : Number(value);
+}
+
+function inputNumberValue(value: number | undefined): number | "" {
+  return value == null || Number.isNaN(value) ? "" : value;
+}
+
+function validateProgramConfig(config: ProgramConfig | null): string | null {
+  if (!config) return "Configuração do programa não carregada.";
+  const hasInvalidCredits = CREDIT_CONFIG_FIELDS.some((field) => {
+    const value = config[field];
+    return !Number.isInteger(value) || value < 0;
+  });
+  if (hasInvalidCredits) {
+    return "Créditos devem ser inteiros maiores ou iguais a zero.";
+  }
+  if (!Number.isInteger(config.meses_ate_qualificacao) || config.meses_ate_qualificacao < 1) {
+    return "Meses até qualificação deve ser maior ou igual a 1.";
+  }
+  if (config.creditos_total_min < config.creditos_grupo_basico_min + config.creditos_grupo_especifico_min) {
+    return "Créditos totais mínimos não podem ser menores que a soma dos créditos básico e específico.";
+  }
+  return null;
+}
+
 const BASE_TABS = [
   { id: "perfil", label: "Perfil", icon: <User size={16} /> },
   { id: "notificacoes", label: "Notificações", icon: <Bell size={16} /> },
@@ -59,17 +92,55 @@ const BASE_TABS = [
   { id: "sistema", label: "Sistema", icon: <Globe size={16} /> },
 ];
 
+const FONT_SIZE_OPTIONS: Array<{ label: string; value: FontSizePreference }> = [
+  { label: "Pequena", value: "small" },
+  { label: "Normal", value: "normal" },
+  { label: "Grande", value: "large" },
+];
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  email: true,
+  in_app: true,
+  work_plan: true,
+  transfers: true,
+  activities: true,
+  extensions: true,
+};
+
+const NOTIFICATION_SETTINGS: Array<{
+  key: keyof NotificationPreferences;
+  label: string;
+  desc: string;
+}> = [
+  { key: "in_app", label: "Notificações no Sistema", desc: "Receber avisos dentro do SAGA" },
+  { key: "email", label: "Notificações por E-mail", desc: "Receber comunicações por e-mail quando disponíveis" },
+  { key: "work_plan", label: "Plano de Trabalho", desc: "Atualizações de tarefas, progresso e prazos críticos" },
+  { key: "transfers", label: "Transferências", desc: "Convites e avisos de transferência de orientação ou coordenação" },
+  { key: "activities", label: "Atividades", desc: "Submissões, pareceres e validações de atividades" },
+  { key: "extensions", label: "Prorrogações", desc: "Solicitações e decisões sobre prorrogações" },
+];
+
 export function SettingsPage() {
-  const { currentUser, darkMode, toggleDarkMode, token, retryProfile } = useApp();
+  const {
+    currentUser,
+    darkMode,
+    toggleDarkMode,
+    token,
+    retryProfile,
+    fontSizePreference,
+    setFontSizePreference,
+  } = useApp();
   const [activeTab, setActiveTab] = useState("perfil");
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [profileName, setProfileName] = useState("");
   const [profileDepartment, setProfileDepartment] = useState("");
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
 
   // Program Config State
   const [programConfig, setProgramConfig] = useState<ProgramConfig | null>(null);
+  const [programConfigError, setProgramConfigError] = useState<string | null>(null);
   const [activityTypes, setActivityTypes] = useState<ActivityType[]>([]);
   const [vehicleLevels, setVehicleLevels] = useState<VehicleLevel[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -80,7 +151,7 @@ export function SettingsPage() {
   // Modal States
   const [isActivityModalOpen, setIsActivityModalOpen] = useState(false);
   const [currentActivity, setCurrentActivity] = useState<ActivityType | null>(null);
-  
+
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
   const [currentVehicle, setCurrentVehicle] = useState<VehicleLevel | null>(null);
 
@@ -89,6 +160,13 @@ export function SettingsPage() {
     setProfileDepartment(currentUser?.departamento ?? "");
     setProfileError(null);
   }, [currentUser?.name, currentUser?.departamento]);
+
+  useEffect(() => {
+    setNotificationPreferences({
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      ...(currentUser?.notificationPreferences ?? {}),
+    });
+  }, [currentUser?.notificationPreferences]);
 
   useEffect(() => {
     if (activeTab === "programa" && currentUser?.role === "coordenacao") {
@@ -113,6 +191,7 @@ export function SettingsPage() {
         getVehicles(token)
       ]);
       setProgramConfig(config);
+      setProgramConfigError(null);
       setActivityTypes(types);
       setVehicleLevels(vLevels);
       setVehicles(vehicleList);
@@ -145,6 +224,13 @@ export function SettingsPage() {
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    const validationError = validateProgramConfig(programConfig);
+    if (validationError) {
+      setProgramConfigError(validationError);
+      toast.error(validationError);
+      return;
+    }
+    setProgramConfigError(null);
     setLoading(true);
     try {
       await programsApi.updateProgramConfig(token, programConfig);
@@ -152,7 +238,9 @@ export function SettingsPage() {
       toast.success("Configurações atualizadas");
       setTimeout(() => setSaved(false), 2000);
     } catch (error) {
-      toast.error("Erro ao salvar configurações");
+      const message = error instanceof Error ? error.message : "Erro ao salvar configurações";
+      setProgramConfigError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -310,9 +398,31 @@ export function SettingsPage() {
     }
   };
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  const handleToggleNotificationPreference = (key: keyof NotificationPreferences) => {
+    setNotificationPreferences((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  };
+
+  const handleSaveNotificationPreferences = async () => {
+    if (!token) return;
+
+    setLoading(true);
+    setSaved(false);
+    try {
+      await usersApi.updateProfile(token, {
+        notification_preferences: notificationPreferences,
+      });
+      await retryProfile();
+      setSaved(true);
+      toast.success("Preferências de notificação atualizadas");
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      toast.error("Erro ao salvar preferências de notificação");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -472,36 +582,42 @@ export function SettingsPage() {
             <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
               <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)", marginBottom: "24px" }}>Preferências de Notificação</h2>
               <div className="space-y-4">
-                {[
-                  { label: "Notificações por E-mail", desc: "Receber resumos de atividades por e-mail", enabled: true },
-                  { label: "Alertas de Prazo", desc: "Aviso antecipado de vencimentos de prazo", enabled: true },
-                  { label: "Novas Submissões", desc: "Quando alunos submetem documentos", enabled: true },
-                  { label: "Aprovações Pendentes", desc: "Itens aguardando sua aprovação", enabled: true },
-                  { label: "Relatórios do Sistema", desc: "Relatórios automáticos semanais", enabled: false },
-                  { label: "Atualizações do Sistema", desc: "Novas versões e manutenções", enabled: false },
-                ].map((pref) => (
-                  <div key={pref.label} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-                    <div>
-                      <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>{pref.label}</p>
-                      <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{pref.desc}</p>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" defaultChecked={pref.enabled} className="sr-only" />
-                      <div
-                        className="rounded-full transition-all"
-                        style={{ width: 44, height: 24, background: pref.enabled ? "#123C7A" : "var(--muted)", cursor: "pointer" }}
-                      >
+                {NOTIFICATION_SETTINGS.map((pref) => {
+                  const enabled = notificationPreferences[pref.key];
+                  return (
+                    <div key={pref.key} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid var(--border)" }}>
+                      <div>
+                        <p style={{ fontSize: "14px", fontWeight: 600, color: "var(--foreground)" }}>{pref.label}</p>
+                        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{pref.desc}</p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          onChange={() => handleToggleNotificationPreference(pref.key)}
+                          className="sr-only"
+                        />
                         <div
                           className="rounded-full transition-all"
-                          style={{ width: 18, height: 18, background: "#fff", margin: "3px", marginLeft: pref.enabled ? "23px" : "3px", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}
-                        />
-                      </div>
-                    </label>
-                  </div>
-                ))}
+                          style={{ width: 44, height: 24, background: enabled ? "#123C7A" : "var(--muted)", cursor: "pointer" }}
+                        >
+                          <div
+                            className="rounded-full transition-all"
+                            style={{ width: 18, height: 18, background: "#fff", margin: "3px", marginLeft: enabled ? "23px" : "3px", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}
+                          />
+                        </div>
+                      </label>
+                    </div>
+                  );
+                })}
               </div>
-              <button onClick={handleSave} className="mt-6 flex items-center gap-2 rounded-xl px-5 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
-                <Save size={15} /> Salvar Preferências
+              <button
+                onClick={handleSaveNotificationPreferences}
+                disabled={loading}
+                className="mt-6 flex items-center gap-2 rounded-xl px-5 py-2.5"
+                style={{ background: saved ? "#1F8A70" : "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px", opacity: loading ? 0.7 : 1 }}
+              >
+                <Save size={15} /> {saved ? "Salvo!" : "Salvar Preferências"}
               </button>
             </div>
           )}
@@ -588,11 +704,27 @@ export function SettingsPage() {
                 <div>
                   <label style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "12px" }}>Tamanho da Fonte</label>
                   <div className="flex gap-3">
-                    {["Pequena", "Normal", "Grande"].map((size) => (
-                      <button key={size} className="px-4 py-2 rounded-xl border-2 transition-all" style={{ borderColor: size === "Normal" ? "#123C7A" : "var(--border)", background: size === "Normal" ? "#eef3fc" : "var(--muted)", color: size === "Normal" ? "#123C7A" : "var(--foreground)", fontWeight: 600, fontSize: "13px" }}>
-                        {size}
-                      </button>
-                    ))}
+                    {FONT_SIZE_OPTIONS.map((size) => {
+                      const selected = fontSizePreference === size.value;
+                      return (
+                        <button
+                          key={size.value}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setFontSizePreference(size.value)}
+                          className="px-4 py-2 rounded-xl border-2 transition-all"
+                          style={{
+                            borderColor: selected ? "#123C7A" : "var(--border)",
+                            background: selected ? "#eef3fc" : "var(--muted)",
+                            color: selected ? "#123C7A" : "var(--foreground)",
+                            fontWeight: 600,
+                            fontSize: "13px",
+                          }}
+                        >
+                          {size.label}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -729,57 +861,72 @@ export function SettingsPage() {
             <div className="space-y-6">
               <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                 <h2 style={{ fontSize: "17px", fontWeight: 700, color: "var(--foreground)", marginBottom: "24px" }}>Regras Acadêmicas do Programa</h2>
-                
+
                 {loading && !programConfig ? (
                   <p>Carregando...</p>
                 ) : (
                   <form onSubmit={handleSaveConfig} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {programConfigError && (
+                      <p className="sm:col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                        {programConfigError}
+                      </p>
+                    )}
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Básicos</label>
-                      <input 
+                      <input
                         type="number"
-                        value={programConfig?.creditos_grupo_basico_min || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_basico_min: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_grupo_basico_min)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_basico_min: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Créditos Específicos</label>
-                      <input 
+                      <input
                         type="number"
-                        value={programConfig?.creditos_grupo_especifico_min || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_especifico_min: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_grupo_especifico_min)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_especifico_min: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Máximo Créditos Tecnológicos</label>
-                      <input 
+                      <input
                         type="number"
-                        value={programConfig?.creditos_grupo_tecnologico_max || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_tecnologico_max: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_grupo_tecnologico_max)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_grupo_tecnologico_max: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Mínimo Total de Créditos</label>
-                      <input 
+                      <input
                         type="number"
-                        value={programConfig?.creditos_total_min || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_total_min: parseInt(e.target.value)}))}
+                        min={0}
+                        step={1}
+                        value={inputNumberValue(programConfig?.creditos_total_min)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), creditos_total_min: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-semibold mb-1.5 opacity-70">Meses até Qualificação</label>
-                      <input 
+                      <input
                         type="number"
-                        value={programConfig?.meses_ate_qualificacao || 0}
-                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), meses_ate_qualificacao: parseInt(e.target.value)}))}
+                        min={1}
+                        step={1}
+                        value={inputNumberValue(programConfig?.meses_ate_qualificacao)}
+                        onChange={e => setProgramConfig(prev => ({...(prev ?? DEFAULT_PROGRAM_CONFIG), meses_ate_qualificacao: parseIntegerInput(e.target.value)}))}
                         className="w-full rounded-xl px-4 py-2.5 bg-[var(--muted)] border border-[var(--border)]"
                       />
                     </div>
-                    
+
                     <div className="col-span-full">
                       <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-xl px-5 py-2.5 bg-[#123C7A] text-white font-semibold text-sm">
                         <Save size={15} /> {saved ? "Salvo!" : "Salvar Regras"}

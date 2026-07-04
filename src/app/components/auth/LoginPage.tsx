@@ -340,7 +340,7 @@ export function LoginPage() {
         <div className="flex items-start gap-2.5">
           <Shield size={13} style={{ color: "#94a3b8", flexShrink: 0, marginTop: 1 }} />
           <p style={{ fontSize: "11px", color: "#94a3b8", lineHeight: 1.5 }}>
-            <strong style={{ color: "#64748b" }}>Aviso de seguranca:</strong> Este sistema e de uso exclusivo de membros vinculados ao programa.
+            <strong style={{ color: "#64748b" }}>Aviso de seguranca:</strong> Este sistema e de uso exclusivo de usuarios autorizados.
             Acessos não autorizados sao registrados.
           </p>
         </div>

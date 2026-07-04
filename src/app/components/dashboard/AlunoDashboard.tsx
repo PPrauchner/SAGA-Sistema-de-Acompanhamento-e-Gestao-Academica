@@ -48,7 +48,7 @@ const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: str
 // ─── DATA ────────────────────────────────────────────────────────────────────
 const CHECKLIST: ChecklistItem[] = [
   { id: "creditos", label: "Créditos", icon: "📚", required: 60, completed: 42, unit: "créditos", details: "42 de 60 créditos integralizados. Faltam 18 créditos para a conclusão. Ritmo atual é adequado para finalizar até Dez/2026 cursando 2 disciplinas por semestre." },
-  { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: 1, unit: "exame", details: "Proficiência em Língua Inglesa aprovada em Março/2023. Resultado TOEFL: 87 pontos (mínimo exigido pelo programa: 60 pontos). Válida para toda a duração do doutorado." },
+  { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: 1, unit: "exame", details: "Proficiência em Língua Inglesa aprovada em Março/2023. Resultado TOEFL: 87 pontos (mínimo exigido pelo programa: 60 pontos). Válida para toda a duração do curso." },
   { id: "qualificacao", label: "Qualificação", icon: "🎤", required: 1, completed: 1, unit: "exame", details: "Exame de Qualificação aprovado em Agosto/2024. Banca: Profa. Dra. Carla Mendes (presidente), Prof. Dr. João Silva, Prof. Dr. Pedro Costa. Resultado: Aprovado com Louvor." },
   { id: "producoes", label: "Produções", icon: "📄", required: 3, completed: 2, unit: "artigos Qualis", details: "2 de 3 artigos obrigatórios publicados. Falta 1 artigo em periódico Qualis A1 ou A2. Este é o principal fator de risco da situação atual — prazo crítico para submissão." },
   { id: "defesa", label: "Defesa", icon: "🏛", required: 1, completed: 0, unit: "defesa", details: "Defesa da tese ainda não agendada. Pré-requisitos: integralizar todos os créditos e publicar os 3 artigos exigidos. Previsão de marcação: Julho/2026." },
@@ -67,7 +67,7 @@ const PHASES: WorkPhase[] = [
 
 const TASKS: PendingTask[] = [
   { id: 1, title: "Entregar relatório anual de progresso", deadline: "15/06/2026", priority: "alta", type: "relatorio", done: false, detail: "O relatório anual deve incluir: atividades realizadas, publicações, participação em eventos e planejamento do próximo semestre. Enviar via SAGA e protocolar cópia na secretaria do programa." },
-  { id: 2, title: "Submeter artigo para SBES 2026", deadline: "30/06/2026", priority: "alta", type: "producao", done: false, detail: "Prazo de submissão: 30/06/2026. Formato SBC (LaTeX). Limite: 12 páginas. Trilha técnica principal. Este artigo pode ser Qualis B1 e completar o requisito de produções para a defesa." },
+  { id: 2, title: "Submeter artigo para SBES 2026", deadline: "30/06/2026", priority: "alta", type: "producao", done: false, detail: "Prazo de submissão: 30/06/2026. Formato SBC (LaTeX). Limite: 12 páginas. Trilha técnica principal. Este artigo pode ser Qualis A5 e completar o requisito de produções para a defesa." },
   { id: 3, title: "Revisar capítulo 3 com a orientadora", deadline: "20/06/2026", priority: "alta", type: "orientacao", done: false, detail: "Reunião de orientação agendada para 20/06/2026 às 14h. Enviar o capítulo revisado para a Profa. Carla até 17/06/2026. Local: Sala 302, Bloco C, Instituto de Computação." },
   { id: 4, title: "Atualizar plano de trabalho (2º sem/2026)", deadline: "01/07/2026", priority: "media", type: "plano", done: false, detail: "Revisar e atualizar o cronograma de atividades previstas para o 2º semestre de 2026. A atualização requer aprovação da orientadora. Prazo: até 01/07/2026 via SAGA." },
   { id: 5, title: "Inscrição em disciplina eletiva (2026/2)", deadline: "05/07/2026", priority: "media", type: "creditos", done: false, detail: "Disciplina recomendada: Tópicos Especiais em Inteligência Artificial (4 créditos). Professor: Dr. André Lima. Período: 2026/2. Inscrição pelo portal do aluno da UFX." },
@@ -80,7 +80,7 @@ const DEADLINES: Deadline[] = [
   { id: 3, label: "Submissão SBES 2026", date: "30/06/2026", days: 28, type: "urgente", icon: "📄" },
   { id: 4, label: "Plano de Trabalho 2026/2", date: "01/07/2026", days: 29, type: "normal", icon: "📅" },
   { id: 5, label: "Inscrição Disciplina 2026/2", date: "05/07/2026", days: 33, type: "normal", icon: "📚" },
-  { id: 6, label: "Prazo Máximo do Doutorado", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
+  { id: 6, label: "Prazo Máximo do Curso", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
 ];
 
 const GRAPH_DATA = [

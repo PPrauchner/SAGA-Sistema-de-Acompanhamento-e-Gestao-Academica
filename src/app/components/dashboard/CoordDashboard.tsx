@@ -289,7 +289,7 @@ function ReportModal({ type, onClose, statusData, advisorData, completionData, p
             )})}
           </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-            Total: {statusData.reduce((acc, d) => acc + d.value, 0)} alunos matriculados · Programa PPGCC
+            Total: {statusData.reduce((acc, d) => acc + d.value, 0)} alunos matriculados · Programa acadêmico
           </p>
         </div>
       ),
@@ -678,17 +678,13 @@ function ExtensionRequestsSection({ extensions, loading, error }: { extensions: 
             const status = String(ext.status);
             const sc = EXT_STATUS_CFG[status] ?? { label: status, color: "var(--muted-foreground)", bg: "var(--muted)" };
             const nome = ext.aluno_nome || ext.aluno || "—";
-            const isDoutorado = (ext.nivel || "").toLowerCase() === "doutorado";
-            const podeDecidir = status === "pendente" || status === "em_analise";
+                        const podeDecidir = status === "pendente" || status === "em_analise";
             return (
               <div key={ext.id} className="rounded-xl p-4" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
                 <div className="flex items-start justify-between mb-2">
                   <div>
                     <div className="flex items-center gap-2">
                       <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{nome}</span>
-                      <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: isDoutorado ? "var(--tint-blue-bg)" : "var(--tint-violet-bg)", color: isDoutorado ? "var(--tint-blue-text)" : "var(--tint-violet-text)", border: `1px solid ${isDoutorado ? "var(--tint-blue-border)" : "var(--tint-violet-border)"}` }}>
-                        {isDoutorado ? "Doutorado" : "Mestrado"}
-                      </span>
                       <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
                     </div>
                     {ext.matricula && (
@@ -862,7 +858,7 @@ export function CoordDashboard() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <GraduationCap size={18} style={{ color: "rgba(255,255,255,0.85)" }} />
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>PPGCC · Coordenação</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>SAGA · Coordenação</span>
             </div>
             <h2 style={{ fontSize: "clamp(16px,4vw,22px)", fontWeight: 800, color: "#fff", lineHeight: 1.2 }}>Painel da Coordenação</h2>
             <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.75)", marginTop: "4px" }}>

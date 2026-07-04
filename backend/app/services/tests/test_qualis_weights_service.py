@@ -65,6 +65,10 @@ def test_resolve_retorna_none_sem_versoes() -> None:
     assert resolve_weights_at([], datetime.now(timezone.utc)) is None
 
 
+def test_default_sc_tem_pontuacao_minima() -> None:
+    assert PESO_POR_NIVEL["SC"] == 0.2
+
+
 # -- QualisWeightsService ---------------------------------------------------------------
 
 

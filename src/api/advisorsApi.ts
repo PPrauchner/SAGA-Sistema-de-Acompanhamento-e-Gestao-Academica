@@ -30,7 +30,6 @@ export interface AdvisorCreateResult {
 
 export interface AdvisorUpdatePayload {
   nome?: string;
-  departamento?: string;
   lattes?: string | null;
   limite_orientandos?: number;
 }

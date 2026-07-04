@@ -26,6 +26,7 @@ from backend.app.core.firebase import get_auth_client
 from backend.app.models.user import (
     CreateCoordinatorRequest,
     CreateCoordinatorResponse,
+    NotificationPreferences,
     ProfileUpdateRequest,
     ProfileUpdateResponse,
 )
@@ -85,6 +86,7 @@ class UserService:
             "role": "coordenacao",
             "programa_id": data.programa_id,
             "ativo": True,
+            "notification_preferences": NotificationPreferences().model_dump(),
             "primeiro_acesso_completo": True,
             "criado_em": agora,
             "atualizado_em": agora,
@@ -131,7 +133,11 @@ class UserService:
             )
 
         agora = datetime.now(timezone.utc)
-        update_data: dict[str, Any] = {"nome": data.nome, "atualizado_em": agora}
+        update_data: dict[str, Any] = {"atualizado_em": agora}
+        if data.nome is not None:
+            update_data["nome"] = data.nome
+        if data.notification_preferences is not None:
+            update_data["notification_preferences"] = data.notification_preferences.model_dump()
         if "telefone" in doc:
             update_data["telefone"] = firestore.DELETE_FIELD
         await self._users.update(user.uid, update_data)
@@ -143,7 +149,11 @@ class UserService:
             )
 
         return ProfileUpdateResponse(
-            uid=user.uid, nome=data.nome, departamento=departamento
+            uid=user.uid,
+            nome=data.nome or doc["nome"],
+            departamento=departamento,
+            notification_preferences=data.notification_preferences
+            or NotificationPreferences(**doc.get("notification_preferences", {})),
         )
 
     async def _atualizar_departamento(

@@ -22,11 +22,36 @@ from backend.app.tests.fake_firestore import FakeFirestore
 def fake_db():
     """Patcha o cliente Firestore do repositorio por um fake compartilhado em memoria."""
     fake = FakeFirestore()
+    advisor_id = "advisor_orientador"
+    fake.collection("advisors").document(advisor_id).set(
+        {"uid": "orientador", "nome": "Orientador Teste"}
+    )
+    for student_id in (
+        "aluno_real",
+        "aluno_sem_plano",
+        "aluno_bloqueado",
+        "aluno_coord",
+        "aluno_issue_44",
+        "aluno_persist",
+        "aluno_dash",
+        "aluno_apto",
+    ):
+        fake.collection("students").document(student_id).set(
+            {
+                "uid": student_id,
+                "nome": student_id,
+                "orientador_id": advisor_id,
+                "programa_id": "prog_default",
+            }
+        )
     with patch(
         "backend.app.repositories.work_plan_repository.get_firestore_client",
         return_value=fake,
     ), patch(
         "backend.app.aspects.alerts.get_firestore_client",
+        return_value=fake,
+    ), patch(
+        "backend.app.repositories.firebase_repository.get_firestore_client",
         return_value=fake,
     ):
         yield fake
@@ -128,7 +153,7 @@ def test_get_work_plan_missing_returns_404(fake_db) -> None:
 def test_progress_update_recalculates_progress_and_notifies(fake_db) -> None:
     ids = _build_plan_via_api("aluno_real")
 
-    response = _client("aluno").post(
+    response = TestClient(_app("aluno", uid="aluno_real")).post(
         f"/api/v1/tasks/{ids['t1']}/updates",
         json={"conteudo": "Tarefa finalizada", "percentual": 100},
         headers={"X-User-Id": "aluno_real", "X-User-Name": "Aluno Real", "X-User-Role": "aluno"},
@@ -146,7 +171,7 @@ def test_progress_update_to_100_persists_plano_concluido(fake_db) -> None:
     headers = {"X-User-Id": "aluno_real", "X-User-Name": "Aluno Real", "X-User-Role": "aluno"}
 
     for task_id in (ids["t1"], ids["t2"]):
-        response = _client("aluno").post(
+        response = TestClient(_app("aluno", uid="aluno_real")).post(
             f"/api/v1/tasks/{task_id}/updates",
             json={"conteudo": "Concluída", "percentual": 100},
             headers=headers,

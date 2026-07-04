@@ -77,6 +77,7 @@ export function AdvisorsPage() {
     setEditingAdvisor(null);
     setForm({ ...emptyForm, programa_id: programs[0]?.id ?? "" });
     setInviteToken(null);
+    setError(null);
     setShowForm(true);
   }
 
@@ -92,6 +93,7 @@ export function AdvisorsPage() {
       limite_orientandos: advisor.limite_orientandos,
     });
     setInviteToken(null);
+    setError(null);
     setShowForm(true);
   }
 
@@ -108,7 +110,6 @@ export function AdvisorsPage() {
       if (editingAdvisor) {
         await updateAdvisor(token, editingAdvisor.id, {
           nome: form.nome,
-          departamento: form.departamento,
           lattes: form.lattes,
           limite_orientandos: form.limite_orientandos,
         });
@@ -122,7 +123,7 @@ export function AdvisorsPage() {
       setEditingAdvisor(null);
       await loadData(token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao cadastrar orientador");
+      setError(err instanceof Error ? err.message : editingAdvisor ? "Falha ao editar orientador" : "Falha ao cadastrar orientador");
     } finally {
       setSaving(false);
     }
@@ -238,18 +239,19 @@ export function AdvisorsPage() {
           <form onSubmit={handleSubmit} className="rounded-2xl p-6 w-full max-w-lg mx-4" style={{ background: "var(--card)" }}>
             <div className="flex justify-between items-center mb-6">
               <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>{editingAdvisor ? "Editar Orientador" : "Cadastrar Orientador"}</h2>
-              <button type="button" onClick={() => { setShowForm(false); setEditingAdvisor(null); }} style={{ color: "var(--muted-foreground)", fontSize: "20px" }}>x</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditingAdvisor(null); setError(null); }} style={{ color: "var(--muted-foreground)", fontSize: "20px" }}>x</button>
             </div>
+            {error && <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px" }}>{error}</div>}
             <div className="grid grid-cols-2 gap-4">
               <Field label="Nome Completo" className="col-span-2"><input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="E-mail"><input required disabled={Boolean(editingAdvisor)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
-              <Field label="Departamento"><input required value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              {!editingAdvisor && <Field label="Departamento"><input required value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>}
               <Field label="Programa"><select required disabled={Boolean(editingAdvisor)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione um programa</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.nome ?? program.id}</option>)}</select></Field>
-              <Field label="Limite"><input required type="number" min={1} value={form.limite_orientandos} onChange={(e) => setForm({ ...form, limite_orientandos: Number(e.target.value) })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              <Field label="Limite"><input required type="number" min={0} value={form.limite_orientandos} onChange={(e) => setForm({ ...form, limite_orientandos: Number(e.target.value) })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Lattes URL" className="col-span-2"><input value={form.lattes ?? ""} onChange={(e) => setForm({ ...form, lattes: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
             </div>
             <div className="flex gap-3 mt-6">
-              <button type="button" onClick={() => { setShowForm(false); setEditingAdvisor(null); }} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditingAdvisor(null); setError(null); }} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
               <button disabled={saving} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>{saving ? "Salvando..." : editingAdvisor ? "Salvar" : "Cadastrar"}</button>
             </div>
           </form>

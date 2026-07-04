@@ -36,6 +36,7 @@ from backend.app.models.user import (
     FirstAccessResponse,
     InviteRequest,
     InviteResponse,
+    NotificationPreferences,
     UserResponse,
 )
 from backend.app.repositories.firebase_repository import FirebaseRepository
@@ -223,6 +224,7 @@ class AuthService:
             "role": invite["role"],
             "programa_id": invite["programa_id"],
             "ativo": True,
+            "notification_preferences": NotificationPreferences().model_dump(),
             "primeiro_acesso_completo": True,
             "criado_em": agora,
             "atualizado_em": agora,
@@ -277,6 +279,7 @@ class AuthService:
             role=doc["role"],
             programa_id=doc["programa_id"],
             ativo=doc.get("ativo", True),
+            notification_preferences=doc.get("notification_preferences", {}),
             student_id=doc.get("student_id"),
             advisor_id=doc.get("advisor_id"),
         )

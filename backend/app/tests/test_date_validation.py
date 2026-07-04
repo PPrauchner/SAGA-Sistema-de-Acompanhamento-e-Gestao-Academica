@@ -33,7 +33,7 @@ ANTES_DO_MINIMO = DATA_MINIMA - timedelta(days=1)
 
 
 def _ext(nova_data: date) -> ExtensionCreateRequest:
-    return ExtensionCreateRequest(nova_data=nova_data, motivo="x")
+    return ExtensionCreateRequest(tipo="prorrogacao", nova_data=nova_data, motivo="x")
 
 
 def _act(data_realizacao: datetime) -> ActivityCreateRequest:

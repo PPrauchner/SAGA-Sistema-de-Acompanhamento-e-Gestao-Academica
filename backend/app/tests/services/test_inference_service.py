@@ -27,20 +27,20 @@ async def test_inference_reflects_program_config_change(monkeypatch):
     # _PROGRAM em fixtures.py já tem creditos_total_min=24
     repo = FixtureRepository()
     service = InferenceService(data_source=repo)
-    
+
     # 2. Primeira inferência: deve ser 'qualificado' (pois o fixture aluno_regular já qualificou)
     result_before = await service.run_inference(student_id="aluno_regular", programa_id="prog_default")
     assert result_before.situacao_inferida == "qualificado"
     assert result_before.creditos_validos is True
     assert result_before.em_risco is False
-    
+
     # 3. Alterar configuração do programa (Simulando Issue #47)
     # Usamos monkeypatch para alterar a constante no módulo de fixtures durante o teste
     monkeypatch.setitem(_PROGRAM, "creditos_total_min", 100)
-    
+
     # 4. Segunda inferência: deve ser 'em_risco' pois o aluno tem apenas 25 créditos
     result_after = await service.run_inference(student_id="aluno_regular", programa_id="prog_default")
-    
+
     # 5. Asserções
     assert result_after.situacao_inferida == "em_risco"
     assert result_after.creditos_validos is False
@@ -52,9 +52,9 @@ async def test_aptidao_defesa_aluno_apto():
     """Verifica se o aluno_apto é inferido corretamente como em_fase_de_defesa."""
     repo = FixtureRepository()
     service = InferenceService(data_source=repo)
-    
+
     result = await service.run_inference(student_id="aluno_apto", programa_id="prog_default")
-    
+
     assert result.situacao_inferida == "em_fase_de_defesa"
     assert result.apto_defesa is True
     assert result.checklist.creditos_minimos.status == "cumprido"
@@ -64,9 +64,9 @@ async def test_aptidao_defesa_aluno_apto():
 async def test_inference_with_non_existent_student():
     """Garante que o serviço levanta erro para aluno inexistente."""
     from backend.app.services.inference_service import StudentNotFoundError
-    
+
     repo = FixtureRepository()
     service = InferenceService(data_source=repo)
-    
+
     with pytest.raises(StudentNotFoundError):
         await service.run_inference(student_id="inexistente", programa_id="prog_default")
