@@ -61,7 +61,7 @@ export function getPrivateRouteRedirect({
   }
 
   if (profileLoading) {
-    return onAuthPage ? "dashboard" : null;
+    return null;
   }
 
   if (onAuthPage) {
