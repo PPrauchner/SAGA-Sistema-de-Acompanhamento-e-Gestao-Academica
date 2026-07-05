@@ -171,7 +171,11 @@ export function SettingsPage() {
 
   const handleSaveActivity = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!token || !currentActivity) return;
+    if (!currentActivity) return;
+    if (!token) {
+      toast.error("Sessão expirada. Entre novamente.");
+      return;
+    }
     try {
       if (currentActivity.id) {
         await activityTypesApi.updateActivityType(token, currentActivity.id, currentActivity);
@@ -184,7 +188,7 @@ export function SettingsPage() {
       }
       setIsActivityModalOpen(false);
     } catch (error) {
-      toast.error("Erro ao salvar tipo de atividade");
+      toast.error(error instanceof Error ? error.message : "Erro ao salvar tipo de atividade");
     }
   };
 
