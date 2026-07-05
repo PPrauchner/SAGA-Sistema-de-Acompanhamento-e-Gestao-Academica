@@ -51,6 +51,27 @@ class _FakeRepo:
     async def update(self, doc_id: str, data: dict[str, Any]) -> None:
         self.store.setdefault(doc_id, {}).update(data)
 
+    async def query(
+        self,
+        filters: list[tuple] | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+        subcollection_path: str | None = None
+    ) -> list[dict[str, Any]]:
+        results = []
+        for doc_id, doc in self.store.items():
+            match = True
+            if filters:
+                for field, op, value in filters:
+                    if op == "==" and doc.get(field) != value:
+                        match = False
+                        break
+            if match:
+                data = dict(doc)
+                data["id"] = doc_id
+                results.append(data)
+        return results
+
 
 class _FakeAuth:
     """Cliente Firebase Auth fake: get_user_by_email/create_user/set_custom_user_claims."""
@@ -74,6 +95,13 @@ class _FakeAuth:
 
     def set_custom_user_claims(self, uid: str, claims: dict[str, Any]) -> None:
         self.claims[uid] = claims
+
+    def verify_id_token(self, id_token: str) -> dict[str, Any]:
+        if id_token == "invalid_token":
+            raise ValueError("Token inválido")
+        if id_token == "no_email_token":
+            return {"uid": "uid_google"}
+        return {"uid": "uid_google", "email": id_token}
 
 
 def _coordenacao() -> CurrentUser:
@@ -243,3 +271,64 @@ async def test_get_me_perfil_inexistente_404() -> None:
     with pytest.raises(HTTPException) as exc:
         await service.get_me(user)
     assert exc.value.status_code == 404
+
+
+async def test_activate_google_first_access_success() -> None:
+    auth = _FakeAuth()
+    service, invites, users = _service(auth)
+    token = "tok-google"
+    invites.store[token] = {
+        "email": "a@x.com",
+        "role": "aluno",
+        "nome": "Aluno X",
+        "programa_id": "prog_default",
+        "usado": False,
+        "expira_em": datetime.now(timezone.utc) + timedelta(hours=10),
+    }
+
+    # Passa "a@x.com" como id_token pois o _FakeAuth.verify_id_token mapeia id_token para o email
+    resp = await service.activate_google_first_access("a@x.com")
+
+    assert resp.uid == "uid_google"
+    assert resp.role == "aluno"
+    assert auth.claims[resp.uid] == {"role": "aluno", "programa_id": "prog_default"}
+    assert invites.store[token]["usado"] is True
+    assert users.store[resp.uid]["primeiro_acesso_completo"] is True
+    assert users.store[resp.uid]["email"] == "a@x.com"
+
+
+async def test_activate_google_first_access_invalid_token_401() -> None:
+    service, _, _ = _service(_FakeAuth())
+    with pytest.raises(HTTPException) as exc:
+        await service.activate_google_first_access("invalid_token")
+    assert exc.value.status_code == 401
+
+
+async def test_activate_google_first_access_no_email_400() -> None:
+    service, _, _ = _service(_FakeAuth())
+    with pytest.raises(HTTPException) as exc:
+        await service.activate_google_first_access("no_email_token")
+    assert exc.value.status_code == 400
+
+
+async def test_activate_google_first_access_no_invite_403() -> None:
+    service, _, _ = _service(_FakeAuth())
+    # Não há convite no _FakeRepo
+    with pytest.raises(HTTPException) as exc:
+        await service.activate_google_first_access("nobody@x.com")
+    assert exc.value.status_code == 403
+
+
+async def test_activate_google_first_access_expired_invite_403() -> None:
+    service, invites, _ = _service(_FakeAuth())
+    invites.store["tok"] = {
+        "email": "a@x.com",
+        "role": "aluno",
+        "nome": "Aluno X",
+        "programa_id": "prog_default",
+        "usado": False,
+        "expira_em": datetime.now(timezone.utc) - timedelta(hours=10),
+    }
+    with pytest.raises(HTTPException) as exc:
+        await service.activate_google_first_access("a@x.com")
+    assert exc.value.status_code == 403
