@@ -752,9 +752,91 @@ const REVIEW_TIPO_CFG: Record<ValidationQueueItem["tipo"], { label: string; colo
   producao: { label: "Produção", color: "var(--tint-teal-text)", icon: <Star size={13} /> },
 };
 
+const REVIEW_CATEGORIA_LABEL: Record<string, string> = {
+  basico: "Básico",
+  especifico: "Específico",
+  tecnologico: "Tecnológico",
+};
+
+function ReviewDetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span style={{ color: "var(--muted-foreground)" }}>{label}</span>
+      <span style={{ color: "var(--foreground)", fontWeight: 600, textAlign: "right" }}>{children}</span>
+    </div>
+  );
+}
+
+// Modal read-only de detalhes de um item da fila de verificação (#264). Fechar apenas
+// fecha — nenhuma mutação na solicitação.
+function ReviewDetailModal({ item, onClose }: { item: ValidationQueueItem; onClose: () => void }) {
+  const tc = REVIEW_TIPO_CFG[item.tipo];
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(15,23,42,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-5"
+        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 24px 70px rgba(0,0,0,0.25)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-4 gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 800, color: tc.color, background: `${tc.color}15` }}>{tc.label}</span>
+            <h2 style={{ fontSize: "15px", fontWeight: 800, color: "var(--foreground)" }}>{item.aluno}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" style={{ color: "var(--muted-foreground)", flexShrink: 0 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <p style={{ fontSize: "13px", color: "var(--foreground)", marginBottom: 12 }}>{item.descricao}</p>
+
+        <div className="space-y-1.5" style={{ fontSize: "12px" }}>
+          {item.tipoNome && <ReviewDetailRow label="Tipo">{item.tipoNome}</ReviewDetailRow>}
+          {item.categoria && (
+            <ReviewDetailRow label="Categoria">{REVIEW_CATEGORIA_LABEL[item.categoria] ?? item.categoria}</ReviewDetailRow>
+          )}
+          {item.dataRealizacao && <ReviewDetailRow label="Data de realização">{formatDataBR(item.dataRealizacao)}</ReviewDetailRow>}
+          {typeof item.creditos === "number" && <ReviewDetailRow label="Créditos">{item.creditos}</ReviewDetailRow>}
+          {typeof item.elegivel === "boolean" && (
+            <div className="flex justify-between gap-4">
+              <span style={{ color: "var(--muted-foreground)" }}>Elegível (RL04)</span>
+              <span style={{ color: item.elegivel ? "#1F8A70" : "#dc2626", fontWeight: 600 }}>{item.elegivel ? "Sim" : "Não"}</span>
+            </div>
+          )}
+          <ReviewDetailRow label="Enviado em">{formatDataBR(item.data)}</ReviewDetailRow>
+        </div>
+
+        {item.comprovanteUrl && (
+          <a
+            href={item.comprovanteUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 mt-3"
+            style={{ fontSize: "12px", color: "#123C7A", fontWeight: 700 }}
+          >
+            <ArrowUpRight size={14} /> Ver comprovante
+          </a>
+        )}
+
+        {item.parecerOrientador && (
+          <div className="mt-3 rounded-xl px-3 py-2.5" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+            <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted-foreground)", marginBottom: 4 }}>Parecer do orientador</p>
+            <p style={{ fontSize: "12px", color: "var(--foreground)", whiteSpace: "pre-wrap" }}>{item.parecerOrientador}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PendingReviews() {
   const { data, loading, error } = useValidationQueue();
   const items = data ?? [];
+  const [selected, setSelected] = useState<ValidationQueueItem | null>(null);
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
@@ -790,15 +872,19 @@ function PendingReviews() {
                     <Calendar size={9} className="inline mr-1" />Enviado em: {formatDataBR(item.data)}
                   </p>
                 </div>
-                <button className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
+                <button
+                  onClick={() => setSelected(item)}
+                  className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
                   style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>
-                  Avaliar
+                  Ver detalhes
                 </button>
               </div>
             );
           })}
         </div>
       )}
+
+      {selected && <ReviewDetailModal item={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
