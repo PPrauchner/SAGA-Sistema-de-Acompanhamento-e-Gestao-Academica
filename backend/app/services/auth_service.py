@@ -27,6 +27,7 @@ from typing import Any
 
 from fastapi import HTTPException, status
 from firebase_admin import auth as firebase_auth
+from firebase_admin import exceptions as firebase_exceptions
 
 from backend.app.core.auth import CurrentUser
 from backend.app.core.config import settings
@@ -248,6 +249,90 @@ class AuthService:
 
         return FirstAccessResponse(
             message="Conta ativada com sucesso",
+            uid=uid,
+            role=invite["role"],
+            email=invite["email"],
+        )
+
+    async def activate_google_first_access(
+        self, id_token: str
+    ) -> FirstAccessResponse:
+        """Ativa a conta do convidado via Google OAuth (sem senha nem token).
+
+        Args:
+            id_token: Token JWT do Firebase retornado após signInWithPopup no Google.
+
+        Returns:
+            FirstAccessResponse com uid, role e e-mail da conta ativada.
+
+        Raises:
+            HTTPException: 401 se token inválido, 400 se sem e-mail, 403 se não houver convite.
+        """
+        try:
+            decoded = await asyncio.to_thread(self._auth.verify_id_token, id_token)
+        except (ValueError, firebase_exceptions.FirebaseError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token inválido ou expirado",
+            ) from exc
+
+        email = decoded.get("email")
+        if not email:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Token Google não possui e-mail",
+            )
+        
+        uid = decoded["uid"]
+
+        invites = await self._invites.query(
+            filters=[("email", "==", email), ("usado", "==", False)]
+        )
+        agora = datetime.now(timezone.utc)
+        valid_invites = [
+            inv for inv in invites if inv.get("expira_em") and inv["expira_em"] > agora
+        ]
+        
+        if not valid_invites:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="E-mail sem convite; procure a coordenação",
+            )
+            
+        invite = valid_invites[0]
+        token = invite["id"]
+
+        claims = {"role": invite["role"], "programa_id": invite["programa_id"]}
+        await asyncio.to_thread(self._auth.set_custom_user_claims, uid, claims)
+
+        user_data = {
+            "uid": uid,
+            "email": invite["email"],
+            "nome": invite["nome"],
+            "role": invite["role"],
+            "programa_id": invite["programa_id"],
+            "ativo": True,
+            "notification_preferences": NotificationPreferences().model_dump(),
+            "primeiro_acesso_completo": True,
+            "criado_em": agora,
+            "atualizado_em": agora,
+        }
+        if invite.get("student_id"):
+            user_data["student_id"] = invite["student_id"]
+        if invite.get("advisor_id"):
+            user_data["advisor_id"] = invite["advisor_id"]
+
+        await self._users.set(uid, user_data)
+
+        if invite.get("student_id"):
+            await FirebaseRepository("students").update(invite["student_id"], {"uid": uid})
+        if invite.get("advisor_id"):
+            await FirebaseRepository("advisors").update(invite["advisor_id"], {"uid": uid})
+
+        await self._invites.update(token, {"usado": True})
+
+        return FirstAccessResponse(
+            message="Conta ativada com sucesso via Google",
             uid=uid,
             role=invite["role"],
             email=invite["email"],
