@@ -24,7 +24,14 @@ export interface UseChecklistStudentResult {
   setStudentId: (id: string) => void;
 }
 
-export function useChecklistStudent(): UseChecklistStudentResult {
+/**
+ * @param autoSelectFirst Quando não há seleção prévia, cai no primeiro aluno da lista.
+ *   Padrão `true` (checklist/inferência, só leitura). Passe `false` em fluxos de edição
+ *   (ex: plano de trabalho) onde nada deve ser aberto/alterado sem escolha explícita.
+ */
+export function useChecklistStudent(
+  { autoSelectFirst = true }: { autoSelectFirst?: boolean } = {},
+): UseChecklistStudentResult {
   const { currentUser, selectedStudentId, setSelectedStudentId } = useApp();
   const { token } = useAuth();
   const [students, setStudents] = useState<ChecklistStudent[]>([]);
@@ -48,7 +55,7 @@ export function useChecklistStudent(): UseChecklistStudentResult {
     };
   }
 
-  const studentId = selectedStudentId ?? students[0]?.id ?? null;
+  const studentId = selectedStudentId ?? (autoSelectFirst ? students[0]?.id ?? null : null);
 
   return {
     studentId,
