@@ -72,6 +72,18 @@ class _FakeInferenceService:
         return type(self).result
 
 
+class _FakeUsersRepository:
+    """Repo genérico de users/ (FirebaseRepository) para resolver a coordenação."""
+
+    store: list[dict[str, Any]] = []
+
+    def __init__(self, collection: str | None = None) -> None:
+        pass
+
+    async def list_all(self) -> list[dict[str, Any]]:
+        return [dict(user) for user in type(self).store]
+
+
 def _aluno(uid: str = "uid-aluno") -> CurrentUser:
     return CurrentUser(uid=uid, role="aluno", programa_id="prog_default", email="a@x.com")
 
@@ -108,6 +120,9 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
         },
     }
     _FakeAdvisorRepository.store = {"advisor1": {"uid": "uid-orient", "nome": "Prof"}}
+    _FakeUsersRepository.store = [
+        {"id": "uid-coord", "role": "coordenacao", "programa_id": "prog_default"},
+    ]
     _FakeInferenceService.last_kwargs = {}
     _FakeInferenceService.result = True
 
@@ -115,6 +130,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(activity_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(activity_module, "ActivityTypeRepository", _FakeActivityTypeRepository)
     monkeypatch.setattr(activity_module, "AdvisorRepository", _FakeAdvisorRepository)
+    monkeypatch.setattr(activity_module, "FirebaseRepository", _FakeUsersRepository)
     monkeypatch.setattr(activity_module, "InferenceRepository", lambda: object())
 
 
@@ -316,8 +332,10 @@ async def test_orientador_cria_atividade_enviada_com_parecer() -> None:
 
     assert result["id"] == "act1"
     assert result["elegibilidade_preliminar"] is True
-    assert result["notificacao_enviada"] is False
     assert result["aluno_nome"] == "Maria"
+    # Coordenação do programa é notificada (A05)
+    assert result["notificacao_enviada"] is True
+    assert result["coord_uids"] == ["uid-coord"]
 
     stored = _FakeActivityRepository.store["student1"][0]
     assert stored["status"] == "enviado"
@@ -325,6 +343,33 @@ async def test_orientador_cria_atividade_enviada_com_parecer() -> None:
     # Créditos não são contabilizados antes da aprovação da coordenação (US-CR01)
     assert stored["creditos_gerados"] == 4.0
     assert stored["creditos_concedidos"] is None
+
+
+async def test_orientador_sem_coordenacao_nao_notifica() -> None:
+    _FakeUsersRepository.store = []  # programa sem coordenação cadastrada
+    service = _service()
+
+    result = await service.submit_activity_for_orientando(_advisor_activity_payload(), _orientador())
+
+    assert result["coord_uids"] == []
+    assert result["notificacao_enviada"] is False
+
+
+def test_build_notificacao_criacao_orientador() -> None:
+    from backend.app.api.v1.activities import _build_notificacao_criacao_orientador
+
+    result = {
+        "id": "act1",
+        "aluno_nome": "Maria",
+        "programa_id": "prog_default",
+        "coord_uids": ["c1", "c2"],
+    }
+    notifs = _build_notificacao_criacao_orientador(result, (), {})
+
+    assert [n["destinatario_id"] for n in notifs] == ["c1", "c2"]
+    assert all(n["tipo"] == "atividade_submetida" for n in notifs)
+    assert all(n["entidade_id"] == "act1" for n in notifs)
+    assert all(n["programa_id"] == "prog_default" for n in notifs)
 
 
 async def test_orientador_cria_para_aluno_inexistente_404() -> None:
