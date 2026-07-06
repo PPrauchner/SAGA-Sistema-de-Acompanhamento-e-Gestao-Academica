@@ -49,7 +49,9 @@ const PRIORITY_LABEL: Record<TaskPriority, string> = {
 export function WorkPlanPage() {
   const { currentUser } = useApp();
   const { token } = useAuth();
-  const { studentId, students, setStudentId } = useChecklistStudent();
+  // Sem auto-selecionar o primeiro orientando: nada e carregado/alterado sem escolha
+  // explicita do aluno (issue #262 / revisao do PR #301).
+  const { studentId, students, setStudentId } = useChecklistStudent({ autoSelectFirst: false });
   const [plan, setPlan] = useState<WorkPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
