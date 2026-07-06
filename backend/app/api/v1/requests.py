@@ -15,7 +15,7 @@ router = APIRouter()
     response_model=list[RequestItem],
     summary="Listar solicitacoes pendentes",
 )
-@requires_role("orientador", "coordenacao", "adm")
+@requires_role("aluno", "orientador", "coordenacao", "adm")
 async def list_requests(
     user: CurrentUser = Depends(get_current_user),
     service: RequestService = Depends(RequestService),
@@ -23,9 +23,10 @@ async def list_requests(
     """
     Retorna a lista unificada de solicitacoes pendentes de acao ou visualizacao,
     de acordo com o papel e escopo do usuario autenticado.
-    - Orientador: ve as atividades e prorrogacoes de seus orientandos que aguardam seu parecer, 
+    - Aluno: ve suas solicitacoes pendentes criadas em outros fluxos.
+    - Orientador: ve as atividades e prorrogacoes de seus orientandos que aguardam seu parecer,
       bem como as transferencias de coordenacao onde e o destino.
-    - Coordenacao: ve as atividades, prorrogacoes e transferencias de orientando aguardando 
+    - Coordenacao: ve as atividades, prorrogacoes e transferencias de orientando aguardando
       validacao/aprovacao final do seu programa.
     - ADM: ve todas as transferencias de coordenacao globais.
     """

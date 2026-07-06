@@ -113,9 +113,6 @@ function StudentModal({ student: s, onClose }: { student: Student; onClose: () =
             <div>
               <p style={{ fontSize: "18px", fontWeight: 800, color: sc.color }}>{s.name}</p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="rounded-full px-2 py-0.5" style={{ fontSize: "10px", fontWeight: 700, color: sc.color, background: "rgba(255,255,255,0.6)" }}>
-                  {s.nivel}
-                </span>
                 <span style={{ fontSize: "12px", color: sc.color, opacity: 0.75 }}>Ingresso: {s.ingresso}</span>
               </div>
             </div>
@@ -398,12 +395,9 @@ function QuickActionModal({ type, onClose, students }: { type: Exclude<QA, null>
 
 function KpiCards({ total, emRisco, qualificados, defesa, prorrogacao }: OrientadorStatsProps) {
   const atRisk = emRisco + prorrogacao;
-  // Doutorado/Mestrado counts are not returned by the API yet, keeping placeholder logic for sub-text
-  const dout = Math.round(total * 0.6); 
-  const mest = total - dout;
 
   const cards = [
-    { icon: <Users size={20} />, label: "Total de Orientandos", value: total, sub: `${dout} doutorado · ${mest} mestrado`, color: "#123C7A", bg: "#eef3fc" },
+    { icon: <Users size={20} />, label: "Total de Orientandos", value: total, sub: "Orientandos ativos", color: "#123C7A", bg: "#eef3fc" },
     { icon: <AlertTriangle size={20} />, label: "Em Risco / Prorrogação", value: atRisk, sub: "Requerem atenção imediata", color: "#dc2626", bg: "#fef2f2" },
     { icon: <GraduationCap size={20} />, label: "Qualificados", value: qualificados, sub: "Fase avançada de pesquisa", color: "#123C7A", bg: "#eef3fc" },
     { icon: <Star size={20} />, label: "Aptos à Defesa", value: defesa, sub: "Prontos para a banca", color: "#8b5cf6", bg: "#f5f3ff" },
@@ -513,7 +507,7 @@ function StudentTable({ students, onSelect }: { students: Student[]; onSelect: (
                     <Avt init={s.init} size={32} color={ST[s.status].color} />
                     <div>
                       <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap" }}>{s.name}</p>
-                      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{s.nivel} · {s.ingresso}</p>
+                      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Ingresso {s.ingresso}</p>
                     </div>
                   </div>
                 </td>
@@ -682,7 +676,7 @@ function WorkPlanMonitoring({ students, onSelect }: { students: Student[]; onSel
                 <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 128 }}>
                   {s.name}
                 </p>
-                <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{s.nivel} · {s.ingresso}</p>
+                <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Ingresso {s.ingresso}</p>
               </div>
 
               <div className="flex items-center gap-1.5" style={{ minWidth: 130, flexShrink: 0 }}>
@@ -944,7 +938,7 @@ function AttentionStudents({
                   <Avt init={s.init} size={40} color={sc.color} />
                   <div>
                     <p style={{ fontSize: "14px", fontWeight: 800, color: sc.color }}>{s.name}</p>
-                    <p style={{ fontSize: "11px", color: sc.color, opacity: 0.75 }}>{s.nivel} · Ingresso {s.ingresso}</p>
+                    <p style={{ fontSize: "11px", color: sc.color, opacity: 0.75 }}>Ingresso {s.ingresso}</p>
                   </div>
                 </div>
                 <SBadge status={s.status} />

@@ -192,7 +192,7 @@ erDiagram
 | `orientador_id` | string | →`advisors` (auto-id) | **não** é o uid |
 | `coorientador_id` | string\|null | →`advisors` (0..1) | 2º orientador opcional |
 | `programa_id` | string | →`programs` (soft) | |
-| `nivel` | string | | `mestrado`\|`doutorado` — **MVP foca mestrado** |
+| `nivel` | string | `mestrado` | mantido para compatibilidade futura; **MVP opera apenas como mestrado** |
 | `data_ingresso` | timestamp | | |
 | `prazo_final` | timestamp | | **vigente**; escrito no ingresso **e** por prorrogação aprovada |
 | `situacao_registrada` | string | | enum 7 valores¹; escrito **manual** (coordenação) **e** por transições automáticas |
@@ -557,10 +557,10 @@ data de publicação ([ADR-0003](./adr/0003-pesos-qualis-versionados-por-program
 
 > **Escala A1–A8 + fallback (ADR-0003, supera R1/R4):** pesos default em
 > `backend/app/models/vehicle.py` → `PESO_POR_NIVEL`
-> (A1=1.0, A2=0.85, A3=0.7, A4=0.55, A5=0.45, A6=0.35, A7=0.25, A8=0.15, SC=0.1),
+> (A1=1.0, A2=0.9, A3=0.8, A4=0.7, A5=0.6, A6=0.5, A7=0.4, A8=0.3, SC=0.2),
 > estritamente decrescente. Esses valores são apenas o **bootstrap**: o peso efetivo da RL05 é o
 > **vigente por programa na data de publicação**, lido de `qualis_weights` (não desta coleção).
-> **Sem nível configurado:** o veículo assume `SC` (fallback).
+> **Sem nível configurado:** o veículo assume `SC` (fallback com pontuacao minima, nao zero).
 
 ### `qualis_weights` ✅ — sub-coleção de `programs` — chave: `auto-id`
 
@@ -669,7 +669,7 @@ erDiagram
 | Campo | Tipo | Ref | Notas |
 |-------|------|-----|-------|
 | `id` | string | | auto-id Firestore do documento em `extensions/` |
-| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`, `mudanca_nivel` |
+| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`; `mudanca_nivel` é escopo futuro |
 | `student_id` | string | →`students` | aluno da solicitação |
 | `aluno_id` | string | →`students` | alias de compatibilidade para `student_id` |
 | `requester_id` | string | →`users.uid` | uid de quem abriu a solicitação |

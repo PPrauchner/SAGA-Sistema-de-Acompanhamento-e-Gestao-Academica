@@ -8,8 +8,7 @@ import { getWorkPlan, type WorkPlan, type StageStatus } from "@/api/workPlanApi"
 import { ApiError } from "@/api/http";
 import {
   CheckCircle2, X, Calendar, ChevronRight, AlertTriangle,
-  Bell, Clock, FileText, BookOpen, GraduationCap, Shield,
-  ChevronLeft,
+  Bell, Clock,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -31,9 +30,6 @@ type ModalData =
   | null;
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
-// Valores default (usados quando a API ainda não retornou dados)
-const DEFAULT_COURSE_TOTAL = 48;
-
 const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: string; border: string; desc: string; emoji: string }> = {
   regular: { label: "Regular", color: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)", border: "var(--tint-teal-border)", desc: "Todos os requisitos em dia. Continue assim!", emoji: "✓" },
   "em-risco": { label: "Em Risco", color: "var(--tint-gold-text)", bg: "var(--tint-gold-bg)", border: "var(--tint-gold-border)", desc: "Atenção: produções científicas abaixo do esperado para este período.", emoji: "⚠" },
@@ -144,7 +140,7 @@ const DEADLINES: Deadline[] = [
   { id: 3, label: "Submissão SBES 2026", date: "30/06/2026", days: 28, type: "urgente", icon: "📄" },
   { id: 4, label: "Plano de Trabalho 2026/2", date: "01/07/2026", days: 29, type: "normal", icon: "📅" },
   { id: 5, label: "Inscrição Disciplina 2026/2", date: "05/07/2026", days: 33, type: "normal", icon: "📚" },
-  { id: 6, label: "Prazo Máximo do Doutorado", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
+  { id: 6, label: "Prazo Máximo do Curso", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
 ];
 
 const GRAPH_DATA = [

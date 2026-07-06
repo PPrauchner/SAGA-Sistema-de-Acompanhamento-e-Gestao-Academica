@@ -12,7 +12,7 @@
  *   não do cliente.
  */
 
-import type { UserRole } from "@/app/context/AppContext";
+import type { NotificationPreferences, UserRole } from "@/app/context/AppContext";
 import { API_ROOT, apiGet } from "@/api/http";
 
 // Base da API para os clientes que montam o path com /api/v1 (studentsApi, activitiesApi,
@@ -30,7 +30,17 @@ export interface AuthProfile {
   matricula: string | null;
   studentId: string | null;
   advisorId: string | null;
+  notificationPreferences: NotificationPreferences;
 }
+
+const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences = {
+  email: true,
+  in_app: true,
+  work_plan: true,
+  transfers: true,
+  activities: true,
+  extensions: true,
+};
 
 /** Forma crua de GET /api/v1/auth/me (snake_case), antes do mapeamento para camelCase. */
 interface RawProfile {
@@ -43,6 +53,7 @@ interface RawProfile {
   matricula?: string | null;
   student_id?: string | null;
   advisor_id?: string | null;
+  notification_preferences?: Partial<NotificationPreferences> | null;
 }
 
 /** Resultado de POST /api/v1/auth/first-access. */
@@ -64,6 +75,10 @@ export async function getMe(token: string): Promise<AuthProfile> {
     matricula: data.matricula ?? null,
     studentId: data.student_id ?? null,
     advisorId: data.advisor_id ?? null,
+    notificationPreferences: {
+      ...DEFAULT_NOTIFICATION_PREFERENCES,
+      ...(data.notification_preferences ?? {}),
+    },
   };
 }
 
@@ -75,6 +90,23 @@ export async function activateFirstAccess(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, senha }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail ?? `Falha ao ativar conta (HTTP ${response.status})`);
+  }
+  return { uid: data.uid, role: data.role, email: data.email };
+}
+
+export async function activateGoogleFirstAccess(
+  token: string,
+): Promise<FirstAccessResult> {
+  const response = await fetch(`${API_URL}/api/v1/auth/google-first-access`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {

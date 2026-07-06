@@ -17,7 +17,7 @@ const PAGE_LABELS: Record<PageId, string> = {
   producoes: "Produções Científicas",
   checklist: "Checklist de Conclusão",
   solicitacoes: "Solicitações",
-  prorrogacoes: "Solicitações", 
+  prorrogacoes: "Solicitações",
   transferencias: "Solicitações",
   "registration-requests": "Cadastros Pendentes",
   relatorios: "Relatórios",

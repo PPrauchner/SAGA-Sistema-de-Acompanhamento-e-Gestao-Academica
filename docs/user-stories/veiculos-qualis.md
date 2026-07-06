@@ -11,8 +11,8 @@
 
 ## US-VQ01 — Classificar um veículo em um nível Qualis
 
-**Como** coordenador,  
-**quero** classificar um veículo em um nível Qualis,  
+**Como** coordenador,
+**quero** classificar um veículo em um nível Qualis,
 **para que** o sistema possa usar esse nível na pontuação ponderada das produções bibliográficas (RL05).
 
 **Critérios de Aceitação:**
@@ -24,8 +24,8 @@
 
 ## US-VQ02 — Definir o peso de cada nível Qualis no meu programa
 
-**Como** coordenador,  
-**quero** definir o peso de cada nível Qualis (A1–A8 e fallback) no meu programa,  
+**Como** coordenador,
+**quero** definir o peso de cada nível Qualis (A1–A8 e fallback) no meu programa,
 **para que** a pontuação das produções reflita a política de avaliação vigente do programa.
 
 **Critérios de Aceitação:**
@@ -37,8 +37,8 @@
 
 ## US-VQ03 — Versionar e auditar mudanças de peso
 
-**Como** coordenador,  
-**quero** que cada mudança de pesos seja registrada como uma nova versão com autor e data,  
+**Como** coordenador,
+**quero** que cada mudança de pesos seja registrada como uma nova versão com autor e data,
 **para que** exista histórico de quem mudou o quê e quando, e produções antigas não sejam afetadas.
 
 **Critérios de Aceitação:**
@@ -51,8 +51,8 @@
 
 ## US-VQ04 — Registrar métricas descritivas de qualidade do veículo
 
-**Como** coordenador,  
-**quero** registrar Índice H, Percentil Scopus e Fator de Impacto JCR de um veículo,  
+**Como** coordenador,
+**quero** registrar Índice H, Percentil Scopus e Fator de Impacto JCR de um veículo,
 **para que** essas métricas auxiliem a avaliação manual da relevância — **sem** alterar a pontuação da RL05.
 
 **Critérios de Aceitação:**
@@ -65,8 +65,8 @@
 
 ## US-VQ05 — Visualizar métricas de qualidade ao consultar um veículo
 
-**Como** orientador ou coordenador,  
-**quero** ver, na tela de detalhes de um veículo, o nível Qualis e as métricas descritivas disponíveis (Índice H, Percentil Scopus e JCR quando aplicável),  
+**Como** orientador ou coordenador,
+**quero** ver, na tela de detalhes de um veículo, o nível Qualis e as métricas descritivas disponíveis (Índice H, Percentil Scopus e JCR quando aplicável),
 **para que** eu possa avaliar rapidamente a relevância de uma produção bibliográfica associada a esse veículo.
 
 **Critérios de Aceitação:**

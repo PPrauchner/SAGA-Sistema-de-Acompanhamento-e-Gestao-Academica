@@ -1,6 +1,6 @@
 # Histórias de Usuário — Papéis, Permissões e Solicitações
 
-> Geradas a partir de feedback textual (2026-06-23).  
+> Geradas a partir de feedback textual (2026-06-23).
 > Cobre: validação de créditos, filtro de papel, autenticação, hierarquia de usuários, página de solicitações e transferência de coordenação.
 
 ---
@@ -9,8 +9,8 @@
 
 ### US-CR01 — Créditos só são computados após aprovação da coordenação
 
-**Como** sistema,  
-**quero** computar créditos de uma atividade ou produção bibliográfica somente após aprovação explícita da coordenação,  
+**Como** sistema,
+**quero** computar créditos de uma atividade ou produção bibliográfica somente após aprovação explícita da coordenação,
 **para que** o total de créditos do discente reflita apenas itens validados institucionalmente.
 
 **Critérios de Aceitação:**
@@ -25,8 +25,8 @@
 
 ### US-PA01 — Filtrar visão por papel em contas com múltiplos papéis
 
-**Como** usuário com os papéis de orientador e coordenador simultaneamente,  
-**quero** aplicar um filtro de papel em todas as telas principais do sistema,  
+**Como** usuário com os papéis de orientador e coordenador simultaneamente,
+**quero** aplicar um filtro de papel em todas as telas principais do sistema,
 **para que** eu possa alternar entre a visão de coordenador e a visão de orientador sem precisar de contas separadas.
 
 **Critérios de Aceitação:**
@@ -40,8 +40,8 @@
 
 ### US-PA02 — Remover seleção de papel da página de login
 
-**Como** sistema,  
-**quero** eliminar a escolha explícita de papel na tela de login,  
+**Como** sistema,
+**quero** eliminar a escolha explícita de papel na tela de login,
 **para que** o papel do usuário seja sempre determinado pelos `custom claims` do token JWT gerado pelo backend, sem possibilidade de adulteração pelo cliente.
 
 **Critérios de Aceitação:**
@@ -54,8 +54,8 @@
 
 ### US-PA03 — Verificar e garantir implementação real dos papéis de coordenador e orientador
 
-**Como** equipe de desenvolvimento,  
-**quero** auditar todas as rotas e componentes do sistema para confirmar que os papéis `coordenador` e `orientador` estão aplicados corretamente via aspecto A01 (`@requires_role`),  
+**Como** equipe de desenvolvimento,
+**quero** auditar todas as rotas e componentes do sistema para confirmar que os papéis `coordenador` e `orientador` estão aplicados corretamente via aspecto A01 (`@requires_role`),
 **para que** não existam endpoints ou telas acessíveis por papéis incorretos.
 
 **Critérios de Aceitação:**
@@ -70,8 +70,8 @@
 
 ### US-PA04 — Criar papel ADM (superusuário)
 
-**Como** administrador do sistema (ADM),  
-**quero** ter um papel de superusuário separado dos papéis acadêmicos,  
+**Como** administrador do sistema (ADM),
+**quero** ter um papel de superusuário separado dos papéis acadêmicos,
 **para que** a gestão de coordenadores seja feita por um perfil técnico/institucional sem interferir nas operações do programa.
 
 **Critérios de Aceitação:**
@@ -84,8 +84,8 @@
 
 ### US-PA05 — Remover permissão de criação de coordenadores do papel coordenador
 
-**Como** sistema,  
-**quero** que somente o ADM possa criar novos coordenadores,  
+**Como** sistema,
+**quero** que somente o ADM possa criar novos coordenadores,
 **para que** a escalada de privilégios por coordenadores seja impossível.
 
 **Critérios de Aceitação:**
@@ -100,8 +100,8 @@
 
 ### US-SO01 — Centralizar todas as solicitações em uma única página
 
-**Como** coordenador ou orientador,  
-**quero** ter uma página unificada de "Solicitações" que consolide todos os tipos de pedidos existentes no sistema,  
+**Como** coordenador ou orientador,
+**quero** ter uma página unificada de "Solicitações" que consolide todos os tipos de pedidos existentes no sistema,
 **para que** eu não precise navegar por múltiplas telas para gerenciar itens pendentes de revisão.
 
 **Critérios de Aceitação:**
@@ -119,8 +119,8 @@
 
 ### US-SO02 — Transferir coordenação para outro orientador
 
-**Como** ADM ou coordenador atual,  
-**quero** selecionar um orientador na lista de orientadores do programa e transferir a ele o papel de coordenador,  
+**Como** ADM ou coordenador atual,
+**quero** selecionar um orientador na lista de orientadores do programa e transferir a ele o papel de coordenador,
 **para que** a sucessão de coordenação seja feita de forma controlada e rastreada.
 
 **Critérios de Aceitação:**

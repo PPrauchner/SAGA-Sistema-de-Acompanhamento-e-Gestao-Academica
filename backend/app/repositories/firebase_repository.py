@@ -80,7 +80,7 @@ class FirebaseRepository:
             if doc_id:
                 self._document(doc_id).set(data)
                 return doc_id
-            
+
             # Usando add() para auto-id se não fornecido
             _, doc_ref = get_firestore_client().collection(self.collection).add(data)
             return doc_ref.id
@@ -93,7 +93,7 @@ class FirebaseRepository:
         Args:
             doc_id: Identificador do documento a atualizar.
             data: Mapa dos campos a alterar.
-            
+
         Returns:
             True se a atualização for executada.
         """
@@ -105,7 +105,7 @@ class FirebaseRepository:
 
         Args:
             doc_id: Identificador do documento a excluir.
-            
+
         Returns:
             True se a exclusão for executada.
         """
@@ -130,9 +130,9 @@ class FirebaseRepository:
         return await asyncio.to_thread(_list)
 
     async def query(
-        self, 
-        filters: list[tuple] | None = None, 
-        order_by: str | None = None, 
+        self,
+        filters: list[tuple] | None = None,
+        order_by: str | None = None,
         limit: int | None = None,
         subcollection_path: str | None = None
     ) -> list[dict[str, Any]]:
@@ -150,24 +150,24 @@ class FirebaseRepository:
         def _execute_query() -> list[dict[str, Any]]:
             path = subcollection_path if subcollection_path else self.collection
             query_ref = get_firestore_client().collection(path)
-            
+
             if filters:
                 for field, op, value in filters:
                     query_ref = query_ref.where(field, op, value)
-            
+
             if order_by:
                 query_ref = query_ref.order_by(order_by)
-                
+
             if limit:
                 query_ref = query_ref.limit(limit)
-                
+
             docs = query_ref.stream()
             results = []
             for doc in docs:
                 data = doc.to_dict() or {}
                 data['id'] = doc.id
                 results.append(data)
-                
+
             return results
 
         return await asyncio.to_thread(_execute_query)

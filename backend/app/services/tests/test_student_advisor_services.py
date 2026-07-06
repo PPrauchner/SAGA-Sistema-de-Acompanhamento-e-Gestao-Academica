@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
-from backend.app.models.advisor import AdvisorCreateRequest
+from backend.app.models.advisor import AdvisorCreateRequest, AdvisorUpdateRequest
 from backend.app.models.student import SituacaoRequest, StudentCreateRequest
 from backend.app.models.user import InviteRequest
 from backend.app.services import advisor_service as advisor_module
@@ -374,3 +374,62 @@ async def test_get_advisor_retorna_orientandos_ativos() -> None:
     result = await service.get_advisor("advisor1")
 
     assert result["orientandos_ativos"] == 1
+
+
+async def test_update_advisor_altera_nome_lattes_e_limite() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {
+            "uid": "uid-advisor",
+            "nome": "Nome Antigo",
+            "email": "advisor@x.com",
+            "departamento": "Computacao",
+            "programa_id": "prog",
+            "lattes": None,
+            "limite_orientandos": 5,
+        },
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.update_advisor(
+        "advisor1",
+        AdvisorUpdateRequest(
+            nome="Nome Novo",
+            lattes="https://lattes.cnpq.br/123",
+            limite_orientandos=7,
+        ),
+        _coord(),
+    )
+
+    assert result["message"] == "Orientador atualizado"
+    assert _FakeAdvisorRepository.store["advisor1"]["nome"] == "Nome Novo"
+    assert _FakeAdvisorRepository.store["advisor1"]["lattes"] == "https://lattes.cnpq.br/123"
+    assert _FakeAdvisorRepository.store["advisor1"]["limite_orientandos"] == 7
+    assert _FakeAdvisorRepository.store["advisor1"]["departamento"] == "Computacao"
+
+
+async def test_update_advisor_rejeita_limite_menor_que_orientandos_ativos() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {
+            "uid": "uid-advisor",
+            "nome": "Orientador",
+            "email": "advisor@x.com",
+            "departamento": "Computacao",
+            "programa_id": "prog",
+            "limite_orientandos": 5,
+        },
+    }
+    _FakeStudentRepository.store = {
+        "student1": {"orientador_id": "advisor1", "situacao_registrada": "regular"},
+        "student2": {"orientador_id": "advisor1", "situacao_registrada": "em_risco"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.update_advisor(
+            "advisor1",
+            AdvisorUpdateRequest(limite_orientandos=1),
+            _coord(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert _FakeAdvisorRepository.store["advisor1"]["limite_orientandos"] == 5

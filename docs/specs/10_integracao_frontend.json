@@ -11,7 +11,7 @@
     "Todos os fetches de dados usam o token JWT: Authorization: Bearer <await user.getIdToken()>",
     "Criar um hook useNotifications() que assina onSnapshot da coleção notifications filtrada por uid",
     "Corrigir nomenclaturas de status: alinhar todas as páginas para usar os mesmos valores do backend",
-    "Substituir escala Qualis fixa (A1/A2/B1...) por nivel_relevancia carregado de GET /api/v1/vehicles",
+    "Substituir escala Qualis fixa (A1-A8/SC) por nivel_relevancia carregado de GET /api/v1/vehicles",
     "Não refatorar nada além do necessário para a integração — manter componentes visuais como estão"
   ],
 
@@ -149,7 +149,7 @@
     },
     {
       "componente": "ProductionsPage",
-      "dados_hardcoded_atuais": "Escala Qualis fixa (A1/A2/B1/B2/B3/B4/C) e produções estáticas",
+      "dados_hardcoded_atuais": "Escala Qualis fixa (A1-A8/SC) e produções estáticas",
       "substituicoes": [
         "GET /api/v1/productions",
         "POST /api/v1/productions",

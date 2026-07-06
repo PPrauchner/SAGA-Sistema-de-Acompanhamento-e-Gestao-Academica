@@ -36,6 +36,17 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PASSWORD_MIN_LEN = 8
 
 
+class NotificationPreferences(BaseModel):
+    """Preferencias de notificacao persistidas no perfil do usuario."""
+
+    email: bool = True
+    in_app: bool = True
+    work_plan: bool = True
+    transfers: bool = True
+    activities: bool = True
+    extensions: bool = True
+
+
 def _normalizar_email(value: str) -> str:
     """Valida o formato e normaliza o e-mail (trim + minúsculas)."""
     value = value.strip()
@@ -55,6 +66,9 @@ class UserBase(BaseModel):
     # demais papéis o service garante a invariante de programa não-nulo.
     programa_id: str | None = None
     ativo: bool = True
+    notification_preferences: NotificationPreferences = Field(
+        default_factory=NotificationPreferences,
+    )
 
     @field_validator("email")
     @classmethod
@@ -163,8 +177,9 @@ class ProfileUpdateRequest(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    nome: str = Field(..., min_length=1)
+    nome: str | None = Field(default=None, min_length=1)
     departamento: str | None = None
+    notification_preferences: NotificationPreferences | None = None
 
 
 class ProfileUpdateResponse(BaseModel):
@@ -173,3 +188,4 @@ class ProfileUpdateResponse(BaseModel):
     uid: str
     nome: str
     departamento: str | None = None
+    notification_preferences: NotificationPreferences
