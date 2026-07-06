@@ -214,6 +214,17 @@ class AuthService:
         )
         uid = user_record.uid
 
+        await self._provision_user_from_invite(uid, invite, token)
+
+        return FirstAccessResponse(
+            message="Conta ativada com sucesso",
+            uid=uid,
+            role=invite["role"],
+            email=invite["email"],
+        )
+
+    async def _provision_user_from_invite(self, uid: str, invite: dict[str, Any], token: str) -> None:
+        """Provisiona as claims, usuário no Firestore e atualiza referências e convite."""
         claims = {"role": invite["role"], "programa_id": invite["programa_id"]}
         await asyncio.to_thread(self._auth.set_custom_user_claims, uid, claims)
 
@@ -235,10 +246,7 @@ class AuthService:
         if invite.get("advisor_id"):
             user_data["advisor_id"] = invite["advisor_id"]
 
-        await self._users.set(
-            uid,
-            user_data,
-        )
+        await self._users.set(uid, user_data)
 
         if invite.get("student_id"):
             await FirebaseRepository("students").update(invite["student_id"], {"uid": uid})
@@ -246,13 +254,6 @@ class AuthService:
             await FirebaseRepository("advisors").update(invite["advisor_id"], {"uid": uid})
 
         await self._invites.update(token, {"usado": True})
-
-        return FirstAccessResponse(
-            message="Conta ativada com sucesso",
-            uid=uid,
-            role=invite["role"],
-            email=invite["email"],
-        )
 
     async def activate_google_first_access(
         self, id_token: str
@@ -283,6 +284,21 @@ class AuthService:
                 detail="Token Google não possui e-mail",
             )
         
+        if decoded.get("email_verified") is not True:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="E-mail não verificado pelo provedor",
+            )
+
+        firebase_sign_in_provider = decoded.get("firebase", {}).get("sign_in_provider")
+        if firebase_sign_in_provider != "google.com":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Login deve ser realizado via Google",
+            )
+        
+        email = email.lower().strip()
+        
         uid = decoded["uid"]
 
         invites = await self._invites.query(
@@ -302,34 +318,7 @@ class AuthService:
         invite = valid_invites[0]
         token = invite["id"]
 
-        claims = {"role": invite["role"], "programa_id": invite["programa_id"]}
-        await asyncio.to_thread(self._auth.set_custom_user_claims, uid, claims)
-
-        user_data = {
-            "uid": uid,
-            "email": invite["email"],
-            "nome": invite["nome"],
-            "role": invite["role"],
-            "programa_id": invite["programa_id"],
-            "ativo": True,
-            "notification_preferences": NotificationPreferences().model_dump(),
-            "primeiro_acesso_completo": True,
-            "criado_em": agora,
-            "atualizado_em": agora,
-        }
-        if invite.get("student_id"):
-            user_data["student_id"] = invite["student_id"]
-        if invite.get("advisor_id"):
-            user_data["advisor_id"] = invite["advisor_id"]
-
-        await self._users.set(uid, user_data)
-
-        if invite.get("student_id"):
-            await FirebaseRepository("students").update(invite["student_id"], {"uid": uid})
-        if invite.get("advisor_id"):
-            await FirebaseRepository("advisors").update(invite["advisor_id"], {"uid": uid})
-
-        await self._invites.update(token, {"usado": True})
+        await self._provision_user_from_invite(uid, invite, token)
 
         return FirstAccessResponse(
             message="Conta ativada com sucesso via Google",
