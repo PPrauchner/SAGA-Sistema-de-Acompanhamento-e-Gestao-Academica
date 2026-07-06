@@ -100,8 +100,12 @@ class _FakeAuth:
         if id_token == "invalid_token":
             raise ValueError("Token inválido")
         if id_token == "no_email_token":
-            return {"uid": "uid_google"}
-        return {"uid": "uid_google", "email": id_token}
+            return {"uid": "uid_google", "firebase": {"sign_in_provider": "google.com"}}
+        if id_token == "unverified_email_token":
+            return {"uid": "uid_google", "email": "a@x.com", "email_verified": False, "firebase": {"sign_in_provider": "google.com"}}
+        if id_token == "wrong_provider_token":
+            return {"uid": "uid_google", "email": "a@x.com", "email_verified": True, "firebase": {"sign_in_provider": "password"}}
+        return {"uid": "uid_google", "email": id_token, "email_verified": True, "firebase": {"sign_in_provider": "google.com"}}
 
 
 def _coordenacao() -> CurrentUser:
@@ -332,3 +336,19 @@ async def test_activate_google_first_access_expired_invite_403() -> None:
     with pytest.raises(HTTPException) as exc:
         await service.activate_google_first_access("a@x.com")
     assert exc.value.status_code == 403
+
+
+async def test_activate_google_first_access_unverified_email_403() -> None:
+    service, _, _ = _service(_FakeAuth())
+    with pytest.raises(HTTPException) as exc:
+        await service.activate_google_first_access("unverified_email_token")
+    assert exc.value.status_code == 403
+    assert "não verificado" in exc.value.detail
+
+
+async def test_activate_google_first_access_wrong_provider_403() -> None:
+    service, _, _ = _service(_FakeAuth())
+    with pytest.raises(HTTPException) as exc:
+        await service.activate_google_first_access("wrong_provider_token")
+    assert exc.value.status_code == 403
+    assert "via Google" in exc.value.detail
