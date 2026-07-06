@@ -87,7 +87,7 @@ _STATUS_FIELD_MAP: dict[str, str] = {
     "regular": "regular",
     "em_risco": "em_risco",
     "qualificado": "qualificado",
-    "em_fase_de_defesa": "fase_defesa",
+    "em_fase_de_defesa": "em_fase_de_defesa",
     "em_prorrogacao": "em_prorrogacao",
 }
 
@@ -213,11 +213,11 @@ class DashboardService:
         situacao_inf = student.get("situacao_inferida", "")
 
         activities = await self._activities.list_by_student(student_id)
-        
+
         types_list = await self._activity_types.list_all()
         types_map = {t.get("id"): t.get("categoria", "") for t in types_list}
         creditos = _aggregate_credits(activities, types_map)
-        
+
         producoes_aprovadas = sum(
             1
             for a in activities
@@ -227,7 +227,7 @@ class DashboardService:
         atividades_pendentes = sum(
             1 for a in activities if a.get("status") == "enviado"
         )
-        
+
         tasks = await self._work_plan.get_all_tasks_for_student(student_id)
         total_tasks = len(tasks)
         concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
@@ -238,7 +238,7 @@ class DashboardService:
             pendentes.sort(key=lambda x: str(x.get("prazo") or "9999-12-31"))
         except Exception:
             pass
-            
+
         tasks_proximas_list = []
         for t in pendentes[:3]:
             tasks_proximas_list.append(TaskProxima(
@@ -249,20 +249,20 @@ class DashboardService:
             ))
 
         snapshots = await self._students.list_subcollection(student_id, "inferred_status")
-        
+
         cumpridos = 0
         pend_chk = 8
         em_risco = 0
         total_chk = 8
-        
+
         if snapshots:
             latest = max(snapshots, key=lambda snap: snap.get("timestamp", ""))
             checklist_data = latest.get("checklist", {})
-            
+
             pend_chk = 0
             for key in [
-                "creditos_minimos", "creditos_grupo_basico", "creditos_grupo_especifico", 
-                "creditos_grupo_tecnologico", "proficiencia", "qualificacao", 
+                "creditos_minimos", "creditos_grupo_basico", "creditos_grupo_especifico",
+                "creditos_grupo_tecnologico", "proficiencia", "qualificacao",
                 "producao_validada", "plano_concluido"
             ]:
                 item = checklist_data.get(key)
@@ -278,9 +278,9 @@ class DashboardService:
                     pend_chk += 1
 
         checklist = ChecklistResumo(
-            total=total_chk, 
-            cumpridos=cumpridos, 
-            pendentes=pend_chk, 
+            total=total_chk,
+            cumpridos=cumpridos,
+            pendentes=pend_chk,
             em_risco=em_risco
         )
 
@@ -342,12 +342,12 @@ class DashboardService:
         for s in orientandos:
             student_id = s.get("id", "")
             resumo = _build_orientando_resumo(s)
-            
+
             tasks = await self._work_plan.get_all_tasks_for_student(student_id)
             total_tasks = len(tasks)
             concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
             resumo.progresso_plano = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
-            
+
             orientandos_resumo.append(resumo)
 
         return OrientadorDashboardResponse(
@@ -384,10 +384,10 @@ class DashboardService:
         total_alunos_ativos = sum(1 for s in all_students if s.get("situacao_registrada") not in ("concluido", "desligado"))
         audit_logs = await self._audit_logs.list_all()
         auditoria_recente = _build_recent_audit(audit_logs, limit=5)
-        
+
         all_exts = await self._extensions.list_all()
         prorrogacoes_pendentes = sum(1 for e in all_exts if e.get("status") == "pendente")
-        
+
         all_prods = await self._productions.list_all()
         thirty_days_ago = date.today() - timedelta(days=30)
         producoes_ultimo_mes = 0

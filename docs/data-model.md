@@ -143,6 +143,12 @@ erDiagram
   **coordenador**, ou **coordenador + orientador** (mesmo `uid`, acumula). Aluno nunca acumula.
 - `role` é **valor único** = papel de maior privilégio. A capacidade de **orientar** vem da
   **existência do doc `advisors`**, não de `role`. Coordenação engloba as permissões de orientador.
+  O *toggle* "Orientador | Coordenador" é filtro de visão no **frontend**, não fronteira de
+  segurança ([ADR-0002](./adr/0002-papel-unico-com-toggle-de-visao.md)).
+- O papel `adm` ([ADR-0001](./adr/0001-papel-adm-global.md)) é um **superusuário global**, fora
+  de qualquer programa: é o **único papel com `programa_id` nulo**. Cria/edita/desativa
+  coordenadores (operação cross-programa); criado via script/backend, nunca por convite. Não
+  orienta nem cursa, então não tem `students`/`advisors`.
 - **Invariante** (garantida no service, não pelo banco): existe doc `advisors` ⟺ o usuário
   pode orientar. Criar/ativar orientador cria o `advisors`; revogar remove. Não há
   `role="orientador"` sem `advisors`.
@@ -156,8 +162,8 @@ erDiagram
 | `uid` | string | PK | uid do Firebase Auth |
 | `email` | string | | normalizado (trim + minúsculas) |
 | `nome` | string | | |
-| `role` | string | | enum `aluno`\|`orientador`\|`coordenacao` (papel de maior privilégio) |
-| `programa_id` | string | →`programs` (soft) | |
+| `role` | string | | enum `aluno`\|`orientador`\|`coordenacao`\|`adm` (papel de maior privilégio; `adm` é superusuário global — ADR-0001) |
+| `programa_id` | string\|null | →`programs` (soft) | **null apenas para `adm`** (global, fora de programa); não-nulo para os demais |
 | `ativo` | bool | | |
 | `primeiro_acesso_completo` | bool | | persistido; **não exposto** em `UserResponse` |
 | `criado_em` / `atualizado_em` | timestamp | | |
@@ -168,7 +174,7 @@ erDiagram
 |-------|------|-----|-------|
 | `token` | string | PK | UUID do convite |
 | `email` | string | | |
-| `role` | string | | `aluno`\|`orientador` (coordenação não é criada por convite) |
+| `role` | string | | `aluno`\|`orientador` (coordenação e `adm` não são criados por convite) |
 | `nome` | string | | **incluído** (código grava; origem do `users.nome`) — ausente na spec 03 |
 | `programa_id` | string | →`programs` (soft) | |
 | `usado` | bool | | |
@@ -186,7 +192,7 @@ erDiagram
 | `orientador_id` | string | →`advisors` (auto-id) | **não** é o uid |
 | `coorientador_id` | string\|null | →`advisors` (0..1) | 2º orientador opcional |
 | `programa_id` | string | →`programs` (soft) | |
-| `nivel` | string | | `mestrado`\|`doutorado` — **MVP foca mestrado** |
+| `nivel` | string | `mestrado` | mantido para compatibilidade futura; **MVP opera apenas como mestrado** |
 | `data_ingresso` | timestamp | | |
 | `prazo_final` | timestamp | | **vigente**; escrito no ingresso **e** por prorrogação aprovada |
 | `situacao_registrada` | string | | enum 7 valores¹; escrito **manual** (coordenação) **e** por transições automáticas |
@@ -197,7 +203,7 @@ erDiagram
 | `qualificacao_data` | timestamp\|null | | |
 | `criado_em` / `atualizado_em` / `atualizado_por` | timestamp / uid | | |
 
-¹ `regular`\|`em_prorrogacao`\|`em_risco`\|`qualificado`\|`fase_defesa`\|`concluido`\|`desligado`.
+¹ `regular`\|`em_prorrogacao`\|`em_risco`\|`qualificado`\|`em_fase_de_defesa`\|`concluido`\|`desligado`.
 `situacao_registrada` (humano + transição automática) e `situacao_inferida` (motor) usam o mesmo enum;
 a **divergência entre as duas é sinal de atenção**.
 
@@ -277,7 +283,7 @@ com aceite obrigatorio do sucessor. Nao gera A03 porque nao altera historico de 
 | `programa_id` | string | ->`programs` (soft) | programa da coordenacao transferida |
 | `initiator_uid` | string | ->`users.uid` | coordenacao atual que iniciou o convite |
 | `successor_uid` | string | ->`users.uid` | orientador convidado para assumir coordenacao |
-| `status` | string | | `pendente`\|`aceita`\|`rejeitada`\|`cancelada` |
+| `status` | string | | `pendente`\|`concluido`\|`rejeitada`\|`cancelada` |
 | `created_at` / `updated_at` | timestamp | | |
 | `decided_at` | timestamp\|null | | preenchido em aceite/rejeicao |
 | `accepted_at` | timestamp\|null | | preenchido no aceite |
@@ -287,7 +293,7 @@ com aceite obrigatorio do sucessor. Nao gera A03 porque nao altera historico de 
 > Swap no aceite: valida pendencia e vinculo ao mesmo programa; troca `set_custom_user_claims`
 > do sucessor e do iniciador; atualiza `users/{uid}.role` dos dois; cria `advisors/` para o
 > ex-coordenador com `limite_orientandos=5` se ainda nao existir; revoga refresh tokens dos dois;
-> marca a transferencia como `aceita`. Se houver falha parcial, repetir o aceite e seguro desde
+> marca a transferencia como `concluido`. Se houver falha parcial, repetir o aceite e seguro desde
 > que a transferencia continue `pendente`: claims e roles sao regravados com os mesmos valores,
 > o documento `advisors/` e reutilizado/criado com id estavel, e tokens podem ser revogados
 > novamente sem alterar o resultado final.
@@ -535,22 +541,47 @@ erDiagram
 | `programa_id` | string | →`programs` (soft) |
 | `criado_em` | timestamp | |
 
-### `vehicle_levels` 🔲 — sub-coleção de `programs` — chave: `veiculo_id`
+### `vehicle_levels` ✅ — sub-coleção de `programs` — chave: `veiculo_id`
 
-Config de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode existir antes de ser classificado).
+Classificação de relevância **1:1 opcional (0..1)** com `vehicles` (um veículo pode existir antes
+de ser classificado). Guarda o **nível Qualis do veículo no programa**; o peso autoritativo da RL05
+vem de [`qualis_weights`](#qualis_weights--sub-coleção-de-programs--chave-auto-id), resolvido por
+data de publicação ([ADR-0003](./adr/0003-pesos-qualis-versionados-por-programa.md)).
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
 | `veiculo_id` | string (PK = id do veículo) | |
-| `nivel` | string | `A1`\|`A2`\|`A3`\|`A4`\|`B1`\|`B2`\|`SC` (Qualis Único; `SC` = Sem Classificação) |
-| `peso` | float | A1=1.0, A2=0.85, A3=0.7, A4=0.55, B1=0.4, B2=0.3, SC=0.2 (escala monotônica) |
+| `nivel` | string | `A1`–`A8` \| `SC` (Qualis Único A1–A8 + fallback `SC` = Sem Classificação) |
+| `peso` | float | snapshot **denormalizado** do peso default (`PESO_POR_NIVEL`) na classificação — só para exibição na listagem de veículos; **não** é a fonte do score |
 | `atualizado_em` / `atualizado_por` | timestamp / uid | |
 
-> **Sem nível configurado:** RL05 usa **peso default `SC` = 0.2** (fallback). Reclassificar recalcula o score.
->
-> **Escala monotônica (decisão R4, issue #133):** estritamente decrescente — um nível superior
-> sempre pondera mais que um inferior. Substitui os pesos não-monotônicos herdados do PR #111
-> (`A4=0.7`, `B1=B2=0.5`). Fonte de verdade no código: `backend/app/models/vehicle.py`.
+> **Escala A1–A8 + fallback (ADR-0003, supera R1/R4):** pesos default em
+> `backend/app/models/vehicle.py` → `PESO_POR_NIVEL`
+> (A1=1.0, A2=0.9, A3=0.8, A4=0.7, A5=0.6, A6=0.5, A7=0.4, A8=0.3, SC=0.2),
+> estritamente decrescente. Esses valores são apenas o **bootstrap**: o peso efetivo da RL05 é o
+> **vigente por programa na data de publicação**, lido de `qualis_weights` (não desta coleção).
+> **Sem nível configurado:** o veículo assume `SC` (fallback com pontuacao minima, nao zero).
+
+### `qualis_weights` ✅ — sub-coleção de `programs` — chave: `auto-id`
+
+Pesos Qualis **versionados por programa** ([ADR-0003](./adr/0003-pesos-qualis-versionados-por-programa.md)).
+Cada coordenador define, no seu programa, o peso de cada nível da escala `A1`–`A8` + `SC`. Cada
+alteração cria uma **nova versão** (nunca sobrescreve): a própria coleção é o histórico de mudanças.
+A RL05 usa o peso **vigente na data de publicação** da produção; produção ainda não publicada
+(`submetido`/`aceito`) usa o vigente atual (provisório) até ser publicada.
+
+| Campo | Tipo | Notas |
+|-------|------|-------|
+| `pesos` | map | nível → peso; deve cobrir **exatamente** `A1`–`A8` + `SC`; pesos não-negativos |
+| `vigente_desde` | timestamp | momento a partir do qual a versão vale (base da resolução por data) |
+| `alterado_por` | string | →`users.uid` (coordenação que criou a versão) |
+| `alterado_em` | timestamp | |
+
+> Resolução (`QualisWeightsService` / `inference_service`): seleciona a versão de maior
+> `vigente_desde ≤ data_referência`; sem versão aplicável, cai no default `PESO_POR_NIVEL`. O
+> `inference_engine` permanece isolado — recebe o peso já resolvido como fato
+> `relevancia_peso(Nivel, Peso)`. O `seed_firestore` grava uma versão bootstrap a partir de
+> `PESO_POR_NIVEL`.
 
 ---
 
@@ -566,6 +597,7 @@ erDiagram
     students ||--o{ history : versiona
     work_plan ||--o{ history : versiona
     activity_types ||--o{ history : versiona
+    users ||--o{ history : versiona
     users ||--o{ audit_logs : "registra (soft)"
     users ||--o{ notifications : "recebe (soft)"
 
@@ -637,7 +669,7 @@ erDiagram
 | Campo | Tipo | Ref | Notas |
 |-------|------|-----|-------|
 | `id` | string | | auto-id Firestore do documento em `extensions/` |
-| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`, `mudanca_nivel` |
+| `tipo` | string | | ex.: `prazo_defesa`, `prazo_qualificacao`, `trancamento`; `mudanca_nivel` é escopo futuro |
 | `student_id` | string | →`students` | aluno da solicitação |
 | `aluno_id` | string | →`students` | alias de compatibilidade para `student_id` |
 | `requester_id` | string | →`users.uid` | uid de quem abriu a solicitação |
@@ -664,8 +696,9 @@ erDiagram
 
 ### `history` 🔲 — sub-coleção **polimórfica** (A03)
 
-Presente sob `students/`, `work_plan/` e `activity_types/`. Uma entidade genérica;
-`entidade_tipo`/`entidade_id` discriminam o pai.
+Presente sob `students/`, `work_plan/`, `activity_types/` e `users/`. Uma entidade genérica;
+`entidade_tipo`/`entidade_id` discriminam o pai. A edição do próprio perfil
+(`PUT /users/profile`, issue #195) versiona `users/{uid}/history/` com `entidade_tipo="user"`.
 
 | Campo | Tipo | Notas |
 |-------|------|-------|

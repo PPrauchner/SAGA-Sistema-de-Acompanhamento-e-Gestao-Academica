@@ -66,7 +66,6 @@ export function StudentsPage() {
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
-  const [filterNivel, setFilterNivel] = useState("todos");
   const [filterStatus, setFilterStatus] = useState("todos");
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [showForm, setShowForm] = useState(false);
@@ -115,9 +114,8 @@ export function StudentsPage() {
     const matchSearch =
       student.nome.toLowerCase().includes(normalizedSearch) ||
       student.matricula.includes(search);
-    const matchNivel = filterNivel === "todos" || student.nivel === filterNivel;
     const matchStatus = filterStatus === "todos" || student.situacao_registrada === filterStatus;
-    return matchSearch && matchNivel && matchStatus;
+    return matchSearch && matchStatus;
   });
 
   function openCreateForm(): void {
@@ -138,7 +136,7 @@ export function StudentsPage() {
       matricula: student.matricula,
       orientador_id: student.orientador_id,
       coorientador_id: student.coorientador_id ?? null,
-      nivel: student.nivel,
+      nivel: "mestrado",
       data_ingresso: student.data_ingresso.slice(0, 10),
       programa_id: student.programa_id,
     });
@@ -164,7 +162,7 @@ export function StudentsPage() {
         });
         setShowForm(false);
       } else {
-        const result = await createStudent(token, form);
+        const result = await createStudent(token, { ...form, nivel: "mestrado" });
         setInviteToken(result.invite_token);
         setShowForm(false);
       }
@@ -227,11 +225,6 @@ export function StudentsPage() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
           <input placeholder="Buscar por nome ou matrícula..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none" style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }} />
         </div>
-        <select value={filterNivel} onChange={(e) => setFilterNivel(e.target.value)} className="rounded-xl px-3 py-2.5 outline-none" style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}>
-          <option value="todos">Todos os Níveis</option>
-          <option value="mestrado">Mestrado</option>
-          <option value="doutorado">Doutorado</option>
-        </select>
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="rounded-xl px-3 py-2.5 outline-none" style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}>
           <option value="todos">Todos os Status</option>
           {Object.entries(STATUS_MAP).map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}
@@ -252,7 +245,7 @@ export function StudentsPage() {
           <table className="w-full">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--muted)" }}>
-                {["Aluno", "Nível", "Orientador", "Progresso", "Status", "Ações"].map((h) => (
+                {["Aluno", "Orientador", "Progresso", "Status", "Ações"].map((h) => (
                   <th key={h} className="text-left px-4 py-3" style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase" }}>{h}</th>
                 ))}
               </tr>
@@ -273,7 +266,6 @@ export function StudentsPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3"><span className="px-2 py-0.5 rounded-lg" style={{ fontSize: "11px", fontWeight: 600, background: student.nivel === "doutorado" ? "#eef3fc" : "#f0fdf4", color: student.nivel === "doutorado" ? "#123C7A" : "#1F8A70" }}>{student.nivel === "doutorado" ? "Doutorado" : "Mestrado"}</span></td>
                     <td className="px-4 py-3"><p style={{ fontSize: "12px", color: "var(--foreground)" }}>{advisor?.nome ?? student.orientador_id}</p><p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{student.programa_id}</p></td>
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="rounded-full overflow-hidden" style={{ width: 60, height: 6, background: "var(--muted)" }}><div className="h-full rounded-full" style={{ width: `${progress}%`, background: progress > 70 ? "#1F8A70" : progress > 40 ? "#D4A017" : "#dc2626" }} /></div><span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>{progress}%</span></div></td>
                     <td className="px-4 py-3"><span className="flex items-center gap-1 px-2 py-1 rounded-lg w-fit" style={{ background: st.bg, color: st.color, fontSize: "11px", fontWeight: 600 }}>{st.icon} {st.label}</span></td>
@@ -297,7 +289,6 @@ export function StudentsPage() {
                   <span className="flex items-center gap-1 px-2 py-1 rounded-lg" style={{ background: st.bg, color: st.color, fontSize: "11px", fontWeight: 600 }}>{st.icon} {st.label}</span>
                 </div>
                 <div className="space-y-2 text-sm mb-4">
-                  <div className="flex justify-between"><span style={{ color: "var(--muted-foreground)" }}>Nível</span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{student.nivel}</span></div>
                   <div className="flex justify-between"><span style={{ color: "var(--muted-foreground)" }}>Programa</span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{student.programa_id}</span></div>
                   <div className="flex justify-between"><span style={{ color: "var(--muted-foreground)" }}>Prazo</span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{formatDate(student.prazo_final)}</span></div>
                 </div>
@@ -323,7 +314,6 @@ export function StudentsPage() {
               <Field label="Orientador" className="col-span-2"><select required value={form.orientador_id} onChange={(e) => setForm({ ...form, orientador_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione...</option>{advisors.map((advisor) => <option key={advisor.id} value={advisor.id}>{advisor.nome}</option>)}</select></Field>
               <Field label="Programa"><select required disabled={Boolean(editingStudent) || currentUser?.role === "orientador"} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione um programa</option>{availablePrograms.map((program) => <option key={program.id} value={program.id}>{program.nome ?? program.id}</option>)}</select></Field>
               <Field label="Ingresso"><input required disabled={Boolean(editingStudent)} type="date" value={form.data_ingresso} onChange={(e) => setForm({ ...form, data_ingresso: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
-              <Field label="Nível"><select disabled={Boolean(editingStudent)} value={form.nivel} onChange={(e) => setForm({ ...form, nivel: e.target.value as StudentCreatePayload["nivel"] })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="mestrado">Mestrado</option><option value="doutorado">Doutorado</option></select></Field>
             </div>
             <div className="flex gap-3 mt-6">
               <button type="button" onClick={() => { setShowForm(false); setEditingStudent(null); }} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600, fontSize: "14px" }}>Cancelar</button>

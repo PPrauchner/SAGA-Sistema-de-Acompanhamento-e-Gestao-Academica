@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Brain, Zap, Database, GitBranch, Terminal, Clock, CheckCircle2,
+  Brain, Database, GitBranch, Terminal, CheckCircle2,
   XCircle, Circle, Play, RotateCcw, Cpu, Activity, AlertTriangle,
   ChevronRight, Code2, Layers, Shield, Network, FileCheck, Search, Loader2,
   ChevronDown,
 } from "lucide-react";
-import { useApp } from "@/app/context/AppContext";
-import { getInference, type InferenceResult } from "@/api/inferenceApi";
+import { getInference, type InferenceResult, type RequisitoStatus } from "@/api/inferenceApi";
+import { getStudents, getStudent, type Student } from "@/api/studentsApi";
 import { getChecklist, type ChecklistResponse } from "@/api/checklistApi";
 import { useChecklistStudent } from "@/hooks/useChecklistStudent";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,8 +36,6 @@ interface RuleData {
   operator: "AND" | "OR" | "GTE";
   conditions: RuleCondition[];
   result: boolean;
-  firingOrder: number;
-  firingMs: number;
   description: string;
 }
 
@@ -60,75 +58,83 @@ interface StudentProfile {
   facts: FactData[];
   rules: RuleData[];
   conclusions: ConclusionData[];
+  fatosUsados: string[];
+  situacaoInferida: string;
 }
 
-// ─── Student Profiles ─────────────────────────────────────────────────────────
+// ─── Derivação do perfil a partir do motor real ───────────────────────────────
+// O grafo, painéis e timeline abaixo são alimentados por dados reais: o backend
+// devolve o checklist (RL01) e os booleanos apto_defesa/creditos_validos/em_risco,
+// que aqui viram os fatos, regras e conclusões da visualização.
 
-const STUDENTS: StudentProfile[] = [
-  {
-    id: "s1", name: "Lucas Ferreira Silva", short: "Lucas F.", matricula: "2023001", programa: "PPGCC — Doutorado", overallRisk: "em-risco",
-    facts: [
-      { id:"f_cred",  label:"Créditos Obtidos",     detail:"Obtidos vs mínimo exigido",         rawValue:"27",      threshold:"60",    value:false, category:"créditos" },
-      { id:"f_qual",  label:"Qualificação",          detail:"Exame de qualificação realizado",   rawValue:"Aprovada",               value:true,  category:"qualificação" },
-      { id:"f_prod",  label:"Produção Científica",   detail:"Artigos validados pela banca",      rawValue:"2 artigos A1",            value:true,  category:"produção" },
-      { id:"f_prof",  label:"Proficiência",          detail:"Língua estrangeira aprovada",       rawValue:"Inglês C1",              value:true,  category:"proficiência" },
-      { id:"f_plano", label:"Plano de Trabalho",     detail:"Conclusão das etapas do plano",     rawValue:"75%",     threshold:"100%", value:false, category:"plano" },
-    ],
-    rules: [
-      { id:"r_cred", label:"Créditos Válidos",    formula:"creditos_obtidos ≥ 60",                   operator:"GTE", firingOrder:1, firingMs:12,  result:false, description:"Verifica se o aluno atingiu o mínimo de créditos.", conditions:[{ label:"27 ≥ 60?", value:false }] },
-      { id:"r_prod", label:"Produção Suficiente",  formula:"count(artigos_validados) ≥ 1",            operator:"GTE", firingOrder:2, firingMs:18,  result:true,  description:"Verifica se há ao menos uma publicação validada.", conditions:[{ label:"2 ≥ 1?", value:true }] },
-      { id:"r_risk", label:"Em Risco",             formula:"¬creditos_validos ∨ ¬plano_concluido",   operator:"OR",  firingOrder:3, firingMs:31,  result:true,  description:"Acionada quando créditos insuficientes ou plano incompleto.", conditions:[{ label:"¬Créditos Válidos", value:true, negated:true },{ label:"¬Plano Concluído", value:true, negated:true }] },
-      { id:"r_apto", label:"Apto à Defesa",        formula:"r_cred ∧ f_qual ∧ r_prod ∧ f_prof ∧ f_plano", operator:"AND", firingOrder:4, firingMs:45, result:false, description:"Todas as 5 condições devem ser satisfeitas.", conditions:[{ label:"Créditos Válidos",  value:false },{ label:"Qualificação",       value:true  },{ label:"Produção",           value:true  },{ label:"Proficiência",       value:true  },{ label:"Plano Concluído",    value:false }] },
-    ],
-    conclusions: [
-      { id:"c_risco", label:"Em Risco",           result:true,  severity:"warning", detail:"Créditos insuficientes (27/60) e plano incompleto (75%) ativaram a regra de risco.", action:"Reunião urgente com orientador. Elaborar plano de recuperação." },
-      { id:"c_apto",  label:"Apto à Defesa",      result:false, severity:"critical", detail:"Falhou nas condições: Créditos Válidos e Plano Concluído.", action:"Cumprir 33 créditos restantes. Concluir todas as etapas do plano." },
-      { id:"c_prod",  label:"Produção Validada",  result:true,  severity:"ok",       detail:"2 artigos A1 publicados e validados pela coordenação.", action:"Manter ritmo de produção." },
-    ],
-  },
-  {
-    id: "s2", name: "Ana Paula Costa", short: "Ana P.", matricula: "2021003", programa: "PPGCC — Doutorado", overallRisk: "apto",
-    facts: [
-      { id:"f_cred",  label:"Créditos Obtidos",  detail:"Obtidos vs mínimo exigido",       rawValue:"60",          threshold:"60", value:true, category:"créditos" },
-      { id:"f_qual",  label:"Qualificação",       detail:"Exame de qualificação realizado", rawValue:"Aprovada",                   value:true, category:"qualificação" },
-      { id:"f_prod",  label:"Produção Científica",detail:"Artigos validados pela banca",    rawValue:"3 artigos",                  value:true, category:"produção" },
-      { id:"f_prof",  label:"Proficiência",       detail:"Língua estrangeira aprovada",     rawValue:"Inglês C2",                  value:true, category:"proficiência" },
-      { id:"f_plano", label:"Plano de Trabalho",  detail:"Conclusão das etapas do plano",   rawValue:"100%",       threshold:"100%",value:true, category:"plano" },
-    ],
-    rules: [
-      { id:"r_cred", label:"Créditos Válidos",   formula:"creditos_obtidos ≥ 60",                  operator:"GTE", firingOrder:1, firingMs:8,  result:true, description:"Mínimo de créditos atingido.", conditions:[{ label:"60 ≥ 60?", value:true }] },
-      { id:"r_prod", label:"Produção Suficiente", formula:"count(artigos_validados) ≥ 1",           operator:"GTE", firingOrder:2, firingMs:14, result:true, description:"Produção científica confirmada.", conditions:[{ label:"3 ≥ 1?", value:true }] },
-      { id:"r_risk", label:"Em Risco",            formula:"¬creditos_validos ∨ ¬plano_concluido",  operator:"OR",  firingOrder:3, firingMs:22, result:false, description:"Nenhuma condição de risco ativada.", conditions:[{ label:"¬Créditos Válidos", value:false, negated:true },{ label:"¬Plano Concluído", value:false, negated:true }] },
-      { id:"r_apto", label:"Apto à Defesa",       formula:"r_cred ∧ f_qual ∧ r_prod ∧ f_prof ∧ f_plano", operator:"AND", firingOrder:4, firingMs:35, result:true, description:"Todas as condições satisfeitas.", conditions:[{ label:"Créditos Válidos", value:true },{ label:"Qualificação", value:true },{ label:"Produção", value:true },{ label:"Proficiência", value:true },{ label:"Plano Concluído", value:true }] },
-    ],
-    conclusions: [
-      { id:"c_risco", label:"Em Risco",          result:false, severity:"ok",       detail:"Nenhuma condição de risco detectada. Situação regular.", action:"Manter ritmo atual." },
-      { id:"c_apto",  label:"Apto à Defesa",     result:true,  severity:"ok",       detail:"Todas as 5 condições de aptidão satisfeitas.", action:"Iniciar processo de agendamento da defesa." },
-      { id:"c_prod",  label:"Produção Validada", result:true,  severity:"ok",       detail:"3 artigos publicados e validados.", action:"Manter produção." },
-    ],
-  },
-  {
-    id: "s3", name: "Marcos Oliveira", short: "Marcos O.", matricula: "2023002", programa: "PPGCC — Mestrado", overallRisk: "critico",
-    facts: [
-      { id:"f_cred",  label:"Créditos Obtidos",  detail:"Obtidos vs mínimo exigido",       rawValue:"15",        threshold:"60", value:false, category:"créditos" },
-      { id:"f_qual",  label:"Qualificação",       detail:"Exame de qualificação realizado", rawValue:"Pendente",               value:false, category:"qualificação" },
-      { id:"f_prod",  label:"Produção Científica",detail:"Artigos validados pela banca",    rawValue:"0 artigos",              value:false, category:"produção" },
-      { id:"f_prof",  label:"Proficiência",       detail:"Língua estrangeira aprovada",     rawValue:"Pendente",               value:false, category:"proficiência" },
-      { id:"f_plano", label:"Plano de Trabalho",  detail:"Conclusão das etapas do plano",   rawValue:"30%",      threshold:"100%",value:false, category:"plano" },
-    ],
-    rules: [
-      { id:"r_cred", label:"Créditos Válidos",   formula:"creditos_obtidos ≥ 60",                  operator:"GTE", firingOrder:1, firingMs:10, result:false, description:"Créditos insuficientes.", conditions:[{ label:"15 ≥ 60?", value:false }] },
-      { id:"r_prod", label:"Produção Suficiente", formula:"count(artigos_validados) ≥ 1",           operator:"GTE", firingOrder:2, firingMs:16, result:false, description:"Sem produção científica.", conditions:[{ label:"0 ≥ 1?", value:false }] },
-      { id:"r_risk", label:"Em Risco",            formula:"¬creditos_validos ∨ ¬plano_concluido",  operator:"OR",  firingOrder:3, firingMs:27, result:true, description:"Múltiplas condições de risco ativadas.", conditions:[{ label:"¬Créditos Válidos", value:true, negated:true },{ label:"¬Plano Concluído", value:true, negated:true }] },
-      { id:"r_apto", label:"Apto à Defesa",       formula:"r_cred ∧ f_qual ∧ r_prod ∧ f_prof ∧ f_plano", operator:"AND", firingOrder:4, firingMs:41, result:false, description:"Nenhuma condição satisfeita.", conditions:[{ label:"Créditos Válidos", value:false },{ label:"Qualificação", value:false },{ label:"Produção", value:false },{ label:"Proficiência", value:false },{ label:"Plano Concluído", value:false }] },
-    ],
-    conclusions: [
-      { id:"c_risco", label:"Em Risco",          result:true,  severity:"critical", detail:"Risco crítico: todos os indicadores abaixo do mínimo exigido.", action:"Intervenção imediata da coordenação. Reunião de crise com orientador." },
-      { id:"c_apto",  label:"Apto à Defesa",     result:false, severity:"critical", detail:"Nenhuma das 5 condições foi satisfeita.", action:"Plano de recuperação imediato em todas as dimensões." },
-      { id:"c_prod",  label:"Produção Validada", result:false, severity:"critical", detail:"Sem produção científica registrada ou validada.", action:"Iniciar pesquisa e submissão urgente de artigo." },
-    ],
-  },
-];
+function statusOk(status: RequisitoStatus): boolean {
+  return status === "cumprido";
+}
+
+/** Bucket de risco da visualização a partir dos booleanos reais do motor. */
+function riskFromInference(inf: InferenceResult): StudentProfile["overallRisk"] {
+  if (inf.apto_defesa) return "apto";
+  if (inf.em_risco) return "critico";
+  return "em-risco";
+}
+
+/** Bucket de risco do card a partir da situação inferida (sem nova consulta ao motor). */
+function cardRisk(situacao: string): StudentProfile["overallRisk"] {
+  if (situacao === "em_fase_de_defesa" || situacao === "concluido") return "apto";
+  if (situacao === "em_risco" || situacao === "desligado") return "critico";
+  return "em-risco";
+}
+
+function shortName(nome: string): string {
+  const parts = nome.trim().split(/\s+/);
+  return parts.length > 1 ? `${parts[0]} ${parts[1][0]}.` : parts[0];
+}
+
+/** Converte o aluno real + resultado do motor no modelo de visualização. */
+function deriveProfile(student: Student, inf: InferenceResult): StudentProfile {
+  const c = inf.checklist;
+  const qualOk = statusOk(c.qualificacao.status);
+  const prodOk = statusOk(c.producao_validada.status);
+  const profOk = statusOk(c.proficiencia.status);
+  const planoOk = statusOk(c.plano_concluido.status);
+  const numProducoes = inf.pontuacoes_producoes.length;
+
+  const facts: FactData[] = [
+    { id:"f_cred",  label:"Créditos Obtidos",   detail:"Obtidos vs mínimo exigido",       rawValue:String(c.creditos_minimos.obtidos), threshold:String(c.creditos_minimos.minimo), value:statusOk(c.creditos_minimos.status), category:"créditos" },
+    { id:"f_qual",  label:"Qualificação",        detail:"Exame de qualificação realizado", rawValue:qualOk?"Aprovada":"Pendente",        value:qualOk,  category:"qualificação" },
+    { id:"f_prod",  label:"Produção Científica", detail:"Artigos validados pela banca",    rawValue:`${numProducoes} validada(s)`,       value:prodOk,  category:"produção" },
+    { id:"f_prof",  label:"Proficiência",        detail:"Língua estrangeira aprovada",     rawValue:profOk?"Comprovada":"Pendente",      value:profOk,  category:"proficiência" },
+    { id:"f_plano", label:"Plano de Trabalho",   detail:"Conclusão das etapas do plano",   rawValue:planoOk?"Concluído":"Em andamento",  value:planoOk, category:"plano" },
+  ];
+
+  const rules: RuleData[] = [
+    { id:"r_cred", label:"Créditos Válidos",    formula:`creditos_obtidos ≥ ${c.creditos_minimos.minimo}`, operator:"GTE", result:inf.creditos_validos, description:"Verifica se o aluno atingiu o mínimo de créditos.", conditions:[{ label:`${c.creditos_minimos.obtidos} ≥ ${c.creditos_minimos.minimo}?`, value:inf.creditos_validos }] },
+    { id:"r_prod", label:"Produção Suficiente", formula:"count(producoes_validadas) ≥ 1",                 operator:"GTE", result:prodOk,              description:"Verifica se há ao menos uma publicação validada.", conditions:[{ label:`${numProducoes} ≥ 1?`, value:prodOk }] },
+    { id:"r_risk", label:"Em Risco",            formula:"¬creditos_validos ∨ ¬plano_concluido",           operator:"OR",  result:inf.em_risco,        description:"Acionada quando créditos insuficientes ou plano incompleto.", conditions:[{ label:"¬Créditos Válidos", value:!inf.creditos_validos, negated:true },{ label:"¬Plano Concluído", value:!planoOk, negated:true }] },
+    { id:"r_apto", label:"Apto à Defesa",       formula:"r_cred ∧ f_qual ∧ r_prod ∧ f_prof ∧ f_plano",    operator:"AND", result:inf.apto_defesa,     description:"Todas as 5 condições devem ser satisfeitas.", conditions:[{ label:"Créditos Válidos", value:inf.creditos_validos },{ label:"Qualificação", value:qualOk },{ label:"Produção", value:prodOk },{ label:"Proficiência", value:profOk },{ label:"Plano Concluído", value:planoOk }] },
+  ];
+
+  const pendencias = rules[3].conditions.filter(cond => !cond.value).map(cond => cond.label);
+  const conclusions: ConclusionData[] = [
+    { id:"c_risco", label:"Em Risco",          result:inf.em_risco,    severity:inf.em_risco?"warning":"ok",       detail:inf.em_risco ? (inf.riscos_detectados.length ? inf.riscos_detectados.join("; ") : "Condições de risco ativadas pelo motor.") : "Nenhuma condição de risco detectada pelo motor.", action:inf.em_risco ? "Reunião com orientador para elaborar plano de recuperação." : "Manter ritmo atual." },
+    { id:"c_apto",  label:"Apto à Defesa",     result:inf.apto_defesa, severity:inf.apto_defesa?"ok":"critical",    detail:inf.apto_defesa ? "Todas as condições de aptidão satisfeitas." : `Pendências: ${pendencias.join(", ") || "—"}.`, action:inf.apto_defesa ? "Iniciar processo de agendamento da defesa." : "Cumprir as condições pendentes." },
+    { id:"c_prod",  label:"Produção Validada", result:prodOk,          severity:prodOk?"ok":"warning",             detail:prodOk ? `${numProducoes} produção(ões) validada(s) pela banca.` : "Sem produção científica validada.", action:prodOk ? "Manter ritmo de produção." : "Submeter e validar produção científica." },
+  ];
+
+  return {
+    id: student.id,
+    name: student.nome,
+    short: shortName(student.nome),
+    matricula: student.matricula,
+    programa: student.programa_id,
+    overallRisk: riskFromInference(inf),
+    facts,
+    rules,
+    conclusions,
+    fatosUsados: inf.fatos_usados,
+    situacaoInferida: inf.situacao_inferida,
+  };
+}
 
 // ─── Graph Config (pixel positions, fixed layout) ─────────────────────────────
 
@@ -184,24 +190,22 @@ const HIGHLIGHT_PATHS: Record<string, { nodes:string[]; edges:string[] }> = {
 
 // ─── Query Console Data ───────────────────────────────────────────────────────
 
+// As consultas refletem o resultado real do motor (sem tempos simulados): os
+// fatos vêm do checklist e a query de situação lista os fatos_usados retornados.
+
 const QUERIES = [
   {
     label: "Aluno apto à defesa?",
     cmd: "QUERY apto_defesa(?student)",
     output: (s: StudentProfile) => [
-      `[0ms]    Iniciando motor de inferência lógica...`,
-      `[5ms]    Carregando base de fatos de ${s.name}...`,
-      `[12ms]   → Avaliando R1: creditos_validos`,
-      `[15ms]     creditos_obtidos(${s.facts[0].rawValue}) ≥ 60?`,
-      `[18ms]     R1: creditos_validos = ${s.rules[0].result ? "VERDADEIRO" : "FALSO"}`,
-      `[23ms]   → Avaliando R2: producao_suficiente`,
-      `[26ms]     count(artigos_validados) ≥ 1? (${s.facts[2].rawValue})`,
-      `[28ms]     R2: producao_suficiente = ${s.rules[1].result ? "VERDADEIRO" : "FALSO"}`,
-      `[33ms]   → Avaliando R4: apto_defesa`,
-      `[36ms]     R1(${s.rules[0].result ? "T" : "F"}) ∧ qual(${s.facts[1].value ? "T" : "F"}) ∧ R2(${s.rules[1].result ? "T" : "F"}) ∧ prof(${s.facts[3].value ? "T" : "F"}) ∧ plano(${s.facts[4].value ? "T" : "F"})`,
-      `[45ms]   ──────────────────────────────────────`,
-      `[45ms]   CONCLUSÃO: apto_defesa = ${s.rules[3].result ? "✓ VERDADEIRO" : "✗ FALSO"}`,
-      `[46ms]   Inferência concluída em 46ms.`,
+      `Consultando apto_defesa(?student)…`,
+      `→ Créditos válidos     = ${s.rules[0].result ? "VERDADEIRO" : "FALSO"}`,
+      `→ Produção suficiente   = ${s.rules[1].result ? "VERDADEIRO" : "FALSO"}`,
+      `→ Qualificação          = ${s.facts[1].value ? "VERDADEIRO" : "FALSO"}`,
+      `→ Proficiência          = ${s.facts[3].value ? "VERDADEIRO" : "FALSO"}`,
+      `→ Plano concluído       = ${s.facts[4].value ? "VERDADEIRO" : "FALSO"}`,
+      `──────────────────────────────────────`,
+      `CONCLUSÃO: apto_defesa = ${s.rules[3].result ? "✓ VERDADEIRO" : "✗ FALSO"}`,
     ],
     result: (s: StudentProfile) => s.rules[3].result,
   },
@@ -209,14 +213,11 @@ const QUERIES = [
     label: "Créditos válidos?",
     cmd: "QUERY creditos_validos(?student)",
     output: (s: StudentProfile) => [
-      `[0ms]    Iniciando motor de inferência lógica...`,
-      `[8ms]    Consultando fato: creditos_obtidos`,
-      `[10ms]   creditos_obtidos = ${s.facts[0].rawValue}`,
-      `[12ms]   Avaliando R1: creditos_validos ← creditos_obtidos ≥ 60`,
-      `[15ms]   ${s.facts[0].rawValue} ≥ 60? → ${s.rules[0].result ? "VERDADEIRO" : "FALSO"}`,
-      `[16ms]   ──────────────────────────────────────`,
-      `[16ms]   CONCLUSÃO: creditos_validos = ${s.rules[0].result ? "✓ VERDADEIRO" : "✗ FALSO"}`,
-      `[17ms]   ${!s.rules[0].result ? `Déficit: ${60 - parseInt(s.facts[0].rawValue)} créditos restantes.` : "Mínimo de créditos atingido."}`,
+      `Consultando creditos_validos(?student)…`,
+      `creditos_obtidos = ${s.facts[0].rawValue}${s.facts[0].threshold ? ` (meta ${s.facts[0].threshold})` : ""}`,
+      `${s.facts[0].rawValue} ≥ ${s.facts[0].threshold ?? "?"}? → ${s.rules[0].result ? "VERDADEIRO" : "FALSO"}`,
+      `──────────────────────────────────────`,
+      `CONCLUSÃO: creditos_validos = ${s.rules[0].result ? "✓ VERDADEIRO" : "✗ FALSO"}`,
     ],
     result: (s: StudentProfile) => s.rules[0].result,
   },
@@ -224,20 +225,11 @@ const QUERIES = [
     label: "Situação acadêmica?",
     cmd: "QUERY situacao_academica(?student)",
     output: (s: StudentProfile) => [
-      `[0ms]    Iniciando análise completa...`,
-      `[10ms]   Carregando todos os fatos de ${s.name}...`,
-      `[22ms]   → Créditos:      ${s.facts[0].rawValue}${s.facts[0].threshold ? `/${s.facts[0].threshold}` : ""}  [${s.facts[0].value ? "OK" : "FALSO"}]`,
-      `[24ms]   → Qualificação:  ${s.facts[1].rawValue}  [${s.facts[1].value ? "OK" : "FALSO"}]`,
-      `[26ms]   → Produção:      ${s.facts[2].rawValue}  [${s.facts[2].value ? "OK" : "FALSO"}]`,
-      `[28ms]   → Proficiência:  ${s.facts[3].rawValue}  [${s.facts[3].value ? "OK" : "FALSO"}]`,
-      `[30ms]   → Plano:         ${s.facts[4].rawValue}  [${s.facts[4].value ? "OK" : "FALSO"}]`,
-      `[38ms]   Executando ${s.rules.length} regras...`,
-      `[41ms]   R1(Créditos Válidos)   = ${s.rules[0].result ? "VERDADEIRO" : "FALSO"}`,
-      `[43ms]   R2(Produção Suf.)      = ${s.rules[1].result ? "VERDADEIRO" : "FALSO"}`,
-      `[45ms]   R3(Em Risco)           = ${s.rules[2].result ? "VERDADEIRO" : "FALSO"}`,
-      `[47ms]   R4(Apto à Defesa)      = ${s.rules[3].result ? "VERDADEIRO" : "FALSO"}`,
-      `[48ms]   ──────────────────────────────────────`,
-      `[48ms]   SITUAÇÃO: ${s.overallRisk === "apto" ? "✓ REGULAR — Aluno apto para defesa" : s.overallRisk === "em-risco" ? "⚠ EM RISCO — Intervenção necessária" : "✗ CRÍTICO — Múltiplos indicadores comprometidos"}`,
+      `Analisando situacao_academica(?student)…`,
+      `Fatos usados pelo motor (${s.fatosUsados.length}):`,
+      ...(s.fatosUsados.length ? s.fatosUsados.map(f => `  ${f}`) : ["  (nenhum fato retornado)"]),
+      `──────────────────────────────────────`,
+      `SITUAÇÃO INFERIDA: ${s.situacaoInferida}`,
     ],
     result: (s: StudentProfile) => s.overallRisk === "apto",
   },
@@ -593,8 +585,6 @@ function RuleTimeline({ student, running, step }: { student: StudentProfile; run
 
               {/* Timing */}
               <div className="flex items-center gap-2 mb-3">
-                <Clock size={9} style={{ color:"#475569" }}/>
-                <span style={{ fontSize:9, color:"#475569", fontFamily:"monospace" }}>t+{rule.firingMs}ms</span>
                 <span className="rounded-lg px-1.5 py-0.5" style={{ fontSize:8, fontWeight:700, background:"#1e293b", color:"#60a5fa", fontFamily:"monospace" }}>{OPERATORS[rule.operator]} {rule.operator}</span>
               </div>
 
@@ -882,34 +872,69 @@ const RISK_CFG = {
 };
 
 export function InferencePage() {
-  const { currentUser } = useApp();
-  const [student, setStudent] = useState<StudentProfile>(STUDENTS[0]);
+  const { token } = useAuth();
+  const { studentId, students, setStudentId } = useChecklistStudent();
+  const [allStudents, setAllStudents] = useState<Student[]>([]);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [inf, setInf] = useState<InferenceResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [activeConclusion, setActiveConclusion] = useState<string | null>(null);
   const [explainQ, setExplainQ] = useState<string>("c_risco");
   const [timelineRunning, setTimelineRunning] = useState(false);
   const [timelineStep, setTimelineStep] = useState(-1);
   const tlRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Lista real de alunos (metadados dos cards do seletor).
+  useEffect(() => {
+    if (!token) return;
+    getStudents(token).then(setAllStudents).catch(() => setAllStudents([]));
+  }, [token]);
+
+  // Inferência real + dados do aluno selecionado — alimentam toda a visualização.
+  // Busca o aluno por id (GET /students/{id}, acessível também ao próprio aluno),
+  // já que a lista GET /students é restrita a coordenação/orientador.
+  useEffect(() => {
+    if (!studentId || !token) return;
+    let active = true;
+    setLoading(true);
+    setError(null);
+    Promise.all([getInference(studentId, token), getStudent(token, studentId)])
+      .then(([result, record]) => { if (active) { setInf(result); setSelectedStudent(record); } })
+      .catch(() => { if (active) { setInf(null); setSelectedStudent(null); setError("Não foi possível carregar a inferência do backend."); } })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [studentId, token]);
+
+  const student: StudentProfile | null =
+    selectedStudent && inf && inf.student_id === studentId && selectedStudent.id === studentId
+      ? deriveProfile(selectedStudent, inf)
+      : null;
+
   useEffect(() => {
     setActiveConclusion(null);
-    setExplainQ(student.overallRisk === "critico" || student.overallRisk === "em-risco" ? "c_risco" : "c_apto");
     setTimelineStep(-1);
     setTimelineRunning(false);
-  }, [student]);
+  }, [studentId]);
+
+  useEffect(() => {
+    if (student) setExplainQ(student.overallRisk === "apto" ? "c_apto" : "c_risco");
+  }, [studentId, student?.overallRisk]);
 
   useEffect(() => {
     return () => { if (tlRef.current) clearTimeout(tlRef.current); };
   }, []);
 
   function runTimeline() {
-    if (timelineRunning) return;
+    if (timelineRunning || !student) return;
     setTimelineStep(-1);
     setTimelineRunning(true);
     let i = 0;
+    const ruleCount = student.rules.length;
     const tick = () => {
       setTimelineStep(i);
       i++;
-      if (i < student.rules.length) {
+      if (i < ruleCount) {
         tlRef.current = setTimeout(tick, 700);
       } else {
         setTimelineRunning(false);
@@ -918,8 +943,8 @@ export function InferencePage() {
     tlRef.current = setTimeout(tick, 400);
   }
 
-  const risk = RISK_CFG[student.overallRisk];
-  const approvedFacts = student.facts.filter(f => f.value).length;
+  const risk = student ? RISK_CFG[student.overallRisk] : RISK_CFG.apto;
+  const approvedFacts = student ? student.facts.filter((f) => f.value).length : 0;
 
   return (
     <div className="space-y-5 inference-root" style={{ color:"var(--foreground)" }}>
@@ -927,8 +952,48 @@ export function InferencePage() {
       {/* ── Painel de inferência real (motor + backend) ── */}
       <RealInferencePanel />
 
-      {/* A visualização abaixo é ilustrativa (demo do encadeamento lógico). */}
+      {/* ── Seletor de aluno (lista real via GET /students) ── */}
+      {students && allStudents.length > 0 && (
+        <div className="rounded-2xl p-4" style={{ background:"#030712", border:"1px solid #1e293b" }}>
+          <p style={{ fontSize:10, fontWeight:700, color:"#475569", letterSpacing:1, marginBottom:12, fontFamily:"monospace" }}>SELECIONAR ALUNO PARA INFERÊNCIA</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {allStudents.map(s => {
+              const r = RISK_CFG[cardRisk(s.situacao_inferida)];
+              const isSelected = studentId === s.id;
+              return (
+                <button key={s.id} onClick={() => setStudentId(s.id)}
+                  className="rounded-xl p-4 text-left transition-all"
+                  style={{ background:isSelected?"#0a1628":"#0f172a", border:`2px solid ${isSelected?r.color+"60":"#1e293b"}`, boxShadow:isSelected?`0 0 20px ${r.color}20`:"none" }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="rounded-lg flex items-center justify-center" style={{ width:32, height:32, background:r.bg, border:`1px solid ${r.border}` }}>
+                      <span style={{ fontSize:13, fontWeight:800, color:r.color }}>{s.nome.trim()[0]?.toUpperCase()}</span>
+                    </div>
+                    <span className="rounded-lg px-2 py-0.5" style={{ background:r.bg, color:r.color, fontSize:9, fontWeight:800, border:`1px solid ${r.border}`, fontFamily:"monospace" }}>{r.label}</span>
+                  </div>
+                  <p style={{ fontSize:12, fontWeight:700, color:"#f8fafc" }}>{s.nome}</p>
+                      <p style={{ fontSize:10, color:"#475569", marginTop:2, fontFamily:"monospace" }}>{s.matricula}</p>
+                  <div className="flex items-center gap-1.5 mt-3">
+                    <div className="rounded-full" style={{ width:6, height:6, background:r.color }}/>
+                    <span style={{ fontSize:9, color:"#475569", fontFamily:"monospace" }}>{s.situacao_inferida}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
+      {loading && (
+        <div className="flex items-center gap-2 rounded-2xl p-5" style={{ background:"#030712", border:"1px solid #1e293b", color:"#64748b", fontSize:13 }}>
+          <Loader2 size={16} className="animate-spin" /> Consultando o motor de inferência…
+        </div>
+      )}
+      {error && !loading && (
+        <div className="rounded-2xl p-4" style={{ background:"#2c0a0a", border:"1px solid #450a0a", color:"#ef4444", fontSize:13 }}>{error}</div>
+      )}
+
+      {student && (
+      <>
       {/* ── Header ── */}
       <div className="rounded-2xl p-6 relative overflow-hidden" style={{ background:"linear-gradient(135deg, #030712 0%, #0a1628 50%, #0d0a1f 100%)", border:"1px solid #1e293b", boxShadow:"0 20px 60px rgba(0,0,0,0.5)" }}>
         {/* Animated grid bg */}
@@ -974,36 +1039,6 @@ export function InferencePage() {
               <span style={{ fontSize:11, fontWeight:800, color:risk.color }}>{risk.label}</span>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* ── Student Selector ── */}
-      <div className="rounded-2xl p-4" style={{ background:"#030712", border:"1px solid #1e293b" }}>
-        <p style={{ fontSize:10, fontWeight:700, color:"#475569", letterSpacing:1, marginBottom:12, fontFamily:"monospace" }}>SELECIONAR ALUNO PARA INFERÊNCIA</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {STUDENTS.map(s => {
-            const r = RISK_CFG[s.overallRisk];
-            const isSelected = student.id === s.id;
-            return (
-              <button key={s.id} onClick={() => setStudent(s)}
-                className="rounded-xl p-4 text-left transition-all"
-                style={{ background:isSelected?"#0a1628":"#0f172a", border:`2px solid ${isSelected?r.color+"60":"#1e293b"}`, boxShadow:isSelected?`0 0 20px ${r.color}20`:"none" }}>
-                <div className="flex items-center justify-between mb-2">
-                  <div className="rounded-lg flex items-center justify-center" style={{ width:32, height:32, background:r.bg, border:`1px solid ${r.border}` }}>
-                    <span style={{ fontSize:13, fontWeight:800, color:r.color }}>{s.short[0]}</span>
-                  </div>
-                  <span className="rounded-lg px-2 py-0.5" style={{ background:r.bg, color:r.color, fontSize:9, fontWeight:800, border:`1px solid ${r.border}`, fontFamily:"monospace" }}>{r.label}</span>
-                </div>
-                <p style={{ fontSize:12, fontWeight:700, color:"#f8fafc" }}>{s.name}</p>
-                <p style={{ fontSize:10, color:"#475569", marginTop:2, fontFamily:"monospace" }}>{s.matricula} · {s.programa}</p>
-                <div className="flex gap-2 mt-3">
-                  {s.facts.map((f,i) => (
-                    <div key={i} className="rounded-md flex-1" style={{ height:4, background:f.value?TRUE_CLR:FALSE_CLR, opacity:0.8 }}/>
-                  ))}
-                </div>
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -1210,11 +1245,13 @@ export function InferencePage() {
           <div className="mt-4 rounded-xl px-4 py-3 flex items-center gap-3" style={{ background:student.rules[3].result?"#022c22":"#2c0a0a", border:`1px solid ${student.rules[3].result?"#064e3b":"#450a0a"}` }}>
             {student.rules[3].result ? <CheckCircle2 size={16} style={{ color:TRUE_CLR }}/> : <AlertTriangle size={16} style={{ color:FALSE_CLR }}/>}
             <span style={{ fontSize:12, fontWeight:700, color:truthColor(student.rules[3].result), fontFamily:"monospace" }}>
-              INFERÊNCIA CONCLUÍDA · {student.name} — {student.rules[3].result ? "APTO À DEFESA" : "NÃO APTO À DEFESA"} · {student.rules[student.rules.length-1].firingMs}ms total
+              INFERÊNCIA CONCLUÍDA · {student.name} — {student.rules[3].result ? "APTO À DEFESA" : "NÃO APTO À DEFESA"}
             </span>
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }

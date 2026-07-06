@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, Calendar, CheckCircle2, ChevronDown, Circle, Clock3, Loader2, Plus, Search, Send, X } from "lucide-react";
+import { DndProvider, useDrag, useDrop } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
+import { AlertCircle, Calendar, CheckCircle2, ChevronDown, Circle, Clock3, Loader2, Plus, Search, Send, Trash2, X } from "lucide-react";
 
 import {
   addProgressUpdate,
   createStage,
   createTask,
   createWorkPlan,
+  deleteTask,
   getWorkPlan,
   updateTaskStatus,
   type TaskPriority,
@@ -24,21 +27,17 @@ type Modal =
   | { kind: "progress"; task: WorkPlanTask }
   | { kind: "plan" }
   | { kind: "stage" }
+  | { kind: "confirmDelete"; task: WorkPlanTask }
   | null;
 
+const TASK_DND_TYPE = "work-plan-task";
+
+// As 3 colunas movieis do quadro. "Atrasado" nao e coluna: virou badge derivado.
 const STATUS_COLUMNS: { id: TaskStatus; label: string; icon: JSX.Element }[] = [
   { id: "pendente", label: "Pendente", icon: <Circle size={14} /> },
   { id: "em_andamento", label: "Em andamento", icon: <Clock3 size={14} /> },
-  { id: "atrasado", label: "Atrasado", icon: <AlertCircle size={14} /> },
   { id: "concluido", label: "Concluido", icon: <CheckCircle2 size={14} /> },
 ];
-
-const STATUS_LABEL: Record<TaskStatus, string> = {
-  pendente: "Pendente",
-  em_andamento: "Em andamento",
-  atrasado: "Atrasado",
-  concluido: "Concluido",
-};
 
 const PRIORITY_LABEL: Record<TaskPriority, string> = {
   baixa: "Baixa",
@@ -46,11 +45,38 @@ const PRIORITY_LABEL: Record<TaskPriority, string> = {
   alta: "Alta",
 };
 
+// "Atrasado" e derivado (overlay A04): task vencida e nao-concluida. Nao e um
+// status que o usuario seta nem uma coluna do quadro.
+function isTaskOverdue(task: WorkPlanTask): boolean {
+  if (task.status === "concluido") return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(task.prazo) < today;
+}
+
+// O backend ainda emite o status legado "atrasado"; mapeamos para a coluna
+// "em andamento" ja que as colunas movieis sao pendente/em_andamento/concluido.
+function columnStatusOf(status: TaskStatus): TaskStatus {
+  return status === "atrasado" ? "em_andamento" : status;
+}
+
+// Update otimista: substitui o status de uma task no plano em memoria, sem
+// recarregar do servidor.
+function applyTaskStatus(plan: WorkPlan, taskId: string, status: TaskStatus): WorkPlan {
+  return {
+    ...plan,
+    stages: plan.stages.map((stage) => ({
+      ...stage,
+      tasks: stage.tasks.map((task) => (task.task_id === taskId ? { ...task, status } : task)),
+    })),
+  };
+}
+
 export function WorkPlanPage() {
-  const { currentUser } = useApp();
+  const { currentUser, activeView } = useApp();
   const { token } = useAuth();
-  // Sem auto-selecionar o primeiro orientando: nada e carregado/alterado sem escolha
-  // explicita do aluno (issue #262 / revisao do PR #301).
+  // Seletor de aluno (issue #262): sem auto-selecionar o primeiro orientando — nada e
+  // carregado/alterado sem escolha explicita (revisao do PR #301).
   const { studentId, students, setStudentId } = useChecklistStudent({ autoSelectFirst: false });
   const [plan, setPlan] = useState<WorkPlan | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,17 +87,17 @@ export function WorkPlanPage() {
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorSearch, setSelectorSearch] = useState("");
 
-  // studentId resolvido pelo papel (aluno: proprio; orientador/coordenacao: selecao).
-  // Pode ser null quando nenhum aluno esta selecionado — nesse caso nada e carregado
-  // nem alterado.
   const targetStudentId = studentId;
-  // Apenas o orientador dono edita; coordenacao e read-only (ver #248).
-  const canManage = currentUser?.role === "orientador" || !currentUser;
+  const isAdvisor = currentUser?.role === "orientador" || currentUser?.role === "coordenacao" || !currentUser;
   const isStudent = currentUser?.role === "aluno" || !currentUser;
+  // Aluno dono e orientador/coorientador podem mover (backend autoriza via
+  // ownership "status"); coordenacao-pura e revertida pelo 403 do backend.
+  const canMove = isAdvisor || isStudent;
+  // Excluir task e edicao do kanban: so quem age como orientador. ADR-0002 trata o
+  // toggle de visao como filtro de UX; coordenacao-pura fica presa em "coordenador"
+  // (kanban read-only, issue #248) e nao ve o botao. O backend ainda garante ownership.
+  const canEdit = activeView === "orientador";
 
-  // isActive protege contra corrida ao trocar de aluno: uma resposta antiga (aluno A)
-  // que chegar depois da troca para B nao sobrescreve o estado atual. Default sempre ativo
-  // para as chamadas disparadas apos mutacoes.
   async function load(isActive: () => boolean = () => true) {
     if (!targetStudentId) return;
     setLoading(true);
@@ -113,14 +139,19 @@ export function WorkPlanPage() {
   const tasks = useMemo(() => plan?.stages.flatMap((stage) => stage.tasks.map((task) => ({ ...task, stage }))) ?? [], [plan]);
   const concludedStages = plan?.stages.filter((stage) => stage.status === "concluido").length ?? 0;
 
-  async function changeStatus(taskId: string, status: TaskStatus) {
+  function changeStatus(taskId: string, status: TaskStatus) {
+    if (!plan) return;
+    const previous = plan;
+    // Aplica a mudanca na hora (sem reload); reverte se o backend recusar.
+    setPlan(applyTaskStatus(plan, taskId, status));
     setSaving(true);
-    try {
-      await updateTaskStatus(taskId, status, token ?? undefined);
-      await load();
-    } finally {
-      setSaving(false);
-    }
+    setError(null);
+    void updateTaskStatus(taskId, status, token ?? undefined)
+      .catch(() => {
+        setPlan(previous);
+        setError("Nao foi possivel mover a task. Tente novamente.");
+      })
+      .finally(() => setSaving(false));
   }
 
   async function handleCreateTask(stage: WorkPlanStage, data: { titulo: string; descricao: string; prazo: string; prioridade: TaskPriority }) {
@@ -144,6 +175,21 @@ export function WorkPlanPage() {
       await addProgressUpdate(task.task_id, data, token ?? undefined);
       setModal(null);
       await load();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDeleteTask(task: WorkPlanTask) {
+    setSaving(true);
+    setError(null);
+    try {
+      await deleteTask(task.task_id, token ?? undefined);
+      setModal(null);
+      // Recarrega para a barra de progresso da etapa/plano refletir o recalculo.
+      await load();
+    } catch {
+      setError("Nao foi possivel excluir a task. Tente novamente.");
     } finally {
       setSaving(false);
     }
@@ -193,8 +239,8 @@ export function WorkPlanPage() {
     s.label.toLowerCase().includes(selectorSearch.toLowerCase())
   ) ?? [];
 
-  // Cabecalho com titulo e seletor de aluno (orientador/coordenacao). Reaproveitado em
-  // todos os estados (sem selecao / carregando / sem plano / com plano).
+  // Cabecalho com titulo e seletor de aluno (orientador/coordenacao), reaproveitado em
+  // todos os estados (sem selecao / carregando / sem plano / com plano) — issue #262.
   const header = (
     <div className="flex items-start justify-between gap-4 flex-wrap">
       <div>
@@ -288,7 +334,7 @@ export function WorkPlanPage() {
     return (
       <div className="space-y-5">
         {header}
-        {notFound && canManage ? (
+        {notFound && isAdvisor ? (
           <div className="rounded-lg p-6 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
             <Calendar className="mx-auto" size={28} style={{ color: "var(--muted-foreground)" }} />
             <p style={{ color: "var(--foreground)", fontWeight: 800, marginTop: 12 }}>Nenhum plano de trabalho ainda</p>
@@ -317,8 +363,14 @@ export function WorkPlanPage() {
   }
 
   return (
+    <DndProvider backend={HTML5Backend}>
     <div className="space-y-5">
       {header}
+      {error && (
+        <div className="rounded-lg p-3" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
+          <p style={{ color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>{error}</p>
+        </div>
+      )}
       <section className="rounded-lg p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
@@ -349,40 +401,27 @@ export function WorkPlanPage() {
         </div>
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {STATUS_COLUMNS.map((column) => {
-          const columnTasks = tasks.filter((item) => item.status === column.id);
-          return (
-            <div key={column.id} className="min-h-[420px] rounded-lg p-3" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 800, color: "var(--foreground)" }}>
-                  {column.icon} {column.label}
-                </h2>
-                <span style={{ fontSize: 12, color: "var(--muted-foreground)", fontWeight: 700 }}>{columnTasks.length}</span>
-              </div>
-              <div className="space-y-3">
-                {columnTasks.map(({ stage, ...task }) => (
-                  <TaskCard
-                    key={task.task_id}
-                    task={task}
-                    stage={stage}
-                    disabled={saving}
-                    canUpdateStatus={canManage}
-                    canAddProgress={isStudent}
-                    onStatus={changeStatus}
-                    onProgress={() => setModal({ kind: "progress", task })}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {STATUS_COLUMNS.map((column) => (
+          <KanbanColumn
+            key={column.id}
+            column={column}
+            tasks={tasks.filter((item) => columnStatusOf(item.status) === column.id)}
+            saving={saving}
+            canMove={canMove}
+            canAddProgress={isStudent}
+            canDelete={canEdit}
+            onDropTask={changeStatus}
+            onProgress={(task) => setModal({ kind: "progress", task })}
+            onDelete={(task) => setModal({ kind: "confirmDelete", task })}
+          />
+        ))}
       </section>
 
       <section className="rounded-lg p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <div className="mb-3 flex items-center justify-between">
           <h2 style={{ fontSize: 14, fontWeight: 800, color: "var(--foreground)" }}>Etapas</h2>
-          {canManage && (
+          {canEdit && (
             <button
               type="button"
               onClick={() => setModal({ kind: "stage" })}
@@ -403,7 +442,7 @@ export function WorkPlanPage() {
                     {formatDate(stage.data_inicio)} ate {formatDate(stage.data_fim)}
                   </p>
                 </div>
-                {canManage && (
+                {canEdit && (
                   <button
                     type="button"
                     onClick={() => setModal({ kind: "task", stage })}
@@ -431,6 +470,78 @@ export function WorkPlanPage() {
       )}
       {modal?.kind === "plan" && <PlanModal saving={saving} onClose={() => setModal(null)} onSave={handleCreatePlan} />}
       {modal?.kind === "stage" && <StageModal saving={saving} onClose={() => setModal(null)} onSave={handleCreateStage} />}
+      {modal?.kind === "confirmDelete" && (
+        <ConfirmDeleteModal task={modal.task} saving={saving} onClose={() => setModal(null)} onConfirm={() => handleDeleteTask(modal.task)} />
+      )}
+    </div>
+    </DndProvider>
+  );
+}
+
+function KanbanColumn({
+  column,
+  tasks,
+  saving,
+  canMove,
+  canAddProgress,
+  canDelete,
+  onDropTask,
+  onProgress,
+  onDelete,
+}: {
+  column: { id: TaskStatus; label: string; icon: JSX.Element };
+  tasks: (WorkPlanTask & { stage: WorkPlanStage })[];
+  saving: boolean;
+  canMove: boolean;
+  canAddProgress: boolean;
+  canDelete: boolean;
+  onDropTask: (taskId: string, status: TaskStatus) => void;
+  onProgress: (task: WorkPlanTask) => void;
+  onDelete: (task: WorkPlanTask) => void;
+}) {
+  const [{ isOver, canDrop }, dropRef] = useDrop(
+    () => ({
+      accept: TASK_DND_TYPE,
+      drop: (item: { taskId: string; fromStatus: TaskStatus }) => {
+        if (columnStatusOf(item.fromStatus) !== column.id) onDropTask(item.taskId, column.id);
+      },
+      collect: (monitor) => ({ isOver: monitor.isOver(), canDrop: monitor.canDrop() }),
+    }),
+    [column.id, onDropTask],
+  );
+  const active = isOver && canDrop;
+
+  return (
+    <div
+      ref={(node) => { dropRef(node); }}
+      className="flex max-h-[560px] min-h-[420px] flex-col rounded-lg p-3"
+      style={{
+        background: "var(--card)",
+        border: `1px solid ${active ? "#123C7A" : "var(--border)"}`,
+        boxShadow: active ? "0 0 0 2px rgba(18,60,122,0.18)" : "none",
+      }}
+    >
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="flex items-center gap-2" style={{ fontSize: 13, fontWeight: 800, color: "var(--foreground)" }}>
+          {column.icon} {column.label}
+        </h2>
+        <span style={{ fontSize: 12, color: "var(--muted-foreground)", fontWeight: 700 }}>{tasks.length}</span>
+      </div>
+      <div className="flex-1 space-y-3 overflow-y-auto">
+        {tasks.map(({ stage, ...task }) => (
+          <TaskCard
+            key={task.task_id}
+            task={task}
+            stage={stage}
+            draggable={canMove}
+            disabled={saving}
+            canAddProgress={canAddProgress}
+            canDelete={canDelete}
+            onProgress={() => onProgress(task)}
+            onDelete={() => onDelete(task)}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -438,57 +549,87 @@ export function WorkPlanPage() {
 function TaskCard({
   task,
   stage,
+  draggable,
   disabled,
-  canUpdateStatus,
   canAddProgress,
-  onStatus,
+  canDelete,
   onProgress,
+  onDelete,
 }: {
   task: WorkPlanTask;
   stage: WorkPlanStage;
+  draggable: boolean;
   disabled: boolean;
-  canUpdateStatus: boolean;
   canAddProgress: boolean;
-  onStatus: (taskId: string, status: TaskStatus) => Promise<void>;
+  canDelete: boolean;
   onProgress: () => void;
+  onDelete: () => void;
 }) {
+  const [{ isDragging }, dragRef] = useDrag(
+    () => ({
+      type: TASK_DND_TYPE,
+      item: { taskId: task.task_id, fromStatus: task.status },
+      canDrag: draggable && !disabled,
+      collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+    }),
+    [task.task_id, task.status, draggable, disabled],
+  );
+  const overdue = isTaskOverdue(task);
+
   return (
-    <article className="rounded-lg p-3" style={{ background: "var(--background)", border: "1px solid var(--border)" }}>
+    <article
+      ref={(node) => { dragRef(node); }}
+      className="rounded-lg p-3"
+      style={{
+        background: "var(--background)",
+        border: "1px solid var(--border)",
+        cursor: draggable ? "grab" : "default",
+        opacity: isDragging ? 0.5 : 1,
+      }}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p style={{ fontSize: 13, fontWeight: 800, color: "var(--foreground)", lineHeight: 1.35 }}>{task.titulo}</p>
           <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 4 }}>{stage.nome}</p>
         </div>
-        <span className="rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "#123C7A", background: "#eef3fc" }}>
-          {PRIORITY_LABEL[task.prioridade]}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "#123C7A", background: "#eef3fc" }}>
+            {PRIORITY_LABEL[task.prioridade]}
+          </span>
+          {canDelete && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={onDelete}
+              className="flex h-7 w-7 items-center justify-center rounded-md"
+              style={{ background: "var(--card)", border: "1px solid var(--border)", color: "#dc2626" }}
+              aria-label="Excluir task"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
       {task.descricao && <p style={{ fontSize: 12, color: "var(--muted-foreground)", marginTop: 8, lineHeight: 1.45 }}>{task.descricao}</p>}
       <div className="mt-3 flex items-center justify-between" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>
         <span className="flex items-center gap-1.5"><Calendar size={12} /> {formatDate(task.prazo)}</span>
         <span>{Math.round(task.progresso_percentual)}%</span>
       </div>
+      {overdue && (
+        <span className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "#dc2626", background: "#fef2f2" }}>
+          <AlertCircle size={11} /> Atrasado
+        </span>
+      )}
       <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--muted)" }}>
-        <div className="h-full rounded-full" style={{ width: `${task.progresso_percentual}%`, background: task.status === "atrasado" ? "#dc2626" : "#1F8A70" }} />
+        <div className="h-full rounded-full" style={{ width: `${task.progresso_percentual}%`, background: overdue ? "#dc2626" : "#1F8A70" }} />
       </div>
       {task.ultima_atualizacao && (
         <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 8 }}>
           Ultimo update: {task.ultima_atualizacao.conteudo}
         </p>
       )}
-      <div className="mt-3 flex gap-2">
-        {canUpdateStatus && (
-          <select
-            value={task.status}
-            disabled={disabled}
-            onChange={(event) => void onStatus(task.task_id, event.target.value as TaskStatus)}
-            className="min-w-0 flex-1 rounded-md px-2 py-2"
-            style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: 12 }}
-          >
-            {STATUS_COLUMNS.map((status) => <option key={status.id} value={status.id}>{STATUS_LABEL[status.id]}</option>)}
-          </select>
-        )}
-        {canAddProgress && (
+      {canAddProgress && (
+        <div className="mt-3 flex gap-2">
           <button
             type="button"
             disabled={disabled}
@@ -498,8 +639,8 @@ function TaskCard({
           >
             <Send size={13} /> Progresso
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -657,6 +798,48 @@ function ProgressModal({
         >
           Enviar progresso
         </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function ConfirmDeleteModal({
+  task,
+  saving,
+  onClose,
+  onConfirm,
+}: {
+  task: WorkPlanTask;
+  saving: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <ModalShell title="Excluir task" onClose={onClose}>
+      <div className="space-y-4">
+        <p style={{ fontSize: 13, color: "var(--foreground)", lineHeight: 1.5 }}>
+          Excluir <strong>{task.titulo}</strong>? Esta acao nao pode ser desfeita.
+        </p>
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onClose}
+            className="rounded-md px-3.5 py-2"
+            style={{ background: "var(--muted)", color: "var(--foreground)", fontSize: 13, fontWeight: 800 }}
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={onConfirm}
+            className="rounded-md px-3.5 py-2"
+            style={{ background: "#dc2626", color: "#fff", fontSize: 13, fontWeight: 800, opacity: saving ? 0.6 : 1 }}
+          >
+            Excluir
+          </button>
+        </div>
       </div>
     </ModalShell>
   );

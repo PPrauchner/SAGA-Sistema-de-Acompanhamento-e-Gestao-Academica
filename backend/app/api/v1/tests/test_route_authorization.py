@@ -123,7 +123,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     ("work_plan.update_stage", "PATCH", "/api/v1/stages/x", {}, ("orientador", "coordenacao")),
     ("work_plan.create_task", "POST", "/api/v1/stages/x/tasks", _TASK_CREATE, ("orientador", "coordenacao")),
     ("work_plan.update_task", "PATCH", "/api/v1/tasks/x", {}, ("orientador", "coordenacao")),
-    ("work_plan.task_status", "PATCH", "/api/v1/tasks/x/status", _TASK_STATUS, ("orientador", "coordenacao")),
+    ("work_plan.task_status", "PATCH", "/api/v1/tasks/x/status", _TASK_STATUS, ("aluno", "orientador", "coordenacao")),
     ("work_plan.add_update", "POST", "/api/v1/tasks/x/updates", _PROGRESS_UPDATE, ("aluno",)),
     ("work_plan.list_updates", "GET", "/api/v1/tasks/x/updates", None, ("aluno", "orientador", "coordenacao")),
     ("work_plan.fact", "GET", "/api/v1/work-plan/x/facts/plano-concluido", None, ("aluno", "orientador", "coordenacao")),

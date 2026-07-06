@@ -17,6 +17,7 @@ import {
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useChecklistStudent } from "@/hooks/useChecklistStudent";
+import { validateReasonableDate } from "@/lib/dateValidation";
 import {
   createActivity,
   createActivityForOrientando,
@@ -102,6 +103,7 @@ export function ActivitiesPage() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [dataError, setDataError] = useState<string | null>(null);
 
   const [parecerTarget, setParecerTarget] = useState<Activity | null>(null);
   const [parecerText, setParecerText] = useState("");
@@ -151,6 +153,7 @@ export function ActivitiesPage() {
   function openForm(): void {
     setForm(EMPTY_FORM);
     setFeedback(null);
+    setDataError(null);
     setShowForm(true);
   }
 
@@ -190,6 +193,11 @@ export function ActivitiesPage() {
 
     if (!form.tipo_id || !form.descricao || !form.data_realizacao) {
       setError("Preencha tipo, descrição e data de realização.");
+      return;
+    }
+    const dataInvalida = validateReasonableDate(form.data_realizacao, { allowFuture: false });
+    if (dataInvalida) {
+      setDataError(dataInvalida);
       return;
     }
     if (selectedType?.exige_comprovante && !form.file) {
@@ -393,10 +401,15 @@ export function ActivitiesPage() {
               <input
                 type="date"
                 value={form.data_realizacao}
-                onChange={(e) => setForm((f) => ({ ...f, data_realizacao: e.target.value }))}
+                onChange={(e) => {
+                  setForm((f) => ({ ...f, data_realizacao: e.target.value }));
+                  if (dataError) setDataError(null);
+                }}
+                onBlur={(e) => setDataError(validateReasonableDate(e.target.value, { allowFuture: false }))}
                 className="rounded-xl px-3 py-2.5 outline-none"
-                style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
+                style={{ background: "var(--card)", border: `1px solid ${dataError ? "#dc2626" : "var(--border)"}`, fontSize: "13px", color: "var(--foreground)" }}
               />
+              {dataError && <span style={{ fontSize: "11px", color: "#dc2626" }}>{dataError}</span>}
             </label>
 
             <label className="flex flex-col gap-1 sm:col-span-2">

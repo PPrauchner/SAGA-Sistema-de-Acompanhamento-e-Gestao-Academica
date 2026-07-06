@@ -71,8 +71,8 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
             <h1 style={{ color: "#fff", fontSize: "30px", fontWeight: 800, lineHeight: 1.25,
               marginBottom: "8px" }}>
               Sistema de Acompanhamento<br />
-              <span style={{ color: "#D4A017" }}>Acadêmico</span> da<br />
-              Pós-Graduação
+              e <span style={{ color: "#D4A017" }}>Gestão</span><br />
+              Acadêmica
             </h1>
             <p style={{ color: "rgba(255,255,255,0.6)", fontSize: "14px", lineHeight: 1.65,
               maxWidth: 340, marginBottom: "16px" }}>
@@ -85,19 +85,19 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
               <AuthIllustration />
             </div>
 
-            {/* Institution name */}
+            {/* System identity */}
             <div className="rounded-2xl px-4 py-3 mb-3"
               style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)" }}>
               <div className="flex items-center gap-2 mb-1">
                 <BookOpen size={13} style={{ color: "#D4A017", flexShrink: 0 }} />
                 <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "9px", fontWeight: 600,
-                  textTransform: "uppercase", letterSpacing: "0.08em" }}>Programa</p>
+                  textTransform: "uppercase", letterSpacing: "0.08em" }}>Sistema</p>
               </div>
               <p style={{ color: "#fff", fontSize: "12px", fontWeight: 600 }}>
-                PPGCC — Ciência da Computação
+                SAGA — Gestão Acadêmica
               </p>
               <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "11px", marginTop: "2px" }}>
-                Universidade Federal do Pampa — Campus de Alegrete
+                Sistema de Acompanhamento e Gestão Acadêmica
               </p>
             </div>
           </div>
@@ -113,7 +113,7 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
           </div>
 
           <p style={{ color: "rgba(255,255,255,0.25)", fontSize: "10px", marginTop: "16px" }}>
-            © {new Date().getFullYear()} Universidade Federal do Pampa — SAGA v2.4
+            © {new Date().getFullYear()} SAGA v2.4
           </p>
         </div>
       </div>
@@ -134,7 +134,7 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
           </div>
           <div>
             <p style={{ fontWeight: 800, color: "#123C7A", fontSize: "15px" }}>SAGA</p>
-            <p style={{ fontSize: "10px", color: "#64748b" }}>Pós-Graduação</p>
+            <p style={{ fontSize: "10px", color: "#64748b" }}>Gestão Acadêmica</p>
           </div>
         </div>
 

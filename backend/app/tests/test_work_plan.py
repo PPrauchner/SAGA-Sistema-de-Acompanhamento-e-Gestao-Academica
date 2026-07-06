@@ -14,6 +14,7 @@ from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.services.inference_service import InferenceService
+from backend.app.services.work_plan_service import WorkPlanNotFoundError, WorkPlanService
 from backend.app.tests.fake_firestore import FakeFirestore
 
 
@@ -21,8 +22,36 @@ from backend.app.tests.fake_firestore import FakeFirestore
 def fake_db():
     """Patcha o cliente Firestore do repositorio por um fake compartilhado em memoria."""
     fake = FakeFirestore()
+    advisor_id = "advisor_orientador"
+    fake.collection("advisors").document(advisor_id).set(
+        {"uid": "orientador", "nome": "Orientador Teste"}
+    )
+    for student_id in (
+        "aluno_real",
+        "aluno_sem_plano",
+        "aluno_bloqueado",
+        "aluno_coord",
+        "aluno_issue_44",
+        "aluno_persist",
+        "aluno_dash",
+        "aluno_apto",
+    ):
+        fake.collection("students").document(student_id).set(
+            {
+                "uid": student_id,
+                "nome": student_id,
+                "orientador_id": advisor_id,
+                "programa_id": "prog_default",
+            }
+        )
     with patch(
         "backend.app.repositories.work_plan_repository.get_firestore_client",
+        return_value=fake,
+    ), patch(
+        "backend.app.aspects.alerts.get_firestore_client",
+        return_value=fake,
+    ), patch(
+        "backend.app.repositories.firebase_repository.get_firestore_client",
         return_value=fake,
     ):
         yield fake
@@ -124,7 +153,7 @@ def test_get_work_plan_missing_returns_404(fake_db) -> None:
 def test_progress_update_recalculates_progress_and_notifies(fake_db) -> None:
     ids = _build_plan_via_api("aluno_real")
 
-    response = _client("aluno").post(
+    response = TestClient(_app("aluno", uid="aluno_real")).post(
         f"/api/v1/tasks/{ids['t1']}/updates",
         json={"conteudo": "Tarefa finalizada", "percentual": 100},
         headers={"X-User-Id": "aluno_real", "X-User-Name": "Aluno Real", "X-User-Role": "aluno"},
@@ -142,7 +171,7 @@ def test_progress_update_to_100_persists_plano_concluido(fake_db) -> None:
     headers = {"X-User-Id": "aluno_real", "X-User-Name": "Aluno Real", "X-User-Role": "aluno"}
 
     for task_id in (ids["t1"], ids["t2"]):
-        response = _client("aluno").post(
+        response = TestClient(_app("aluno", uid="aluno_real")).post(
             f"/api/v1/tasks/{task_id}/updates",
             json={"conteudo": "Concluída", "percentual": 100},
             headers=headers,
@@ -300,3 +329,130 @@ async def test_get_plan_tasks_compatible_with_rl01_plan_fact(fake_db) -> None:
     assert tasks
     assert {"id", "is_defesa", "concluida"}.issubset(tasks[0])
     assert InferenceService(repo)._is_plano_concluido(tasks) is True
+
+
+async def _seed_stage_with_tasks(
+    repo: WorkPlanRepository, student_id: str, nome: str, count: int
+) -> tuple[str, str, list[str]]:
+    """Cria plano -> etapa `nome` -> `count` tasks e devolve (plan_id, stage_id, task_ids)."""
+    plan_id = await repo.create_plan(
+        student_id,
+        {
+            "titulo": "Plano real",
+            "data_inicio": datetime(2025, 1, 1, tzinfo=timezone.utc),
+            "data_fim_prevista": datetime(2027, 6, 1, tzinfo=timezone.utc),
+            "descricao": None,
+        },
+    )
+    stage_id = await repo.create_stage(
+        plan_id,
+        {
+            "nome": nome,
+            "ordem": 1,
+            "data_inicio": datetime(2025, 1, 1, tzinfo=timezone.utc),
+            "data_fim": datetime(2027, 6, 1, tzinfo=timezone.utc),
+        },
+    )
+    task_ids = [
+        await repo.create_task(
+            stage_id,
+            {
+                "titulo": f"Tarefa {i}",
+                "descricao": "",
+                "prazo": datetime(2027, 6, 1, tzinfo=timezone.utc),
+                "prioridade": "media",
+            },
+        )
+        for i in range(count)
+    ]
+    return plan_id, stage_id, task_ids
+
+
+async def test_delete_task_recomputes_stage_progress_and_plan_fact(fake_db) -> None:
+    """Remover uma task recomputa o progresso da etapa e o fato plano_concluido (RL01)."""
+    repo = WorkPlanRepository()
+    service = WorkPlanService(repo)
+    _, _, (t1, t2) = await _seed_stage_with_tasks(repo, "aluno_del", "Desenvolvimento", 2)
+    await repo.update_task(t1, {"status": "concluido", "progresso_percentual": 100.0})
+
+    before = await repo.get_plan("aluno_del")
+    assert before["stages"][0]["progresso_percentual"] == 50.0  # media (100 + 0) / 2
+
+    await service.delete_task(t2)
+
+    after = await repo.get_plan("aluno_del")
+    stage = after["stages"][0]
+    assert len(stage["tasks"]) == 1
+    assert stage["progresso_percentual"] == 100.0
+    assert stage["status"] == "concluido"
+    assert "plano_concluido(aluno_del)" in after["facts"]
+
+
+async def test_delete_defense_task_does_not_change_plano_concluido(fake_db) -> None:
+    """Excluir task de defesa nao altera plano_concluido — RL01 so olha tasks nao-defesa."""
+    repo = WorkPlanRepository()
+    service = WorkPlanService(repo)
+    plan_id = await repo.create_plan(
+        "aluno_rl01",
+        {
+            "titulo": "Plano",
+            "data_inicio": datetime(2025, 1, 1, tzinfo=timezone.utc),
+            "data_fim_prevista": datetime(2027, 6, 1, tzinfo=timezone.utc),
+            "descricao": None,
+        },
+    )
+    escrita = await repo.create_stage(
+        plan_id,
+        {"nome": "Escrita", "ordem": 1, "data_inicio": datetime(2025, 1, 1, tzinfo=timezone.utc), "data_fim": datetime(2027, 6, 1, tzinfo=timezone.utc)},
+    )
+    t_escrita = await repo.create_task(
+        escrita,
+        {"titulo": "Capitulo", "descricao": "", "prazo": datetime(2027, 6, 1, tzinfo=timezone.utc), "prioridade": "alta"},
+    )
+    defesa = await repo.create_stage(
+        plan_id,
+        {"nome": "defesa", "ordem": 2, "data_inicio": datetime(2025, 1, 1, tzinfo=timezone.utc), "data_fim": datetime(2027, 6, 1, tzinfo=timezone.utc)},
+    )
+    t_defesa = await repo.create_task(
+        defesa,
+        {"titulo": "Agendar banca", "descricao": "", "prazo": datetime(2027, 6, 1, tzinfo=timezone.utc), "prioridade": "media"},
+    )
+    await service.update_task_status(t_escrita, "concluido")
+
+    before = await repo.get_plan("aluno_rl01")
+    assert "plano_concluido(aluno_rl01)" in before["facts"]  # defesa pendente nao bloqueia
+
+    await service.delete_task(t_defesa)
+
+    after = await repo.get_plan("aluno_rl01")
+    assert "plano_concluido(aluno_rl01)" in after["facts"]  # inalterado pela exclusao da defesa
+
+
+async def test_delete_all_tasks_leaves_stage_not_concluido(fake_db) -> None:
+    """Remover todas as tasks nao marca a etapa como concluida e limpa plano_concluido."""
+    repo = WorkPlanRepository()
+    service = WorkPlanService(repo)
+    _, _, (t1, t2) = await _seed_stage_with_tasks(repo, "aluno_empty", "Desenvolvimento", 2)
+    await service.update_task_status(t1, "concluido")
+    await service.update_task_status(t2, "concluido")
+
+    concluded = await repo.get_plan("aluno_empty")
+    assert concluded["stages"][0]["status"] == "concluido"
+    assert "plano_concluido(aluno_empty)" in concluded["facts"]
+
+    await service.delete_task(t1)
+    await service.delete_task(t2)
+
+    after = await repo.get_plan("aluno_empty")
+    stage = after["stages"][0]
+    assert stage["tasks"] == []
+    assert stage["status"] != "concluido"
+    assert stage["progresso_percentual"] == 0.0
+    assert "plano_concluido(aluno_empty)" not in after["facts"]
+
+
+async def test_delete_missing_task_raises_not_found(fake_db) -> None:
+    repo = WorkPlanRepository()
+    service = WorkPlanService(repo)
+    with pytest.raises(WorkPlanNotFoundError):
+        await service.delete_task("inexistente~plan~stage~task")

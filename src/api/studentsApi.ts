@@ -78,13 +78,18 @@ export function getStudents(token: string): Promise<Student[]> {
   return request<Student[]>("/api/v1/students", token);
 }
 
+export function getStudent(token: string, studentId: string): Promise<Student> {
+  return request<Student>(`/api/v1/students/${studentId}`, token);
+}
+
 export function createStudent(
   token: string,
   data: StudentCreatePayload,
 ): Promise<StudentCreateResult> {
+  const payload: StudentCreatePayload = { ...data, nivel: "mestrado" };
   return request<StudentCreateResult>("/api/v1/students", token, {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   });
 }
 

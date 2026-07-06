@@ -8,6 +8,7 @@ from backend.app.aspects.alerts import trigger_alerts
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
 from backend.app.aspects.deadline_validation import check_deadlines
+from backend.app.aspects.ownership import check_work_plan_ownership
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.work_plan import (
     ActorContext,
@@ -54,6 +55,7 @@ def _not_found(exc: WorkPlanNotFoundError) -> HTTPException:
 
 @router.get("/work-plan/{student_id}", response_model=WorkPlanFull)
 @requires_role("aluno", "orientador", "coordenacao")
+@check_work_plan_ownership("read")
 async def get_work_plan(
     student_id: str,
     user: CurrentUser = Depends(get_current_user),
@@ -67,6 +69,7 @@ async def get_work_plan(
 
 @router.post("/work-plan/{student_id}", response_model=CreatePlanResponse, status_code=status.HTTP_201_CREATED)
 @requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
 @audit_operation
 async def create_work_plan(
     student_id: str,
@@ -79,6 +82,7 @@ async def create_work_plan(
 
 @router.put("/work-plan/{plan_id}", response_model=dict)
 @requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
 @audit_operation
 async def update_work_plan(
     plan_id: str,
@@ -94,6 +98,7 @@ async def update_work_plan(
 
 @router.post("/work-plan/{plan_id}/stages", response_model=CreateStageResponse, status_code=status.HTTP_201_CREATED)
 @requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
 @audit_operation
 async def create_stage(
     plan_id: str,
@@ -109,6 +114,7 @@ async def create_stage(
 
 @router.patch("/stages/{stage_id}", response_model=MutationMessage)
 @requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
 @audit_operation
 async def update_stage(
     stage_id: str,
@@ -125,6 +131,7 @@ async def update_stage(
 
 @router.post("/stages/{stage_id}/tasks", response_model=CreateTaskResponse, status_code=status.HTTP_201_CREATED)
 @requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
 @audit_operation
 async def create_task(
     stage_id: str,
@@ -140,6 +147,7 @@ async def create_task(
 
 @router.patch("/tasks/{task_id}", response_model=MutationMessage)
 @requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
 @audit_operation
 async def update_task(
     task_id: str,
@@ -154,8 +162,25 @@ async def update_task(
         raise _not_found(exc)
 
 
-@router.patch("/tasks/{task_id}/status", response_model=TaskStatusResponse)
+@router.delete("/tasks/{task_id}", response_model=MutationMessage)
 @requires_role("orientador", "coordenacao")
+@check_work_plan_ownership("edit")
+@audit_operation
+async def delete_task(
+    task_id: str,
+    user: CurrentUser = Depends(get_current_user),
+    service: WorkPlanService = Depends(_get_service),
+) -> MutationMessage:
+    try:
+        result = await service.delete_task(task_id)
+        return MutationMessage(**result)
+    except WorkPlanNotFoundError as exc:
+        raise _not_found(exc)
+
+
+@router.patch("/tasks/{task_id}/status", response_model=TaskStatusResponse)
+@requires_role("aluno", "orientador", "coordenacao")
+@check_work_plan_ownership("status")
 @audit_operation
 async def update_task_status(
     task_id: str,
@@ -171,6 +196,7 @@ async def update_task_status(
 
 @router.post("/tasks/{task_id}/updates", response_model=ProgressUpdateCreated, status_code=status.HTTP_201_CREATED)
 @requires_role("aluno")
+@check_work_plan_ownership("status")
 @audit_operation
 @check_deadlines
 @trigger_alerts(_build_progress_update_alert)
@@ -189,6 +215,7 @@ async def add_progress_update(
 
 @router.get("/tasks/{task_id}/updates", response_model=ProgressUpdateList)
 @requires_role("aluno", "orientador", "coordenacao")
+@check_work_plan_ownership("read")
 async def list_progress_updates(
     task_id: str,
     user: CurrentUser = Depends(get_current_user),
@@ -202,6 +229,7 @@ async def list_progress_updates(
 
 @router.get("/work-plan/{student_id}/facts/plano-concluido", response_model=WorkPlanFact)
 @requires_role("aluno", "orientador", "coordenacao")
+@check_work_plan_ownership("read")
 async def get_plan_concluded_fact(
     student_id: str,
     user: CurrentUser = Depends(get_current_user),

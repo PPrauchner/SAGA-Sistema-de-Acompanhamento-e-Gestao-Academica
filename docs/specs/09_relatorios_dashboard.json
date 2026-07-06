@@ -95,7 +95,7 @@
           "regular": "int",
           "em_risco": "int",
           "qualificado": "int",
-          "fase_defesa": "int",
+          "em_fase_de_defesa": "int",
           "em_prorrogacao": "int"
         },
         "atividades_aguardando_parecer": "int",
@@ -126,7 +126,7 @@
           "em_risco": "int",
           "em_prorrogacao": "int",
           "qualificado": "int",
-          "fase_defesa": "int"
+          "em_fase_de_defesa": "int"
         },
         "atividades_aguardando_validacao": "int",
         "prorrogacoes_pendentes": "int",
@@ -169,7 +169,7 @@
           "regular": {"total": "int", "alunos": ["array resumido"]},
           "em_risco": {"total": "int", "alunos": ["array resumido"]},
           "qualificado": {"total": "int", "alunos": ["array resumido"]},
-          "fase_defesa": {"total": "int", "alunos": ["array resumido"]},
+          "em_fase_de_defesa": {"total": "int", "alunos": ["array resumido"]},
           "concluido": {"total": "int", "alunos": ["array resumido"]}
         }
       }
@@ -222,7 +222,7 @@
             "student_nome": "string",
             "total": "int",
             "pontuacao_total": "float",
-            "por_nivel": {"A1": "int", "A2": "int", "A3": "int", "A4": "int", "B1": "int", "B2": "int", "SC": "int"}
+            "por_nivel": {"A1": "int", "A2": "int", "A3": "int", "A4": "int", "A5": "int", "A6": "int", "A7": "int", "A8": "int", "SC": "int"}
           }
         ],
         "por_orientador": [

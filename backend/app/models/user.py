@@ -20,7 +20,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # Papéis reconhecidos pelo sistema (custom claim 'role').
 # `adm` é o superusuário global (ADR-0001): não pertence a programa algum,
@@ -34,6 +34,17 @@ InviteRole = Literal["aluno", "orientador"]
 # formato é feita por expressão regular simples para evitar dependência extra.
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 _PASSWORD_MIN_LEN = 8
+
+
+class NotificationPreferences(BaseModel):
+    """Preferencias de notificacao persistidas no perfil do usuario."""
+
+    email: bool = True
+    in_app: bool = True
+    work_plan: bool = True
+    transfers: bool = True
+    activities: bool = True
+    extensions: bool = True
 
 
 def _normalizar_email(value: str) -> str:
@@ -55,6 +66,9 @@ class UserBase(BaseModel):
     # demais papéis o service garante a invariante de programa não-nulo.
     programa_id: str | None = None
     ativo: bool = True
+    notification_preferences: NotificationPreferences = Field(
+        default_factory=NotificationPreferences,
+    )
 
     @field_validator("email")
     @classmethod
@@ -150,3 +164,28 @@ class CreateCoordinatorResponse(BaseModel):
     message: str
     uid: str
     email: str
+
+
+class ProfileUpdateRequest(BaseModel):
+    """Corpo de PUT /api/v1/users/profile: edição do próprio perfil.
+
+    Campos editáveis por papel: `nome` para todos; `departamento` apenas para
+    orientador (o service rejeita `departamento` para os demais papéis). Campos
+    não editáveis (`email`, `programa_id`, `matricula`, `telefone`) são proibidos
+    no corpo via `extra="forbid"`, que faz qualquer chave desconhecida retornar 422.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    nome: str | None = Field(default=None, min_length=1)
+    departamento: str | None = None
+    notification_preferences: NotificationPreferences | None = None
+
+
+class ProfileUpdateResponse(BaseModel):
+    """Resposta 200 de PUT /api/v1/users/profile: perfil atualizado."""
+
+    uid: str
+    nome: str
+    departamento: str | None = None
+    notification_preferences: NotificationPreferences

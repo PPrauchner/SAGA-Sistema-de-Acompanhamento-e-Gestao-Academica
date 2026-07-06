@@ -79,10 +79,16 @@ class AuditService:
         timestamp = log.get("timestamp")
         if (data_inicio or data_fim) and timestamp is None:
             return False
-        if data_inicio and timestamp < data_inicio:
-            return False
-        if data_fim and timestamp > data_fim:
-            return False
+        if timestamp is not None and timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        if data_inicio:
+            dt_inicio = data_inicio if data_inicio.tzinfo else data_inicio.replace(tzinfo=timezone.utc)
+            if timestamp < dt_inicio:
+                return False
+        if data_fim:
+            dt_fim = data_fim if data_fim.tzinfo else data_fim.replace(tzinfo=timezone.utc)
+            if timestamp > dt_fim:
+                return False
 
         return True
 

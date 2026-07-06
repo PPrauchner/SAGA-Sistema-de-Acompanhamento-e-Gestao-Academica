@@ -2,7 +2,10 @@ import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { Plus, Clock, CheckCircle, XCircle, AlertTriangle, FileText, Calendar } from "lucide-react";
 
 import { solicitacoesApi, type Solicitacao } from "@/api/solicitacoesApi";
+import { getAdvisors, type Advisor } from "@/api/advisorsApi";
 import { getStudents, type Student } from "@/api/studentsApi";
+import { createTransferRequest } from "@/api/transfersApi";
+import { validateReasonableDate } from "@/lib/dateValidation";
 import { useApp } from "../../context/AppContext";
 
 const STATUS_MAP = {
@@ -16,16 +19,27 @@ const STATUS_MAP = {
 };
 
 const TIPO_MAP: Record<string, string> = {
+  prorrogacao: "Prorrogação",
+  transferencia_orientando: "Transferência de orientando",
+  transferencia: "Transferência de orientando",
   prazo_defesa: "Prorrogação de Prazo de Defesa",
   prazo_qualificacao: "Prorrogação de Qualificação",
   trancamento: "Trancamento de Matrícula",
-  mudanca_nivel: "Mudança de Nível",
 };
 
+type RequestSubtype = "prorrogacao" | "trancamento" | "transferencia_orientando";
+
+const REQUEST_TYPE_OPTIONS: { value: RequestSubtype; label: string }[] = [
+  { value: "prorrogacao", label: "Prorrogação" },
+  { value: "trancamento", label: "Trancamento de matrícula" },
+  { value: "transferencia_orientando", label: "Transferência de orientando" },
+];
+
 const DEFAULT_FORM = {
-  tipo: "prazo_defesa",
+  tipo: "prorrogacao" as RequestSubtype,
   nova_data: "",
   motivo: "",
+  orientador_destino_id: "",
 };
 
 function getStatus(status: string) {
@@ -75,8 +89,10 @@ export function SolicitacoesPage() {
   const [documentos, setDocumentos] = useState<File[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [dateError, setDateError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [advisorStudents, setAdvisorStudents] = useState<Student[]>([]);
+  const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const canCreateRequest = currentUser?.role === "aluno" || currentUser?.role === "orientador";
   const isStudentRequest = currentUser?.role === "aluno";
   const isAdvisorRequest = currentUser?.role === "orientador";
@@ -105,22 +121,32 @@ export function SolicitacoesPage() {
   useEffect(() => {
     if (!token || !isAdvisorRequest) {
       setAdvisorStudents([]);
+      setAdvisors([]);
       return;
     }
 
     let active = true;
-    getStudents(token)
-      .then((students) => {
+    Promise.all([getStudents(token), getAdvisors(token)])
+      .then(([students, advisorList]) => {
         if (active) setAdvisorStudents(students);
+        if (active) {
+          const sameProgram = currentUser?.programa_id
+            ? advisorList.filter((advisor) => advisor.programa_id === currentUser.programa_id)
+            : advisorList;
+          setAdvisors(sameProgram.filter((advisor) => advisor.id !== currentUser?.advisor_id));
+        }
       })
       .catch(() => {
-        if (active) setAdvisorStudents([]);
+        if (active) {
+          setAdvisorStudents([]);
+          setAdvisors([]);
+        }
       });
 
     return () => {
       active = false;
     };
-  }, [isAdvisorRequest, token]);
+  }, [currentUser?.advisor_id, currentUser?.programa_id, isAdvisorRequest, token]);
 
   const visibleSolicitacoes = solicitacoes.filter((solicitacao) => {
     if (currentUser?.role !== "aluno") return true;
@@ -133,6 +159,7 @@ export function SolicitacoesPage() {
     setFormData(DEFAULT_FORM);
     setDocumentos([]);
     setSubmitError(null);
+    setDateError(null);
     setSuccessMessage(null);
     setShowForm(true);
   }
@@ -141,6 +168,7 @@ export function SolicitacoesPage() {
     if (submitting) return;
     setShowForm(false);
     setSubmitError(null);
+    setDateError(null);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -153,24 +181,54 @@ export function SolicitacoesPage() {
       setSubmitError("Selecione um orientando antes de enviar a solicitação.");
       return;
     }
-    if (!formData.nova_data) {
-      setSubmitError("Informe a nova data solicitada.");
-      return;
-    }
     if (!formData.motivo.trim()) {
       setSubmitError("Informe o motivo da solicitação.");
       return;
     }
+    if (formData.tipo === "prorrogacao" && !formData.nova_data) {
+      setSubmitError("Informe a nova data solicitada.");
+      return;
+    }
+    const dataInvalida = formData.tipo === "prorrogacao"
+      ? validateReasonableDate(formData.nova_data, { allowFuture: true })
+      : null;
+    if (dataInvalida) {
+      setDateError(dataInvalida);
+      return;
+    }
+    if (formData.tipo === "transferencia_orientando" && !isAdvisorRequest) {
+      setSubmitError("Transferência de orientando deve ser solicitada por orientador.");
+      return;
+    }
+    if (formData.tipo === "transferencia_orientando" && !formData.orientador_destino_id) {
+      setSubmitError("Selecione o orientador destino.");
+      return;
+    }
+    if (formData.tipo === "transferencia_orientando" && formData.orientador_destino_id === currentUser?.advisor_id) {
+      setSubmitError("Selecione um orientador destino diferente do orientador atual.");
+      return;
+    }
+
+    const motivo = formData.motivo.trim();
+    const targetStudentId = isAdvisorRequest ? selectedStudentId : currentUser?.student_id ?? currentUser?.id ?? "";
 
     setSubmitting(true);
     setSubmitError(null);
     try {
-      await solicitacoesApi.create(token, {
-        tipo: formData.tipo,
-        nova_data: formData.nova_data,
-        motivo: formData.motivo.trim(),
-        ...(isAdvisorRequest ? { student_id: selectedStudentId } : {}),
-      });
+      if (formData.tipo === "transferencia_orientando") {
+        await createTransferRequest(token, {
+          student_id: targetStudentId,
+          orientador_destino_id: formData.orientador_destino_id,
+          motivo,
+        });
+      } else {
+        await solicitacoesApi.create(token, {
+          tipo: formData.tipo,
+          motivo,
+          ...(formData.tipo === "prorrogacao" ? { nova_data: formData.nova_data } : {}),
+          ...(isAdvisorRequest ? { student_id: selectedStudentId } : {}),
+        });
+      }
       setShowForm(false);
       setFormData(DEFAULT_FORM);
       setDocumentos([]);
@@ -256,7 +314,7 @@ export function SolicitacoesPage() {
                         <div className="min-w-0">
                           <p className="truncate" style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)" }}>{aluno}</p>
                           <p className="truncate" style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
-                            {solicitacao.matricula ? `Mat. ${solicitacao.matricula}` : "Matrícula não informada"}{solicitacao.nivel ? ` · ${solicitacao.nivel}` : ""}
+                            {solicitacao.matricula ? `Mat. ${solicitacao.matricula}` : "Matrícula não informada"}
                           </p>
                         </div>
                       </div>
@@ -344,10 +402,11 @@ export function SolicitacoesPage() {
               )}
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Tipo de Solicitação</label>
-                <select value={formData.tipo} onChange={(e) => setFormData((current) => ({ ...current, tipo: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
-                  {Object.entries(TIPO_MAP).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                <select value={formData.tipo} onChange={(e) => { setFormData((current) => ({ ...current, tipo: e.target.value as RequestSubtype, nova_data: e.target.value === "prorrogacao" ? current.nova_data : "", orientador_destino_id: e.target.value === "transferencia_orientando" ? current.orientador_destino_id : "" })); setSubmitError(null); setDateError(null); }} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
+                  {REQUEST_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </div>
+              {formData.tipo === "prorrogacao" && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Data Prazo Atual</label>
@@ -355,9 +414,21 @@ export function SolicitacoesPage() {
                 </div>
                 <div>
                   <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Nova Data Solicitada</label>
-                  <input type="date" required value={formData.nova_data} onChange={(e) => setFormData((current) => ({ ...current, nova_data: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
+                  <input type="date" required value={formData.nova_data} onChange={(e) => { setFormData((current) => ({ ...current, nova_data: e.target.value })); if (dateError) setDateError(null); }} onBlur={(e) => setDateError(validateReasonableDate(e.target.value, { allowFuture: true }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: `1px solid ${dateError ? "#dc2626" : "var(--border)"}`, background: "var(--input-background)", fontSize: "13px" }} />
+                  {dateError && <p style={{ fontSize: "11px", color: "#dc2626", marginTop: "6px" }}>{dateError}</p>}
                 </div>
               </div>
+              )}
+              {formData.tipo === "transferencia_orientando" && (
+                <div>
+                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Orientador destino</label>
+                  <select required disabled={advisors.length === 0} value={formData.orientador_destino_id} onChange={(e) => setFormData((current) => ({ ...current, orientador_destino_id: e.target.value }))} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px", opacity: advisors.length === 0 ? 0.7 : 1 }}>
+                    <option value="">Selecione o orientador destino</option>
+                    {advisors.map((advisor) => <option key={advisor.id} value={advisor.id}>{advisor.nome}</option>)}
+                  </select>
+                  {advisors.length === 0 && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "6px" }}>Nenhum orientador destino disponível.</p>}
+                </div>
+              )}
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Justificativa Detalhada</label>
                 <textarea rows={4} required value={formData.motivo} onChange={(e) => setFormData((current) => ({ ...current, motivo: e.target.value }))} placeholder="Descreva detalhadamente o motivo da solicitação..." className="w-full rounded-xl px-3 py-2.5 outline-none resize-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} />
