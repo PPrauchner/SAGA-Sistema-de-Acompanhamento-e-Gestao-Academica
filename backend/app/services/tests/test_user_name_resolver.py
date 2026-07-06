@@ -22,8 +22,8 @@ _USERS: list[dict[str, Any]] = [
 
 
 class _FakeUsersRepo:
-    async def list_all(self) -> list[dict[str, Any]]:
-        return [dict(user) for user in _USERS]
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        return next((dict(user) for user in _USERS if user.get("uid") == doc_id), None)
 
 
 @pytest.fixture

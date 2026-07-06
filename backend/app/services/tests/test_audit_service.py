@@ -52,6 +52,10 @@ class _FakeRepo:
     async def list_all(self) -> list[dict[str, Any]]:
         return [dict(log) for log in _LOGS]
 
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        # Serve tambem como repo de users/ (UserNameResolver): sem usuarios modelados aqui.
+        return None
+
 
 @pytest.fixture
 def service(monkeypatch: pytest.MonkeyPatch) -> AuditService:
@@ -128,6 +132,10 @@ class _FakeListRepo:
 
     async def list_all(self) -> list[dict[str, Any]]:
         return [dict(item) for item in self._items]
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        # Serve tambem como repo de users/ (UserNameResolver) no escopo por papel.
+        return None
 
 
 @pytest.fixture
