@@ -28,6 +28,7 @@ from backend.app.models.activity import (
 from backend.app.repositories.activity_repository import ActivityRepository
 from backend.app.repositories.activity_type_repository import ActivityTypeRepository
 from backend.app.repositories.advisor_repository import AdvisorRepository
+from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.services.inference_service import InferenceService
@@ -58,6 +59,7 @@ class ActivityService:
         self._students = StudentRepository()
         self._types = ActivityTypeRepository()
         self._advisors = AdvisorRepository()
+        self._users = FirebaseRepository("users")
         self._inference = inference_service or InferenceService(InferenceRepository())
 
     async def _register_activity(
@@ -202,13 +204,27 @@ class ActivityService:
             parecer=data.parecer,
         )
 
+        coord_uids = await self._get_coord_uids(student.get("programa_id"))
+
         return {
             "id": activity_id,
             "elegibilidade_preliminar": elegibilidade,
-            "notificacao_enviada": False,
+            "notificacao_enviada": len(coord_uids) > 0,
             "aluno_nome": student.get("nome", ""),
             "programa_id": student.get("programa_id"),
+            "coord_uids": coord_uids,
         }
+
+    async def _get_coord_uids(self, programa_id: str | None) -> list[str]:
+        """Lista os uids da coordenação do programa (destinatários do alerta A05)."""
+        if not programa_id:
+            return []
+        users = await self._users.list_all()
+        return [
+            user["id"]
+            for user in users
+            if user.get("role") == "coordenacao" and user.get("programa_id") == programa_id
+        ]
 
     async def list_activities(
         self,
