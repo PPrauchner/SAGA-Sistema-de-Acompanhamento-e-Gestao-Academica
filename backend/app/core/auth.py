@@ -42,7 +42,7 @@ class CurrentUser(BaseModel):
     email: str | None = None
 
 
-def _extrair_bearer_token(authorization: str) -> str:
+def extract_bearer_token(authorization: str) -> str:
     """Extrai o token do header 'Authorization: Bearer <token>'."""
     if not authorization.startswith(_BEARER_PREFIX):
         raise HTTPException(
@@ -64,7 +64,7 @@ async def get_current_user(
     authorization: str = Header(...),
 ) -> CurrentUser:
     """Verifica o Firebase ID Token e retorna a identidade do usuário atual."""
-    token = _extrair_bearer_token(authorization)
+    token = extract_bearer_token(authorization)
 
     try:
         decoded = await asyncio.to_thread(firebase_auth.verify_id_token, token)
