@@ -7,6 +7,11 @@ Responsabilidades:
   preliminar imediatamente. Aplica @requires_role('aluno'), @audit_operation,
   @check_deadlines (verifica data_realizacao dentro do período do curso) e @trigger_alerts
   (notifica orientador após submissão).
+- POST /api/v1/activities/orientador: orientador cria atividade para um orientando seu. A
+  criação já é o endosso — nasce em 'enviado' com o parecer preenchido, direto na fila da
+  coordenação. Aplica @requires_role('orientador'), @requires_ownership (A01 por
+  propriedade → 403 para não-orientandos), @audit_operation, @check_deadlines e
+  @trigger_alerts (notifica a coordenação do programa).
 - POST /api/v1/activities/{activity_id}/comprovante: aluno faz upload real do comprovante
   (PDF/JPEG/PNG) ao Firebase Storage. Backend persiste no bucket via Admin SDK e devolve a
   URL de download tokenizada. Aplica @requires_role('aluno') e @audit_operation.
@@ -28,6 +33,7 @@ from backend.app.aspects.authorization import requires_ownership, requires_role
 from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.activity import (
+    ActivityCreateByAdvisorRequest,
     ActivityCreateRequest,
     ActivityCreateResponse,
     ActivityResponse,
@@ -125,6 +131,75 @@ async def submit_activity(
         elegibilidade_preliminar=result["elegibilidade_preliminar"],
         notificacao_enviada=result["notificacao_enviada"],
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /activities/orientador  (orientador cria para orientando — issue #263)
+# ---------------------------------------------------------------------------
+
+def _owner_uid_do_orientando(kwargs: dict[str, Any]):
+    """Resolver do A01 por propriedade: uid do orientador do aluno alvo (via payload).
+
+    Lê o `aluno_id` do corpo da requisição e delega ao service a resolução
+    aluno → orientador. Retorna None (→ 404 no aspecto) quando não há `aluno_id`.
+    """
+    payload = kwargs.get("payload")
+    aluno_id = getattr(payload, "aluno_id", None)
+    if not aluno_id:
+        return None
+    return activity_service.resolve_advisor_uid_for_student(aluno_id)
+
+
+def _build_notificacao_criacao_orientador(result, args, kwargs) -> list[dict[str, Any]]:
+    """Notifica a coordenação do programa quando o orientador cria uma atividade.
+
+    A atividade nasce direto na fila da coordenação; emite uma notificação (A05) por
+    coordenador do programa (`coord_uids` resolvido pelo service).
+    """
+    if not isinstance(result, dict):
+        return []
+    activity_id = result.get("id", "")
+    aluno_nome = result.get("aluno_nome", "")
+    return [
+        {
+            "tipo": "atividade_submetida",
+            "titulo": "Nova atividade para validação",
+            "mensagem": f"O orientador registrou uma atividade de {aluno_nome} para validação.",
+            "destinatario_id": coord_uid,
+            "entidade_tipo": "activities",
+            "entidade_id": activity_id,
+            "programa_id": result.get("programa_id"),
+        }
+        for coord_uid in result.get("coord_uids", [])
+    ]
+
+
+@router.post(
+    "/activities/orientador",
+    response_model=ActivityCreateResponse,
+    status_code=201,
+)
+@requires_role("orientador")
+@requires_ownership(_owner_uid_do_orientando)
+@audit_operation
+@check_deadlines
+@trigger_alerts(_build_notificacao_criacao_orientador)
+async def submit_activity_by_advisor(
+    payload: ActivityCreateByAdvisorRequest,
+    user: CurrentUser = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Orientador cria atividade creditável para um orientando seu.
+    - Apenas o orientador do próprio aluno pode criar (A01 por propriedade → 403)
+    - A atividade nasce em 'enviado' com o parecer preenchido (pula o passo de parecer)
+    - Créditos só são contabilizados na validação da coordenação (US-CR01 intacto)
+    - Notifica a coordenação do programa (A05) — a atividade entra direto na fila dela
+
+    Retorna o dict do service (não o ActivityCreateResponse) para que @trigger_alerts leia
+    `coord_uids`; o response_model=ActivityCreateResponse serializa a resposta HTTP,
+    descartando as chaves auxiliares.
+    """
+    return await _activity_service.submit_activity_for_orientando(data=payload, user=user)
 
 
 # ---------------------------------------------------------------------------

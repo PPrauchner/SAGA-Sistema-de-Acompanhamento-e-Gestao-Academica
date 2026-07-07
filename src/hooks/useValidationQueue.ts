@@ -23,6 +23,14 @@ export interface ValidationQueueItem {
   orientador: string;
   descricao: string;
   data: string | null;
+  // Detalhes para o modal "ver detalhes" (#264); preenchidos para atividade.
+  tipoNome?: string | null;
+  categoria?: string | null;
+  dataRealizacao?: string | null;
+  creditos?: number | null;
+  comprovanteUrl?: string | null;
+  elegivel?: boolean | null;
+  parecerOrientador?: string | null;
 }
 
 interface UseValidationQueueResult {
@@ -62,6 +70,13 @@ export function useValidationQueue(): UseValidationQueueResult {
               orientador: activity.orientador_nome ?? "—",
               descricao: activity.descricao,
               data: activity.criado_em,
+              tipoNome: activity.tipo_nome,
+              categoria: activity.categoria,
+              dataRealizacao: activity.data_realizacao,
+              creditos: activity.creditos_gerados,
+              comprovanteUrl: activity.comprovante_url,
+              elegivel: activity.elegivel,
+              parecerOrientador: activity.parecer_orientador,
             })),
           ...productions.map((production) => ({
             id: production.id,

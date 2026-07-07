@@ -8,6 +8,9 @@ Responsabilidades:
   gerados pelo aspecto A02 (@audit_operation). Autorizado para coordenação (visão total) e
   orientador (escopado pelo service aos logs dos seus orientandos).
   Alimenta a AuditPage e a timeline do OrientadorDashboard com dados reais.
+- GET /api/v1/audit-logs/filters: retorna as opções distintas de filtro (operações,
+  módulos e usuários com nome) presentes nos logs escopados por papel, para os dropdowns
+  de seleção da AuditPage.
 """
 
 from __future__ import annotations
@@ -18,12 +21,20 @@ from fastapi import APIRouter, Depends, Query
 
 from backend.app.aspects.authorization import requires_role
 from backend.app.core.auth import CurrentUser, get_current_user
-from backend.app.models.audit import AuditLogPage, ResultadoStatus
+from backend.app.models.audit import AuditFilterOptions, AuditLogPage, ResultadoStatus
 from backend.app.services.audit_service import AuditService
 
 router = APIRouter()
 
 service = AuditService()
+
+
+@router.get("/audit-logs/filters")
+@requires_role("coordenacao", "orientador")
+async def list_audit_filter_options(
+    user: CurrentUser = Depends(get_current_user),
+) -> AuditFilterOptions:
+    return await service.list_filter_options(user=user)
 
 
 @router.get("/audit-logs")

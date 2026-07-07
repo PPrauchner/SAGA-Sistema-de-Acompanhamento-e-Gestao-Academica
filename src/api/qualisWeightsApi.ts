@@ -25,6 +25,7 @@ export interface QualisWeightsVersion {
   pesos: QualisWeights;
   vigente_desde: string;
   alterado_por: string;
+  alterado_por_nome?: string | null;
   alterado_em: string;
 }
 
