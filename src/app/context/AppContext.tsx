@@ -17,9 +17,9 @@ export interface NotificationPreferences {
 
 const FONT_SIZE_STORAGE_KEY = "saga:fontSizePreference";
 const FONT_SIZE_SCALES: Record<FontSizePreference, string> = {
-  small: "0.94",
+  small: "0.875",
   normal: "1",
-  large: "1.08",
+  large: "1.125",
 };
 
 function isFontSizePreference(value: string | null): value is FontSizePreference {
