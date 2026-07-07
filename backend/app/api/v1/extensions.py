@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.extension import ExtensionCreateRequest, ExtensionResponse
 from backend.app.services.extension_service import ExtensionService
@@ -11,6 +12,10 @@ from backend.app.services.extension_service import ExtensionService
 router = APIRouter()
 
 service = ExtensionService()
+
+
+def _get_service() -> ExtensionService:
+    return service
 
 
 @router.get("/extensions", response_model=list[ExtensionResponse])
@@ -39,9 +44,11 @@ async def list_pending_extensions(
 )
 @requires_role("aluno", "orientador")
 @audit_operation
+@check_deadlines
 async def create_extension(
     body: ExtensionCreateRequest,
     user: CurrentUser = Depends(get_current_user),
+    service: ExtensionService = Depends(_get_service),
 ) -> ExtensionResponse:
     """Cria uma solicitacao de prorrogacao para aluno ou orientando."""
     return await service.create_extension(body, user)
