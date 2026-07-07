@@ -7,6 +7,7 @@ from typing import Any
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
 STATUS_PENDING = "pendente"
+STATUS_APPROVED = "aprovada"
 
 
 class ExtensionRepository(FirebaseRepository):
@@ -51,3 +52,21 @@ class ExtensionRepository(FirebaseRepository):
             limit=1,
         )
         return bool(matches)
+
+    async def count_approved_for_student(self, student_id: str) -> int:
+        """Conta as prorrogações já aprovadas de um aluno.
+
+        Args:
+            student_id: Aluno cujas prorrogações aprovadas devem ser contadas.
+
+        Returns:
+            Quantidade de documentos em extensions/ do aluno com status 'aprovada'
+            — base para comparar com programs.max_prorrogacoes (sem contador persistido).
+        """
+        matches = await self.query(
+            filters=[
+                ("student_id", "==", student_id),
+                ("status", "==", STATUS_APPROVED),
+            ],
+        )
+        return len(matches)
