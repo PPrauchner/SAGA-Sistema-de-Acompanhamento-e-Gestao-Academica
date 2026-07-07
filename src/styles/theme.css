@@ -196,21 +196,16 @@
     @apply bg-background text-foreground;
   }
 
+  /* zoom padronizado (Chrome 128+/Firefox 126+) já resolve %/vh no espaço
+   * escalado — compensar com divisão pela escala encolhe/estoura o layout. */
   #root {
-    min-height: calc(100vh / var(--app-font-scale));
-    width: calc(100% / var(--app-font-scale));
-    transform-origin: top left;
+    min-height: 100vh;
     zoom: var(--app-font-scale);
   }
 
   @supports not (zoom: 1) {
     html {
       font-size: calc(var(--font-size) * var(--app-font-scale));
-    }
-
-    #root {
-      min-height: 100vh;
-      width: 100%;
     }
   }
 
