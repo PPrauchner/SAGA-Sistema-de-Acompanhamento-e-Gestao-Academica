@@ -91,3 +91,7 @@ class StudentResponse(BaseModel):
 
     qualificacao_data: datetime | None = None
     proficiencia_data: datetime | None = None
+
+    # calc: percentual de tasks concluídas do plano de trabalho (0-100), computado
+    # em leitura pelo StudentService — não é persistido em students/ (issue #317).
+    progresso_plano: float = 0.0
