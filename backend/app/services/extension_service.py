@@ -124,7 +124,10 @@ class ExtensionService:
         Recalcula o `prazo_final` do aluno para a `nova_data` solicitada,
         escrevendo através do `StudentRepository` — o mesmo caminho de
         atualização já usado pelo cadastro de aluno e pela transferência de
-        orientando — em vez de duplicar a lógica de escrita.
+        orientando — em vez de duplicar a lógica de escrita. Quando a
+        solicitação não traz `nova_data` (permitido para `trancamento`, ver
+        `ExtensionCreateRequest`), o `prazo_final` é **preservado** em vez de
+        ser sobrescrito com `None`, evitando apagar o prazo do aluno.
 
         Args:
             extension_id: Id do documento em `extensions/`.
@@ -142,7 +145,8 @@ class ExtensionService:
         now = datetime.now(timezone.utc)
         student_id = extension.get("student_id")
         nova_data = extension.get("nova_data") or extension.get("prazo_novo")
-        await self._students.update(student_id, {"prazo_final": nova_data})
+        if nova_data is not None:
+            await self._students.update(student_id, {"prazo_final": nova_data})
         await self._repo.update(
             extension_id,
             {
