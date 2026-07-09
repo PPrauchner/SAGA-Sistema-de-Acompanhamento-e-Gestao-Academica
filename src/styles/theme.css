@@ -333,7 +333,11 @@
   :root:not(.dark) .inference-root [style*="background:#0f172a"],
   :root:not(.dark) .inference-root [style*="background: #0f172a"],
   :root:not(.dark) .inference-root [style*="background:#0a1628"],
-  :root:not(.dark) .inference-root [style*="background: #0a1628"] {
+  :root:not(.dark) .inference-root [style*="background: #0a1628"],
+  :root:not(.dark) .inference-root [style*="background:#0b1220"],
+  :root:not(.dark) .inference-root [style*="background: #0b1220"],
+  :root:not(.dark) .inference-root [style*="background:#0c1829"],
+  :root:not(.dark) .inference-root [style*="background: #0c1829"] {
     background-color: #1a2540 !important;
     background-image: none !important;
   }
