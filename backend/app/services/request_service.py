@@ -56,6 +56,8 @@ class RequestService:
             requests.extend(await self._get_advisor_requests(user))
         elif user.role == "coordenacao":
             requests.extend(await self._get_coordinator_requests(user))
+        elif user.role == "adm":
+            requests.extend(await self._get_adm_requests())
 
         # Ordenar por data_solicitacao DESCENDENTE
         requests.sort(key=lambda req: req.data_solicitacao, reverse=True)
@@ -285,6 +287,37 @@ class RequestService:
                     )
                 )
 
+        return requests
+
+    async def _get_adm_requests(self) -> list[RequestItem]:
+        """Retorna as transferências de coordenação pendentes de todos os programas.
+
+        O papel `adm` é global (ADR-0001): gere coordenadores cross-programa e, por
+        isso, enxerga as transferências de coordenação de qualquer programa — não
+        apenas de um `programa_id`, que para o `adm` é `null`.
+
+        Returns:
+            Lista de RequestItem de `transferencia_coordenacao` com status pendente.
+        """
+        requests: list[RequestItem] = []
+        all_coord_transfers = (
+            await self._coord_transfers.list_all()
+            if hasattr(self._coord_transfers, "list_all")
+            else []
+        )
+        for ct in all_coord_transfers:
+            if ct.get("status") == "pendente":
+                initiator_name = await self._get_user_name(ct.get("initiator_uid"))
+                requests.append(
+                    self._build_request(
+                        id=ct.get("id", ""),
+                        tipo="transferencia_coordenacao",
+                        solicitante=initiator_name,
+                        data=ct.get("created_at") or datetime.now(timezone.utc),
+                        status="pendente",
+                        payload=ct,
+                    )
+                )
         return requests
 
     async def _get_advisor_students(self, user: CurrentUser) -> list[dict[str, Any]]:
