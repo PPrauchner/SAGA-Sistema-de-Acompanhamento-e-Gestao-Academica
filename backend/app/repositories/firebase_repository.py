@@ -134,7 +134,8 @@ class FirebaseRepository:
         filters: list[tuple] | None = None,
         order_by: str | None = None,
         limit: int | None = None,
-        subcollection_path: str | None = None
+        subcollection_path: str | None = None,
+        descending: bool = False,
     ) -> list[dict[str, Any]]:
         """Realiza uma consulta na coleção ou subcoleção.
 
@@ -143,6 +144,8 @@ class FirebaseRepository:
             order_by: Nome do campo para ordenação.
             limit: Número máximo de resultados.
             subcollection_path: Opcional, permite consultar subcoleções ignorando self.collection.
+            descending: Ordena o order_by em ordem decrescente (ex.: auditoria mais recente
+                primeiro com limit, sem ler a coleção inteira).
 
         Returns:
             Lista de documentos (dicts) que atendem aos critérios.
@@ -156,7 +159,9 @@ class FirebaseRepository:
                     query_ref = query_ref.where(field, op, value)
 
             if order_by:
-                query_ref = query_ref.order_by(order_by)
+                query_ref = query_ref.order_by(
+                    order_by, direction="DESCENDING" if descending else "ASCENDING"
+                )
 
             if limit:
                 query_ref = query_ref.limit(limit)
