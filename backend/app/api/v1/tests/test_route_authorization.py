@@ -215,7 +215,7 @@ def test_comprovante_upload_papel_incorreto_403(client: TestClient, role: str) -
 
     response = client.post(
         "/api/v1/activities/x/comprovante",
-        files={"file": ("comprovante.pdf", b"%PDF-1.4 dummy", "application/pdf")},
+        files={"arquivo": ("comprovante.pdf", b"%PDF-1.4 dummy", "application/pdf")},
     )
 
     assert response.status_code == 403
