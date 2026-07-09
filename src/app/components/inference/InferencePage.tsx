@@ -54,7 +54,7 @@ interface StudentProfile {
   short: string;
   matricula: string;
   programa: string;
-  overallRisk: "apto" | "em-risco" | "critico";
+  overallRisk: "apto" | "regular" | "em-risco" | "critico";
   facts: FactData[];
   rules: RuleData[];
   conclusions: ConclusionData[];
@@ -71,18 +71,21 @@ function statusOk(status: RequisitoStatus): boolean {
   return status === "cumprido";
 }
 
-/** Bucket de risco da visualização a partir dos booleanos reais do motor. */
+/** Bucket de risco da visualização, fiel aos booleanos reais do motor:
+ * apto_defesa → apto; em_risco → em-risco; caso contrário o aluno está regular. */
 function riskFromInference(inf: InferenceResult): StudentProfile["overallRisk"] {
   if (inf.apto_defesa) return "apto";
-  if (inf.em_risco) return "critico";
-  return "em-risco";
+  if (inf.em_risco) return "em-risco";
+  if (inf.situacao_inferida === "desligado") return "critico";
+  return "regular";
 }
 
 /** Bucket de risco do card a partir da situação inferida (sem nova consulta ao motor). */
 function cardRisk(situacao: string): StudentProfile["overallRisk"] {
   if (situacao === "em_fase_de_defesa" || situacao === "concluido") return "apto";
-  if (situacao === "em_risco" || situacao === "desligado") return "critico";
-  return "em-risco";
+  if (situacao === "em_risco") return "em-risco";
+  if (situacao === "desligado") return "critico";
+  return "regular";
 }
 
 function shortName(nome: string): string {
@@ -867,8 +870,9 @@ function RealInferencePanel() {
 
 const RISK_CFG = {
   apto:     { label:"Apto à Defesa",  color:"#10b981", bg:"#022c22", border:"#064e3b" },
+  regular:  { label:"Regular",        color:"#60a5fa", bg:"#0c1829", border:"#1e3a5f" },
   "em-risco":{ label:"Em Risco",      color:"#f59e0b", bg:"#1c1002", border:"#451a03" },
-  critico:  { label:"Crítico",        color:"#ef4444", bg:"#2c0a0a", border:"#450a0a" },
+  critico:  { label:"Desligado",      color:"#ef4444", bg:"#2c0a0a", border:"#450a0a" },
 };
 
 export function InferencePage() {
