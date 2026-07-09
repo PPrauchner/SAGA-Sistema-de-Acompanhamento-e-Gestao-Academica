@@ -22,6 +22,10 @@ class ExtensionCreateRequest(BaseModel):
     student_id: str | None = None
 
 
+class ExtensionRejectRequest(BaseModel):
+    motivo: str = Field(..., min_length=1)
+
+
 class ExtensionResponse(BaseModel):
     id: str
     tipo: str
