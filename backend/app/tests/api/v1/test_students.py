@@ -179,3 +179,28 @@ def test_post_students_permite_orientador(client: TestClient) -> None:
     assert response.json()["invite_token"] == "tok-aluno"
     assert fake_service.user is not None
     assert fake_service.user.role == "orientador"
+
+
+def test_post_students_sem_nivel_usa_default_mestrado(client: TestClient) -> None:
+    fake_service = _FakeStudentService()
+    original_service = students_router.service
+    students_router.service = fake_service
+
+    response = client.post(
+        "/api/v1/students",
+        json={
+            "nome": "Novo Aluno",
+            "email": "novo@saga.edu",
+            "matricula": "2026003",
+            "orientador_id": "advisor1",
+            "coorientador_id": None,
+            "data_ingresso": "2026-01-01T00:00:00Z",
+            "programa_id": "prog",
+        },
+    )
+
+    students_router.service = original_service
+
+    assert response.status_code == 201
+    assert fake_service.body is not None
+    assert fake_service.body.nivel == "mestrado"

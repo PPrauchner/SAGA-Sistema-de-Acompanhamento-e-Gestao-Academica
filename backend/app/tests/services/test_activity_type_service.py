@@ -49,9 +49,9 @@ async def test_create_type_calls_repo(service, mock_repo):
     """Deve chamar o repositório para criar o tipo de atividade."""
     # Configuração
     data = ActivityTypeCreate(
-        nome="Patente", 
-        categoria="tecnologico", 
-        pontuacao_base=5.0, 
+        nome="Patente",
+        categoria="tecnologico",
+        pontuacao_base=5.0,
         programa_id="prog_default"
     )
     mock_repo.create_type.return_value = "new_id"

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 TipoSolicitacao = Literal[
     "atividade",
+    "producao",
     "prorrogacao",
     "trancamento",
     "transferencia",

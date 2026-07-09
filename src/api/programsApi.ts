@@ -26,9 +26,9 @@ export const programsApi = {
     const response = await fetch(`${API_BASE_URL}/programs/config`, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
-    
+
     if (response.status === 404) return null;
-    
+
     if (!response.ok) throw new Error('Failed to fetch program config');
     return response.json();
   },
@@ -42,8 +42,12 @@ export const programsApi = {
       },
       body: JSON.stringify(data)
     });
-    if (!response.ok) throw new Error('Failed to update program config');
-    return response.json();
+    const responseData = await response.json().catch(() => null);
+    if (!response.ok) {
+      const detail = responseData?.detail;
+      throw new Error(typeof detail === "string" ? detail : 'Failed to update program config');
+    }
+    return responseData;
   },
 
   updateVehicleLevel: async (token: string, vehicleId: string, data: { nivel: string, peso: number }) => {

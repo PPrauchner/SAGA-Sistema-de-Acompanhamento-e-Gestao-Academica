@@ -6,12 +6,12 @@ Responsabilidades:
   nivel_relevancia(V, Prog, Nivel), relevancia_peso(Nivel, Peso), pontuacao_base(P, Base),
   Score = Base * Peso (built-in aritmético).
 - Fatos de configuração de pesos (escala Qualis Único monotônica A1–A8 + fallback):
-  relevancia_peso('A1', 1.0), relevancia_peso('A2', 0.85), relevancia_peso('A4', 0.55),
-  relevancia_peso('A8', 0.15) — carregados da coleção programs/prog_default/vehicle_levels/
+  relevancia_peso('A1', 1.0), relevancia_peso('A2', 0.9), relevancia_peso('A4', 0.7),
+  relevancia_peso('A8', 0.3) — carregados da coleção programs/prog_default/qualis_weights/
   pelo InferenceService.
 - Executada em ProductionService.create_production() e em GET /api/v1/inference/{student_id}.
-- Casos de teste: producao_A1_base10 → Score=10.0, producao_A4_base10 → Score=5.5,
-  producao_A8_base10 → Score=1.5.
+- Casos de teste: producao_A1_base10 → Score=10.0, producao_A4_base10 → Score=7.0,
+  producao_A8_base10 → Score=3.0.
 """
 
 from __future__ import annotations

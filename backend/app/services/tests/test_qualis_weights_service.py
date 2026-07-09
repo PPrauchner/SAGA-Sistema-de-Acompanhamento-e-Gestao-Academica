@@ -65,6 +65,10 @@ def test_resolve_retorna_none_sem_versoes() -> None:
     assert resolve_weights_at([], datetime.now(timezone.utc)) is None
 
 
+def test_default_sc_tem_pontuacao_minima() -> None:
+    assert PESO_POR_NIVEL["SC"] == 0.2
+
+
 # -- QualisWeightsService ---------------------------------------------------------------
 
 
@@ -117,6 +121,46 @@ async def test_list_history_ordena_recente_primeiro(service: QualisWeightsServic
     ]
     history = await service.list_history("prog1")
     assert [v["id"] for v in history] == ["nova", "antiga"]
+
+
+class _FakeNames:
+    """Resolver fake de uid→nome (sem I/O)."""
+
+    def __init__(self, mapping: dict[str, str]) -> None:
+        self._mapping = mapping
+
+    async def resolve(self, uids: Any) -> dict[str, str]:
+        return {uid: self._mapping[uid] for uid in uids if uid in self._mapping}
+
+
+async def test_list_history_resolve_alterado_por_nome(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qws_module, "QualisWeightsRepository", _FakeRepo)
+    service = QualisWeightsService(names=_FakeNames({"coord-uid": "Ana Souza"}))
+    service._repo.store["prog1"] = [
+        {**_version("v1", 2025, A1=0.5), "alterado_por": "coord-uid"},
+    ]
+
+    history = await service.list_history("prog1")
+
+    assert history[0]["alterado_por_nome"] == "Ana Souza"
+    # uid persistido permanece inalterado
+    assert history[0]["alterado_por"] == "coord-uid"
+
+
+async def test_list_history_alterado_por_nome_none_quando_desconhecido(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(qws_module, "QualisWeightsRepository", _FakeRepo)
+    service = QualisWeightsService(names=_FakeNames({}))
+    service._repo.store["prog1"] = [
+        {**_version("v1", 2025, A1=0.5), "alterado_por": "fantasma"},
+    ]
+
+    history = await service.list_history("prog1")
+
+    assert history[0]["alterado_por_nome"] is None
 
 
 async def test_get_active_weights_fallback_sem_versao(service: QualisWeightsService) -> None:

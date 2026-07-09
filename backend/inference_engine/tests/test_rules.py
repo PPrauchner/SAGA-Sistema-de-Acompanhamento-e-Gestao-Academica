@@ -257,25 +257,32 @@ class TestProductionScoring:
         assert results[0]["Score"].value == pytest.approx(10.0)
 
     def test_producao_A4_base10(self):
-        engine = make_engine(*self._fatos_producao("p1", "v2", "A4", 0.55, 10))
+        engine = make_engine(*self._fatos_producao("p1", "v2", "A4", 0.7, 10))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"].value == pytest.approx(5.5)
+        assert results[0]["Score"].value == pytest.approx(7.0)
 
     def test_producao_A8_base10(self):
-        engine = make_engine(*self._fatos_producao("p1", "v3", "A8", 0.15, 10))
+        engine = make_engine(*self._fatos_producao("p1", "v3", "A8", 0.3, 10))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"].value == pytest.approx(1.5)
+        assert results[0]["Score"].value == pytest.approx(3.0)
+
+    def test_producao_SC_base10(self):
+        engine = make_engine(*self._fatos_producao("p1", "v_sc", "SC", 0.2, 10))
+        Score = Variable("Score")
+        results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
+        assert len(results) == 1
+        assert results[0]["Score"].value == pytest.approx(2.0)
 
     def test_producao_A2_base8(self):
-        engine = make_engine(*self._fatos_producao("p1", "v4", "A2", 0.85, 8))
+        engine = make_engine(*self._fatos_producao("p1", "v4", "A2", 0.9, 8))
         Score = Variable("Score")
         results = engine.query(Compound("pontuacao_producao", [Atom("p1"), Score]))
         assert len(results) == 1
-        assert results[0]["Score"].value == pytest.approx(6.8)
+        assert results[0]["Score"].value == pytest.approx(7.2)
 
     def test_veiculo_sem_nivel_configurado(self):
         fatos = [

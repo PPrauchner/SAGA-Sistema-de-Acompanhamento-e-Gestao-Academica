@@ -22,7 +22,7 @@ from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.services.advisor_service import AdvisorService
 
 _PENDING = "pendente"
-_ACCEPTED = "aceita"
+_ACCEPTED = "concluido"
 
 
 class CoordinationTransferService:

@@ -34,7 +34,7 @@ export interface Solicitacao {
 
 export interface CreateSolicitacaoPayload {
   tipo: string;
-  nova_data: string;
+  nova_data?: string;
   motivo: string;
   student_id?: string;
 }

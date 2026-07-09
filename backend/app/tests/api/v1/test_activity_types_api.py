@@ -37,7 +37,7 @@ def test_get_activity_types_success():
 
     # Execute
     response = client.get("/api/v1/activity-types")
-    
+
     # Cleanup
     app.dependency_overrides = {}
 
@@ -61,12 +61,12 @@ def test_create_activity_type_success():
 
     # Execute
     response = client.post("/api/v1/activity-types", json={
-        "nome": "Patente", 
-        "categoria": "tecnologico", 
-        "pontuacao_base": 5.0, 
+        "nome": "Patente",
+        "categoria": "tecnologico",
+        "pontuacao_base": 5.0,
         "programa_id": "prog_default"
     })
-    
+
     # Cleanup
     app.dependency_overrides = {}
 

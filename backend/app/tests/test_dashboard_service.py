@@ -126,7 +126,7 @@ async def test_aluno_dashboard_aggregates_credits_by_group():
         {"id": "a3", "status": "aprovado", "creditos_concedidos": 2.0,
          "tipo_id": "t_tecnologico", "producao_id": None},
         {"id": "a4", "status": "enviado", "creditos_concedidos": 4.0,
-         "tipo_id": "t_basico", "producao_id": None},  
+         "tipo_id": "t_basico", "producao_id": None},
     ]
 
     with (
@@ -174,7 +174,7 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
         {"id": "a4", "status": "enviado", "producao_id": None,
          "creditos_concedidos": 2.0, "categoria": "tecnologico"},
         {"id": "a5", "status": "aprovado", "producao_id": None,
-         "creditos_concedidos": 4.0, "categoria": "basico"},  
+         "creditos_concedidos": 4.0, "categoria": "basico"},
     ]
 
     with (
@@ -197,11 +197,11 @@ async def test_aluno_dashboard_counts_producoes_and_pending():
         service = DashboardService()
         result = await service.get_aluno_dashboard("stu_001")
 
-    assert result.producoes_aprovadas == 2 
+    assert result.producoes_aprovadas == 2
     assert result.producoes.total == 2
     assert result.producoes.pontuacao_total == 6.5
     assert result.producoes.por_nivel == {"A1": 1, "A2": 1}
-    assert result.atividades_pendentes_validacao == 2 
+    assert result.atividades_pendentes_validacao == 2
 
     MockSR.return_value.get.assert_called_once_with("stu_001")
     MockAR.return_value.list_by_student.assert_called_once_with("stu_001")
@@ -738,7 +738,7 @@ async def test_aluno_dashboard_calculates_real_progress():
     assert result.checklist_resumo.pendentes == 6
     assert result.checklist_resumo.em_risco == 1
     assert result.checklist_resumo.total == 8
-    
+
     assert len(result.tasks_proximas) == 3
     assert result.tasks_proximas[0].titulo == "T2" # 2026-06-21
     assert result.tasks_proximas[1].titulo == "T4" # 2026-06-28

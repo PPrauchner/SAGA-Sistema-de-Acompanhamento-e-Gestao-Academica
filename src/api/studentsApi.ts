@@ -94,9 +94,10 @@ export function createStudent(
   token: string,
   data: StudentCreatePayload,
 ): Promise<StudentCreateResult> {
+  const payload: StudentCreatePayload = { ...data, nivel: "mestrado" };
   return request<StudentCreateResult>("/api/v1/students", token, {
     method: "POST",
-    body: JSON.stringify(data),
+    body: JSON.stringify(payload),
   });
 }
 

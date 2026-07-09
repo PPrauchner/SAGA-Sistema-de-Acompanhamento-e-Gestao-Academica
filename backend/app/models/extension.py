@@ -5,21 +5,27 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from backend.app.models.validators import DataFutura
 
 ExtensionStatus = Literal["pendente", "em_analise", "aprovada", "rejeitada"]
 ExtensionType = Literal[
-    "prazo_defesa", "prazo_qualificacao", "trancamento", "mudanca_nivel"
+    "prorrogacao", "prazo_defesa", "prazo_qualificacao", "trancamento", "mudanca_nivel"
 ]
 
 
 class ExtensionCreateRequest(BaseModel):
     tipo: ExtensionType
-    nova_data: DataFutura
+    nova_data: DataFutura | None = None
     motivo: str = Field(..., min_length=1)
     student_id: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_fields_by_type(self) -> "ExtensionCreateRequest":
+        if self.tipo in {"prorrogacao", "prazo_defesa", "prazo_qualificacao"} and self.nova_data is None:
+            raise ValueError("nova_data e obrigatoria para prorrogacao")
+        return self
 
 
 class ExtensionRejectRequest(BaseModel):

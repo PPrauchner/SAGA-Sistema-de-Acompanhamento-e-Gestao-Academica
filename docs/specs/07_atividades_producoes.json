@@ -49,7 +49,7 @@
         "nao_excede_limite_categoria(activity_id, student_id) — soma créditos aprovados da categoria + pontucacao_base <= limite_maximo_creditos",
         "producao_veiculo(producao_id, veiculo_id) — campo da produção",
         "nivel_relevancia(veiculo_id, programa_id, nivel) — de programs/prog_default/vehicle_levels/",
-        "relevancia_peso(nivel, peso) — de programs/prog_default/vehicle_levels/",
+        "relevancia_peso(nivel, peso) — de programs/prog_default/qualis_weights/",
         "pontuacao_base(producao_id, valor) — de activity_types/{tipo_id}.pontuacao_base",
         "producao_bibliografica_validada(student_id) — ≥1 produção com status='aprovado' na coleção"
       ]
@@ -311,7 +311,7 @@
         "tipo": "string ('evento'|'revista')",
         "sigla": "string | null",
         "issn": "string | null",
-        "nivel": "string ('A1'|'A2'|'A3'|'A4'|'B1'|'B2'|'SC') — configurável em vehicle_levels"
+        "nivel": "string ('A1'|'A2'|'A3'|'A4'|'A5'|'A6'|'A7'|'A8'|'SC') — configurável em vehicle_levels"
       },
       "response_201": {"id": "string", "peso_atribuido": "float"}
     }

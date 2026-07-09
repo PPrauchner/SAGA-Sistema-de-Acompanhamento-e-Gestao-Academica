@@ -27,10 +27,21 @@ from typing import Any, Callable, Optional
 
 from backend.app.aspects import aspect_config
 from backend.app.core.firebase import get_firestore_client
+from backend.app.repositories.firebase_repository import FirebaseRepository as FirestoreRepository
 
 logger = logging.getLogger(__name__)
 
 _COLLECTION = "notifications"
+UserPreferencesRepository = FirestoreRepository
+
+_DEFAULT_NOTIFICATION_PREFERENCES = {
+    "email": True,
+    "in_app": True,
+    "work_plan": True,
+    "transfers": True,
+    "activities": True,
+    "extensions": True,
+}
 
 
 class FirebaseRepository:
@@ -47,6 +58,43 @@ class FirebaseRepository:
         except Exception as exc:
             logger.error("[A05] Falha ao gravar notificação: %s", exc)
             return ""
+
+
+def _preference_key_for_notification(spec: dict[str, Any]) -> str | None:
+    tipo = str(spec.get("tipo", ""))
+    entidade_tipo = str(spec.get("entidade_tipo", ""))
+
+    if tipo in {"progresso_task", "prazo_critico"} or entidade_tipo == "work_plan":
+        return "work_plan"
+    if tipo.startswith("transferencia_") or entidade_tipo in {"transfer", "transfers"}:
+        return "transfers"
+    if tipo in {"atividade_validada", "atividade_submetida"} or entidade_tipo == "activities":
+        return "activities"
+    if tipo == "prorrogacao_aprovada" or entidade_tipo == "extensions":
+        return "extensions"
+    return None
+
+
+async def _notification_enabled(spec: dict[str, Any]) -> bool:
+    destinatario_id = spec.get("destinatario_id")
+    if not destinatario_id:
+        return True
+
+    try:
+        user_doc = await UserPreferencesRepository("users").get(destinatario_id)
+    except Exception as exc:
+        logger.error("[A05] Falha ao ler preferencias de notificacao: %s", exc)
+        return True
+
+    preferences = {
+        **_DEFAULT_NOTIFICATION_PREFERENCES,
+        **((user_doc or {}).get("notification_preferences") or {}),
+    }
+    if not preferences.get("in_app", True):
+        return False
+
+    preference_key = _preference_key_for_notification(spec)
+    return preference_key is None or preferences.get(preference_key, True)
 
 
 def trigger_alerts(build: Callable) -> Callable:
@@ -88,6 +136,13 @@ def trigger_alerts(build: Callable) -> Callable:
                         "lida": spec.get("lida", False),
                         "timestamp": spec.get("timestamp", datetime.now(timezone.utc)),
                     }
+                    if not await _notification_enabled(doc):
+                        logger.debug(
+                            "[A05] Notificacao ignorada por preferencia: tipo=%s destinatario=%s",
+                            spec.get("tipo"),
+                            spec.get("destinatario_id"),
+                        )
+                        continue
                     await repo.create(doc)
                     logger.debug(
                         "[A05] Notificação gravada: tipo=%s destinatario=%s",
@@ -142,6 +197,13 @@ async def disparar_alerta_prazo(
     }
 
     try:
+        if not await _notification_enabled(doc):
+            logger.debug(
+                "[A05] Alerta de prazo ignorado por preferencia: destinatario=%s",
+                destinatario_id,
+            )
+            return
+
         repo = FirebaseRepository(_COLLECTION)
         await repo.create(doc)
         logger.debug(

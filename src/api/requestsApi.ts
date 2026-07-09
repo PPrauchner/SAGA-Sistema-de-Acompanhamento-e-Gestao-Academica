@@ -4,6 +4,7 @@ export interface RequestItem {
   id: string;
   tipo:
     | "atividade"
+    | "producao"
     | "prorrogacao"
     | "trancamento"
     | "transferencia"

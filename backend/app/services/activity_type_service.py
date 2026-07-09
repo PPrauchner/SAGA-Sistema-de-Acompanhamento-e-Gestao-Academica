@@ -61,7 +61,7 @@ class ActivityTypeService:
         """
         now = datetime.now(timezone.utc)
         payload = data.model_dump()
-        
+
         if user:
             payload.update({
                 "programa_id": user.programa_id,
@@ -127,9 +127,9 @@ class ActivityTypeService:
             True se a alteração for bem-sucedida, ou dicionário se `user` for fornecido.
         """
         current_type = await self._get_or_404(type_id)
-        
+
         new_status = data.ativo if data else not current_type.get("ativo", True)
-        
+
         await self.repository.update_type(
             type_id,
             {"ativo": new_status, "atualizado_em": datetime.now(timezone.utc)},

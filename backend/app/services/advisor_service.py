@@ -5,7 +5,7 @@ Responsabilidades:
 - Implementar CRUD de orientadores delegando persistência ao AdvisorRepository.
 - create_advisor(): cria orientador no Firestore e dispara convite de primeiro acesso via
   AuthService.
-- update_advisor(): atualiza dados do orientador (nome, departamento, lattes, limite).
+- update_advisor(): atualiza dados editaveis do orientador (nome, lattes, limite).
 - get_advisors_with_count(): lista orientadores enriquecendo cada registro com contagem
   de orientandos_ativos calculada por query na coleção students/.
 - Verificar limite_orientandos antes de permitir associação de novo orientando ao orientador.
@@ -150,9 +150,21 @@ class AdvisorService:
     ) -> dict:
         await self._reject_self_management(advisor_id, user)
 
+        update_data = data.model_dump(exclude_none=True)
+
+        if "limite_orientandos" in update_data:
+            active_students = await self._advisors.count_active_students(
+                advisor_id,
+            )
+            if update_data["limite_orientandos"] < active_students:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Limite nao pode ser menor que orientandos ativos",
+                )
+
         await self._advisors.update(
             advisor_id,
-            data.model_dump(exclude_none=True),
+            update_data,
         )
 
         return {

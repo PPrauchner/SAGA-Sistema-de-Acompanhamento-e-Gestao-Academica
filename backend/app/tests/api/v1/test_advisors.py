@@ -31,6 +31,9 @@ class _FakeAdvisorRepository:
     async def count_active_students(self, advisor_id: str) -> int:
         return self.active_count
 
+    async def update(self, advisor_id: str, data: dict[str, Any]) -> None:
+        self.store.setdefault(advisor_id, {}).update(data)
+
 
 class _FakeUserRepository:
     """Sem coordenadores por padrão: list_advisors não precisa provisionar nada."""
@@ -145,3 +148,65 @@ def test_get_advisors_orientador_oculta_convites_pendentes(client: TestClient) -
 
     assert response.status_code == 200
     assert [advisor["id"] for advisor in response.json()] == ["advisor1"]
+
+
+def test_update_advisor_altera_campos_editaveis(client: TestClient) -> None:
+    store = {
+        "advisor1": {
+            "uid": "uid-advisor",
+            "nome": "Nome Antigo",
+            "email": "advisor@saga.edu",
+            "departamento": "Computacao",
+            "programa_id": "prog",
+            "lattes": None,
+            "limite_orientandos": 5,
+        },
+    }
+    advisors_router.service._advisors = _FakeAdvisorRepository(store)
+
+    response = client.put(
+        "/api/v1/advisors/advisor1",
+        json={
+            "nome": "Nome Novo",
+            "lattes": "https://lattes.cnpq.br/123",
+            "limite_orientandos": 7,
+        },
+    )
+
+    assert response.status_code == 200
+    assert store["advisor1"]["nome"] == "Nome Novo"
+    assert store["advisor1"]["lattes"] == "https://lattes.cnpq.br/123"
+    assert store["advisor1"]["limite_orientandos"] == 7
+    assert store["advisor1"]["departamento"] == "Computacao"
+
+
+def test_update_advisor_rejeita_departamento(client: TestClient) -> None:
+    store = {
+        "advisor1": {
+            "uid": "uid-advisor",
+            "nome": "Orientador",
+            "email": "advisor@saga.edu",
+            "departamento": "Computacao",
+            "programa_id": "prog",
+        },
+    }
+    advisors_router.service._advisors = _FakeAdvisorRepository(store)
+
+    response = client.put(
+        "/api/v1/advisors/advisor1",
+        json={"departamento": "Outro"},
+    )
+
+    assert response.status_code == 422
+    assert store["advisor1"]["departamento"] == "Computacao"
+
+
+def test_update_advisor_rejeita_limite_invalido(client: TestClient) -> None:
+    advisors_router.service._advisors = _FakeAdvisorRepository({"advisor1": _legacy_advisor()})
+
+    response = client.put(
+        "/api/v1/advisors/advisor1",
+        json={"limite_orientandos": -1},
+    )
+
+    assert response.status_code == 422

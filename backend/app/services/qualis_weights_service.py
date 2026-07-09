@@ -9,7 +9,8 @@ Responsabilidades:
   vigente_desde <= data; faz fallback para a escala default PESO_POR_NIVEL quando não há
   nenhuma versão aplicável (bootstrap).
 - get_active_weights(): atalho para o conjunto vigente hoje.
-- list_history(): retorna o histórico de versões (mais recente primeiro).
+- list_history(): retorna o histórico de versões (mais recente primeiro), enriquecendo cada
+  versão com alterado_por_nome resolvido no read path a partir de alterado_por (uid).
 
 Restrição: única camada que conhece a regra de resolução por data; o repositório apenas
 persiste e lê.
@@ -23,6 +24,7 @@ from typing import Any
 from backend.app.models.qualis_weights import QualisWeightsUpdate
 from backend.app.models.vehicle import PESO_POR_NIVEL
 from backend.app.repositories.qualis_weights_repository import QualisWeightsRepository
+from backend.app.services.user_name_resolver import UserNameResolver
 
 
 def _as_aware(value: Any) -> datetime:
@@ -71,8 +73,10 @@ def resolve_weights_at(
 class QualisWeightsService:
     """Serviço de negócio das versões de pesos Qualis de um programa."""
 
-    def __init__(self) -> None:
+    def __init__(self, names: UserNameResolver | None = None) -> None:
         self._repo = QualisWeightsRepository()
+        # Resolve alterado_por→nome na leitura do histórico (read path). Injetável em teste.
+        self._names = names or UserNameResolver()
 
     async def set_weights(
         self,
@@ -127,7 +131,14 @@ class QualisWeightsService:
         return await self.get_weights_at(programa_id, datetime.now(timezone.utc))
 
     async def list_history(self, programa_id: str) -> list[dict[str, Any]]:
-        """Retorna o histórico de versões de pesos, da mais recente para a mais antiga."""
+        """Retorna o histórico de versões de pesos, da mais recente para a mais antiga.
+
+        Cada versão é enriquecida com `alterado_por_nome` (resolvido de `alterado_por` no
+        read path); o uid `alterado_por` persistido permanece inalterado.
+        """
         versions = await self._repo.list_versions(programa_id)
         versions.sort(key=lambda v: _as_aware(v.get("vigente_desde")), reverse=True)
+        nomes = await self._names.resolve(v.get("alterado_por") for v in versions)
+        for version in versions:
+            version["alterado_por_nome"] = nomes.get(version.get("alterado_por"))
         return versions

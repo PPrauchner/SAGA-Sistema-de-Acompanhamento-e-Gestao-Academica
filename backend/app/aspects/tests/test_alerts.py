@@ -29,6 +29,16 @@ class _NotifRepo:
         return f"n{len(type(self).created)}"
 
 
+class _UserPrefsRepo:
+    store: dict[str, dict[str, Any]] = {}
+
+    def __init__(self, collection: str) -> None:
+        self.collection = collection
+
+    async def get(self, doc_id: str) -> dict[str, Any] | None:
+        return self.store.get(doc_id)
+
+
 def _spec(destinatario_id: str) -> dict[str, str]:
     return {
         "tipo": "atividade_validada",
@@ -43,6 +53,8 @@ async def test_trigger_alerts_persiste_e_aplica_defaults(
 ) -> None:
     _NotifRepo.created = []
     monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+    _UserPrefsRepo.store = {}
 
     @trigger_alerts(lambda result, args, kwargs: _spec("u1"))
     async def op() -> dict[str, str]:
@@ -63,6 +75,8 @@ async def test_trigger_alerts_respeita_flag_desativada(
     _NotifRepo.created = []
     monkeypatch.setattr(aspect_config, "ALERTS_ENABLED", False)
     monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+    _UserPrefsRepo.store = {}
 
     @trigger_alerts(lambda result, args, kwargs: _spec("u1"))
     async def op() -> str:
@@ -77,6 +91,8 @@ async def test_trigger_alerts_suporta_builder_assincrono(
 ) -> None:
     _NotifRepo.created = []
     monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+    _UserPrefsRepo.store = {}
 
     async def build(result: Any, args: tuple, kwargs: dict) -> dict[str, str]:
         return _spec("u2")
@@ -94,6 +110,8 @@ async def test_trigger_alerts_builder_none_nao_persiste(
 ) -> None:
     _NotifRepo.created = []
     monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+    _UserPrefsRepo.store = {}
 
     @trigger_alerts(lambda result, args, kwargs: None)
     async def op() -> str:
@@ -108,6 +126,8 @@ async def test_trigger_alerts_lista_persiste_varias(
 ) -> None:
     _NotifRepo.created = []
     monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+    _UserPrefsRepo.store = {}
 
     @trigger_alerts(lambda result, args, kwargs: [_spec("aluno"), _spec("orientador")])
     async def op() -> dict:
@@ -117,11 +137,40 @@ async def test_trigger_alerts_lista_persiste_varias(
     assert {doc["destinatario_id"] for doc in _NotifRepo.created} == {"aluno", "orientador"}
 
 
+async def test_notifica_coordenacao_na_criacao_pelo_orientador(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Prova a fiação da issue #263: quando a função retorna o dict do service (com
+    # coord_uids), o builder emite uma notificação por coordenador. O endpoint
+    # submit_activity_by_advisor retorna esse dict justamente para o advice enxergar.
+    from backend.app.api.v1.activities import _build_notificacao_criacao_orientador
+
+    _NotifRepo.created = []
+    monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+
+    @trigger_alerts(_build_notificacao_criacao_orientador)
+    async def op() -> dict[str, Any]:
+        return {
+            "id": "a1",
+            "aluno_nome": "Maria",
+            "programa_id": "prog_default",
+            "coord_uids": ["c1", "c2"],
+        }
+
+    await op()
+
+    assert {doc["destinatario_id"] for doc in _NotifRepo.created} == {"c1", "c2"}
+    assert all(doc["tipo"] == "atividade_submetida" for doc in _NotifRepo.created)
+    assert all(doc["entidade_id"] == "a1" for doc in _NotifRepo.created)
+
+
 async def test_trigger_alerts_nao_dispara_em_excecao(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _NotifRepo.created = []
     monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+    _UserPrefsRepo.store = {}
 
     @trigger_alerts(lambda result, args, kwargs: _spec("u1"))
     async def op() -> None:
@@ -131,3 +180,41 @@ async def test_trigger_alerts_nao_dispara_em_excecao(
         await op()
 
     assert _NotifRepo.created == []
+
+
+async def test_trigger_alerts_respeita_preferencia_desabilitada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _NotifRepo.created = []
+    _UserPrefsRepo.store = {
+        "u1": {"notification_preferences": {"activities": False}},
+    }
+    monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+
+    @trigger_alerts(lambda result, args, kwargs: _spec("u1"))
+    async def op() -> str:
+        return "ok"
+
+    await op()
+
+    assert _NotifRepo.created == []
+
+
+async def test_trigger_alerts_envia_quando_preferencia_habilitada(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _NotifRepo.created = []
+    _UserPrefsRepo.store = {
+        "u1": {"notification_preferences": {"activities": True}},
+    }
+    monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+    monkeypatch.setattr(alerts_module, "UserPreferencesRepository", _UserPrefsRepo)
+
+    @trigger_alerts(lambda result, args, kwargs: _spec("u1"))
+    async def op() -> str:
+        return "ok"
+
+    await op()
+
+    assert len(_NotifRepo.created) == 1
