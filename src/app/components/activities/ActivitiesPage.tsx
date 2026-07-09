@@ -124,8 +124,10 @@ export function ActivitiesPage() {
   // checklist/plano de trabalho). Para o aluno, o hook retorna students=null.
   const { students } = useChecklistStudent();
 
-  async function loadData(authToken: string): Promise<void> {
-    setLoading(true);
+  // background=true refaz o fetch sem acionar o estado de loading — evita desmontar a
+  // lista ("Carregando…") ao validar uma atividade (issue #325).
+  async function loadData(authToken: string, background = false): Promise<void> {
+    if (!background) setLoading(true);
     setError(null);
     try {
       const [activityList, typeList] = await Promise.all([
@@ -289,9 +291,10 @@ export function ActivitiesPage() {
     try {
       const creditos =
         acao === "aprovar" && validateCreditos.trim() !== "" ? Number(validateCreditos) : null;
+      const observacao = validateObs.trim() || null;
       const result = await validarAtividade(token, activity.id, {
         acao,
-        observacao: validateObs.trim() || null,
+        observacao,
         creditos_concedidos: creditos,
       });
       const label = acao === "aprovar" ? "aprovada" : "rejeitada";
@@ -300,10 +303,20 @@ export function ActivitiesPage() {
           ? `Atividade ${label}. O motor reavaliou a situação do aluno.`
           : `Atividade ${label}.`,
       );
+      // Reflete o resultado imediatamente: status autoritativo da resposta e observação
+      // como o backend a gravou (null limpa o campo). O refetch em background atualiza os
+      // campos derivados das demais linhas (ex.: elegivel/RL04) sem desmontar a lista.
+      setActivities((prev) =>
+        prev.map((item) =>
+          item.id === activity.id
+            ? { ...item, status: result.novo_status, observacao_coordenacao: observacao }
+            : item,
+        ),
+      );
       setValidateTarget(null);
       setValidateObs("");
       setValidateCreditos("");
-      await loadData(token);
+      await loadData(token, true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao validar atividade");
     } finally {
