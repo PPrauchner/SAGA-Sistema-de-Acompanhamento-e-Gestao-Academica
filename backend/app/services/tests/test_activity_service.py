@@ -27,6 +27,13 @@ class _FakeActivityRepository:
     async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
         return [dict(item) for item in type(self).store.get(student_id, [])]
 
+    async def list_all_grouped(self) -> list[dict[str, Any]]:
+        return [
+            {**item, "student_id": student_id}
+            for student_id, items in type(self).store.items()
+            for item in items
+        ]
+
 
 class _FakeStudentRepository:
     store: list[dict[str, Any]] = []
