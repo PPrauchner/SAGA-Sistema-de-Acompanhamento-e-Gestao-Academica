@@ -292,3 +292,26 @@ class StudentService:
                 )
 
         return self._normalize_student_response(student)
+
+    async def list_coauthor_candidates(self, user: CurrentUser) -> list[dict]:
+        """Lista alunos cadastrados do programa para o seletor de co-autores (issue #310).
+
+        Não escopa por papel do chamador (diferente de list_students): qualquer aluno
+        cadastrado no programa é um co-autor elegível de produção/atividade (ADR-0006).
+        Devolve só uid/nome — não o StudentResponse completo — para não vazar dados de
+        outros alunos (matrícula, orientador, situação) a um par que só precisa escolher
+        um co-autor pelo nome.
+
+        Args:
+            user: Usuário autenticado; define o programa (escopo de tenant).
+
+        Returns:
+            Lista de {uid, nome} de alunos com uid vinculado (conta ativada) no programa,
+            incluindo o próprio usuário — a exclusão de si mesmo é feita pelo chamador.
+        """
+        students = await self._students.list_by_program(user.programa_id)
+        return [
+            {"uid": student["uid"], "nome": student.get("nome", "")}
+            for student in students
+            if student.get("uid")
+        ]
