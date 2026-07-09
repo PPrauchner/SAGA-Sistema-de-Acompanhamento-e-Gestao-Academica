@@ -28,6 +28,8 @@ export interface Student {
   proficiencia_comprovada?: boolean;
   qualificacao_data?: string | null;
   proficiencia_data?: string | null;
+  // Percentual (0-100) de tasks concluídas do plano de trabalho, calculado no backend.
+  progresso_plano?: number;
 }
 
 export interface StudentCreatePayload {
