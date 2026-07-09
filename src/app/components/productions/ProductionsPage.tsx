@@ -11,6 +11,7 @@ import {
   type TipoProducao,
   type StatusPublicacao,
 } from "@/api/productionsApi";
+import { getCoauthorCandidates, type CoauthorCandidate } from "@/api/studentsApi";
 
 const TIPO_MAP: Record<TipoProducao, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
   artigo: { label: "Artigo", icon: <FileText size={16} />, color: "var(--tint-blue-text)", bg: "var(--tint-blue-bg)" },
@@ -53,12 +54,15 @@ const emptyForm = {
   status_publicacao: "publicado" as StatusPublicacao,
   doi: "",
   data_realizacao: "",
+  coautores: [] as string[],
+  autoresExternos: "",
 };
 
 export function ProductionsPage() {
-  const { token, role } = useAuth();
+  const { token, role, currentUser } = useAuth();
   const [productions, setProductions] = useState<Production[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [coauthorCandidates, setCoauthorCandidates] = useState<CoauthorCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,10 +78,11 @@ export function ProductionsPage() {
   function reload() {
     if (!token) return;
     setLoading(true);
-    Promise.all([getProductions(token), getVehicles(token)])
-      .then(([prods, vehs]) => {
+    Promise.all([getProductions(token), getVehicles(token), getCoauthorCandidates(token)])
+      .then(([prods, vehs, coauthors]) => {
         setProductions(prods);
         setVehicles(vehs);
+        setCoauthorCandidates(coauthors);
         setError(null);
       })
       .catch((e: Error) => setError(e.message))
@@ -89,6 +94,23 @@ export function ProductionsPage() {
   // Na visão da coordenação cada produção pode ser de um aluno diferente; oferecer filtro.
   const isCoordenacao = role === "coordenacao";
   const canRegisterProduction = role === "aluno";
+
+  // Diretório completo (inclui o próprio usuário) resolve nomes de qualquer uid em
+  // autores[]; o seletor do formulário exclui a si mesmo (já incluído automaticamente
+  // pelo backend).
+  const nameByUid = useMemo(
+    () => new Map(coauthorCandidates.map((c) => [c.uid, c.nome])),
+    [coauthorCandidates],
+  );
+  const pickableCoauthors = useMemo(
+    () => coauthorCandidates.filter((c) => c.uid !== currentUser?.uid),
+    [coauthorCandidates, currentUser],
+  );
+
+  const selectedVehicle = useMemo(
+    () => vehicles.find((v) => v.id === form.veiculo_id) ?? null,
+    [vehicles, form.veiculo_id],
+  );
 
   const alunos = useMemo(() => {
     const byId = new Map<string, string>();
@@ -122,6 +144,10 @@ export function ProductionsPage() {
     }
     setSubmitting(true);
     try {
+      const autoresExternos = form.autoresExternos
+        .split(",")
+        .map((nome) => nome.trim())
+        .filter(Boolean);
       await createProduction(token, {
         titulo: form.titulo,
         veiculo_id: form.veiculo_id,
@@ -129,6 +155,7 @@ export function ProductionsPage() {
         status_publicacao: form.status_publicacao,
         doi: form.doi || null,
         data_realizacao: new Date(form.data_realizacao).toISOString(),
+        autores: [...form.coautores, ...autoresExternos],
       });
       setForm(emptyForm);
       setDateError(null);
@@ -139,6 +166,15 @@ export function ProductionsPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  function toggleCoautor(uid: string) {
+    setForm((f) => ({
+      ...f,
+      coautores: f.coautores.includes(uid)
+        ? f.coautores.filter((u) => u !== uid)
+        : [...f.coautores, uid],
+    }));
   }
 
   return (
@@ -245,7 +281,9 @@ export function ProductionsPage() {
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>👤 {prod.aluno_nome}</span>
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>📰 {prod.veiculo_nome}</span>
                       {prod.autores && prod.autores.length > 1 && (
-                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>✍️ {prod.autores.length} autores</span>
+                        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                          ✍️ {prod.autores.map((autor) => nameByUid.get(autor) ?? autor).join(", ")}
+                        </span>
                       )}
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>⭐ {prod.pontuacao_calculada.toFixed(1)} pts (peso {prod.peso_aplicado})</span>
                     </div>
@@ -333,6 +371,47 @@ export function ProductionsPage() {
                   <option value="">Selecione um veículo…</option>
                   {vehicles.map((v) => <option key={v.id} value={v.id}>{v.nome} · Nível {v.nivel} (peso {v.peso})</option>)}
                 </select>
+                {selectedVehicle && (
+                  <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 6 }}>
+                    Nível <strong>{selectedVehicle.nivel}</strong> · peso{" "}
+                    <strong>{selectedVehicle.peso}</strong> (resolvidos para o programa atual)
+                  </p>
+                )}
+              </div>
+
+              {/* Co-autoria */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "var(--muted-foreground)", display: "block", marginBottom: 8 }}>CO-AUTORES (OPCIONAL)</label>
+                {pickableCoauthors.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {pickableCoauthors.map((c) => {
+                      const selected = form.coautores.includes(c.uid);
+                      return (
+                        <button
+                          key={c.uid}
+                          type="button"
+                          onClick={() => toggleCoautor(c.uid)}
+                          className="rounded-lg px-2.5 py-1 transition-all"
+                          style={{
+                            background: selected ? "var(--tint-blue-bg)" : "var(--muted)",
+                            color: selected ? "var(--tint-blue-text)" : "var(--muted-foreground)",
+                            border: `1px solid ${selected ? "var(--tint-blue-border)" : "var(--border)"}`,
+                            fontSize: 11,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {c.nome}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                <FInput
+                  label="AUTORES EXTERNOS (SEPARADOS POR VÍRGULA)"
+                  value={form.autoresExternos}
+                  onChange={(v) => setForm({ ...form, autoresExternos: v })}
+                  placeholder="Ex.: Maria Souza, João Lima"
+                />
               </div>
 
               {/* Status de Publicação */}
