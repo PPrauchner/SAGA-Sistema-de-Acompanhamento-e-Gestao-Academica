@@ -10,9 +10,15 @@ import { TransferModal } from "../transfers/TransferModal";
 const TYPE_LABELS: Record<string, string> = {
   atividade: "Atividade Creditável",
   prorrogacao: "Prorrogação",
+  trancamento: "Trancamento de Matrícula",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",
   producao: "Validação de Produção",
+};
+
+const ORIGEM_LABELS: Record<string, string> = {
+  formulario: "Nova Solicitação",
+  agregado: "Fluxo agregado",
 };
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string; icon: JSX.Element }> = {
@@ -173,7 +179,7 @@ export function RequestsPage() {
         <table className="w-full">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--muted)" }}>
-              {["Tipo", "Solicitante", "Data", "Status", "Ações"].map((h) => (
+              {["Tipo", "Origem", "Solicitante", "Data", "Status", "Ações"].map((h) => (
                 <th
                   key={h}
                   className={`px-4 py-3 text-sm ${h === "Ações" ? "text-center" : "text-left"}`}
@@ -199,6 +205,9 @@ export function RequestsPage() {
               >
                 <td className="px-4 py-3 text-sm font-medium" style={{ color: "var(--foreground)" }}>
                   {TYPE_LABELS[req.tipo] || req.tipo}
+                </td>
+                <td className="px-4 py-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
+                  {ORIGEM_LABELS[req.origem] || req.origem}
                 </td>
                 <td className="px-4 py-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
                   {req.solicitante_nome}
