@@ -214,17 +214,18 @@ async def submit_activity_by_advisor(
 @audit_operation
 async def upload_comprovante(
     activity_id: str,
-    file: UploadFile = File(...),
+    arquivo: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
 ) -> ComprovanteUploadResponse:
     """
     Faz upload do comprovante (PDF/JPEG/PNG) para o Firebase Storage.
     Persiste a URL tokenizada de download na atividade correspondente.
     Restrito ao aluno dono da atividade.
+    O campo multipart chama-se `arquivo` — contrato do spec 07 usado pelo frontend.
     """
     result = await _comprovante_service.upload(
         activity_id=activity_id,
-        arquivo=file,
+        arquivo=arquivo,
         user=user,
     )
     return ComprovanteUploadResponse(
