@@ -15,6 +15,17 @@ from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.transfer_repository import TransferRepository
 
+# Origem de cada subtipo de Solicitação (CONTEXT.md → Solicitação): "formulario"
+# nasce do formulário "Nova Solicitação"; "agregado" nasce de outro fluxo e é só
+# consolidado nesta lista.
+ORIGEM_POR_TIPO: dict[str, str] = {
+    "atividade": "agregado",
+    "prorrogacao": "formulario",
+    "trancamento": "formulario",
+    "transferencia": "formulario",
+    "transferencia_coordenacao": "agregado",
+}
+
 
 class RequestService:
     def __init__(self) -> None:
@@ -94,7 +105,7 @@ class RequestService:
                     requests.append(
                         self._build_request(
                             id=ext.get("id", ""),
-                            tipo="prorrogacao",
+                            tipo=self._extension_tipo(ext),
                             solicitante=student_names.get(
                                 sid, ext.get("aluno_nome", "Desconhecido")
                             ),
@@ -177,7 +188,7 @@ class RequestService:
                 requests.append(
                     self._build_request(
                         id=ext.get("id", ""),
-                        tipo="prorrogacao",
+                        tipo=self._extension_tipo(ext),
                         solicitante=student_names.get(
                             sid, ext.get("aluno_nome", "Desconhecido")
                         ),
@@ -297,6 +308,20 @@ class RequestService:
         advisor = await self._advisors.get(advisor_id)
         return advisor.get("nome", "Desconhecido") if advisor else "Desconhecido"
 
+    def _extension_tipo(self, extension: dict[str, Any]) -> str:
+        """
+        Deriva o subtipo de Solicitação de um documento de `extensions/`.
+
+        Args:
+            extension: Documento de `extensions/` (campo `tipo`: `prazo_defesa`,
+                `prazo_qualificacao`, `trancamento` ou `mudanca_nivel`).
+
+        Returns:
+            "trancamento" quando `extension.tipo == "trancamento"`, senão
+            "prorrogacao" (demais subtipos de prazo).
+        """
+        return "trancamento" if extension.get("tipo") == "trancamento" else "prorrogacao"
+
     def _build_request(
         self,
         id: str,
@@ -325,6 +350,7 @@ class RequestService:
         return RequestItem(
             id=id,
             tipo=tipo,
+            origem=ORIGEM_POR_TIPO[tipo],
             solicitante_nome=solicitante,
             data_solicitacao=data,
             status=status,
