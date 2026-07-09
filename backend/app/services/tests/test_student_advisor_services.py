@@ -87,6 +87,25 @@ class _FakeProgramRepository(_FakeRepo):
         return await self.get(programa_id)
 
 
+class _FakeWorkPlanRepository:
+    """Fake do plano de trabalho: tasks por aluno definidas pelo teste."""
+
+    tasks_by_student: dict[str, list[dict[str, Any]]] = {}
+
+    def __init__(self) -> None:
+        pass
+
+    async def list_all_tasks_grouped(self) -> list[dict[str, Any]]:
+        return [
+            {"student_id": sid, "status": task.get("status")}
+            for sid, tasks in type(self).tasks_by_student.items()
+            for task in tasks
+        ]
+
+    async def get_all_tasks_for_student(self, student_id: str) -> list[dict[str, Any]]:
+        return [dict(task) for task in type(self).tasks_by_student.get(student_id, [])]
+
+
 class _FakeAuthService:
     async def create_invite(
         self,
@@ -117,10 +136,12 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeAdvisorRepository.counter = 0
     _FakeProgramRepository.store = {}
     _FakeProgramRepository.counter = 0
+    _FakeWorkPlanRepository.tasks_by_student = {}
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
     monkeypatch.setattr(student_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(student_module, "AdvisorRepository", _FakeAdvisorRepository)
     monkeypatch.setattr(student_module, "ProgramRepository", _FakeProgramRepository)
+    monkeypatch.setattr(student_module, "WorkPlanRepository", _FakeWorkPlanRepository)
     monkeypatch.setattr(advisor_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(advisor_module, "AdvisorRepository", _FakeAdvisorRepository)
 
@@ -433,3 +454,26 @@ async def test_update_advisor_rejeita_limite_menor_que_orientandos_ativos() -> N
 
     assert exc_info.value.status_code == 400
     assert _FakeAdvisorRepository.store["advisor1"]["limite_orientandos"] == 5
+
+
+async def test_list_students_calcula_progresso_do_plano() -> None:
+    """progresso_plano vem da fração de tasks concluídas; sem tasks é 0.0 (issue #317)."""
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Com plano", "orientador_id": "advisor1"},
+        "student2": {"nome": "Sem plano", "orientador_id": "advisor1"},
+    }
+    _FakeWorkPlanRepository.tasks_by_student = {
+        "student1": [
+            {"status": "concluido"},
+            {"status": "concluido"},
+            {"status": "concluido"},
+            {"status": "pendente"},
+        ],
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    result = await service.list_students(_coord())
+
+    by_id = {student["id"]: student for student in result}
+    assert by_id["student1"]["progresso_plano"] == 75.0
+    assert by_id["student2"]["progresso_plano"] == 0.0
