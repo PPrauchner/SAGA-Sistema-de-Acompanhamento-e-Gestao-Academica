@@ -146,6 +146,24 @@ class _MixedExtensionRepository(_FakeExtensionRepository):
         ]
 
 
+class _TrancamentoSemDataRepository(_FakeExtensionRepository):
+    """Trancamento pendente sem `nova_data` (permitido pelo modelo)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.extensions = [
+            {
+                "id": "ext_tranc",
+                "student_id": "student1",
+                "tipo": "trancamento",
+                "status": "pendente",
+                "motivo": "Licenca medica",
+                "nova_data": None,
+                "programa_id": "prog",
+            }
+        ]
+
+
 class _FakeAdvisorRepository:
     async def list_all(self) -> list[dict[str, Any]]:
         return [
@@ -308,6 +326,21 @@ async def test_approve_extension_recalcula_prazo_do_aluno() -> None:
     assert result["status"] == "aprovada"
     assert student_repo.updates["student1"]["prazo_final"] == date(2028, 7, 1)
     assert repo.extensions[0]["aprovado_por"] == "uid-coord"
+
+
+@pytest.mark.asyncio
+async def test_approve_trancamento_sem_data_preserva_prazo() -> None:
+    repo = _TrancamentoSemDataRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.approve_extension(
+        "ext_tranc", _user("coordenacao", "uid-coord")
+    )
+
+    assert result["status"] == "aprovada"
+    # Sem nova_data, a aprovacao nao pode sobrescrever (zerar) o prazo_final do aluno.
+    assert "student1" not in student_repo.updates
 
 
 @pytest.mark.asyncio
