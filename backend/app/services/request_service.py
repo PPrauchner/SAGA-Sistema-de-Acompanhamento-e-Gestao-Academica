@@ -1,5 +1,6 @@
 """Servico agregador para a pagina unificada de Solicitacoes."""
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -44,6 +45,8 @@ class RequestService:
             requests.extend(await self._get_advisor_requests(user))
         elif user.role == "coordenacao":
             requests.extend(await self._get_coordinator_requests(user))
+        elif user.role == "adm":
+            requests.extend(await self._get_adm_requests())
 
         # Ordenar por data_solicitacao DESCENDENTE
         requests.sort(key=lambda req: req.data_solicitacao, reverse=True)
@@ -273,6 +276,29 @@ class RequestService:
                     )
                 )
 
+        return requests
+
+    async def _get_adm_requests(self) -> list[RequestItem]:
+        """Adm global vê as transferências de coordenação de todos os programas."""
+        requests: list[RequestItem] = []
+        coord_transfers = await self._coord_transfers.list_all()
+        relevant = [
+            ct for ct in coord_transfers if ct.get("status") in ["pendente", "concluido"]
+        ]
+        initiator_names = await asyncio.gather(
+            *(self._get_user_name(ct.get("initiator_uid")) for ct in relevant)
+        )
+        for ct, initiator_name in zip(relevant, initiator_names):
+            requests.append(
+                self._build_request(
+                    id=ct.get("id", ""),
+                    tipo="transferencia_coordenacao",
+                    solicitante=initiator_name,
+                    data=ct.get("created_at") or datetime.now(timezone.utc),
+                    status=ct.get("status", "pendente"),
+                    payload=ct,
+                )
+            )
         return requests
 
     async def _get_advisor_students(self, user: CurrentUser) -> list[dict[str, Any]]:
