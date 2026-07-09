@@ -65,6 +65,9 @@ class _FakeStudentRepository(_FakeRepo):
     prefix = "student"
     counter = 0
 
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return await self.query(filters=[("programa_id", "==", programa_id)])
+
 
 class _FakeAdvisorRepository(_FakeRepo):
     store: dict[str, dict[str, Any]] = {}
@@ -304,6 +307,20 @@ async def test_get_student_orientador_filtra_por_propriedade() -> None:
         await service.get_student("student2", _advisor_user())
 
     assert exc_info.value.status_code == 403
+
+
+async def test_list_coauthor_candidates_ignora_escopo_de_papel_do_chamador() -> None:
+    _FakeStudentRepository.store = {
+        "student1": {"uid": "uid-student", "nome": "Aluno Chamador", "programa_id": "prog"},
+        "student2": {"uid": "uid-outro", "nome": "Outro Aluno", "programa_id": "prog"},
+        "student3": {"uid": None, "nome": "Convite pendente", "programa_id": "prog"},
+        "student4": {"uid": "uid-fora", "nome": "Aluno de outro programa", "programa_id": "outro"},
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    result = await service.list_coauthor_candidates(_student_user())
+
+    assert {c["uid"] for c in result} == {"uid-student", "uid-outro"}
 
 
 async def test_update_situacao_nao_grava_observacao_no_documento() -> None:
