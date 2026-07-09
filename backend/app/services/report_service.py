@@ -180,8 +180,9 @@ class ReportService:
 
     async def get_students_at_risk(self) -> StudentsAtRiskResponse:
         """Lista alunos com situacao_inferida 'em_risco' e as razões do último snapshot."""
-        students = await self._students.list_all()
-        advisor_names = await self._advisor_names()
+        students, advisor_names = await asyncio.gather(
+            self._students.list_all(), self._advisor_names()
+        )
 
         at_risk = [s for s in students if s.get("situacao_inferida") == "em_risco"]
         razoes = await asyncio.gather(
@@ -211,8 +212,9 @@ class ReportService:
 
     async def get_students_by_status(self) -> StudentsByStatusResponse:
         """Agrupa alunos por situacao_registrada com total e lista resumida."""
-        students = await self._students.list_all()
-        advisor_names = await self._advisor_names()
+        students, advisor_names = await asyncio.gather(
+            self._students.list_all(), self._advisor_names()
+        )
 
         por_situacao: dict[str, StatusGroup] = {}
         for student in students:
@@ -236,8 +238,9 @@ class ReportService:
 
     async def get_students_by_advisor(self) -> StudentsByAdvisorResponse:
         """Agrupa orientandos por orientador com contagem de em_risco e regulares."""
-        advisors = await self._advisors.list_all()
-        students = await self._students.list_all()
+        advisors, students = await asyncio.gather(
+            self._advisors.list_all(), self._students.list_all()
+        )
 
         items = []
         for advisor in advisors:
@@ -309,26 +312,34 @@ class ReportService:
             uid: uid do solicitante, usado para resolver o próprio registro de
                 discente (aluno) ou de orientador.
         """
-        students = await self._students.list_by_program(programa_id)
+        # Quatro fontes independentes em paralelo; a lista agregada de atividades
+        # substitui as N leituras por aluno (issue #319).
+        students, advisors, productions, all_activities = await asyncio.gather(
+            self._students.list_by_program(programa_id),
+            self._advisors.list_all(),
+            self._productions.list_productions_by_program(programa_id),
+            self._activities.list_all_grouped(),
+        )
         if role == "aluno":
             students = self._scope_to_own_student(students, uid)
-        advisors = await self._advisors.list_all()
         advisor_names = {advisor["id"]: advisor.get("nome", "") for advisor in advisors}
         own_advisor_id = (
             self._resolve_advisor_id(advisors, uid) if role == "orientador" else None
         )
-        productions = await self._productions.list_productions_by_program(programa_id)
         producao_por_id = {producao["id"]: producao for producao in productions}
 
-        activities_por_aluno = await asyncio.gather(
-            *[self._activities.list_by_student(student["id"]) for student in students]
-        )
+        activities_by_student: dict[str, list[dict[str, Any]]] = {}
+        for activity in all_activities:
+            activities_by_student.setdefault(activity.get("student_id", ""), []).append(
+                activity
+            )
 
         por_aluno = []
         producoes_creditadas: set[str] = set()
         agg_orientador: dict[str, dict[str, float]] = {}
 
-        for student, atividades in zip(students, activities_por_aluno):
+        for student in students:
+            atividades = activities_by_student.get(student["id"], [])
             credit_ids = {
                 atividade["producao_id"]
                 for atividade in atividades
@@ -415,30 +426,33 @@ class ReportService:
             Lista de pontos mensais do mais antigo ao mais recente; meses sem produção
             validada aparecem com total zero.
         """
-        students = await self._students.list_by_program(programa_id)
-        productions = await self._productions.list_productions_by_program(programa_id)
-        producao_ids = {producao["id"] for producao in productions}
-
-        activities_por_aluno = await asyncio.gather(
-            *[self._activities.list_by_student(student["id"]) for student in students]
+        # Três fontes independentes em paralelo; a lista agregada de atividades
+        # substitui as N leituras por aluno (issue #319).
+        students, productions, all_activities = await asyncio.gather(
+            self._students.list_by_program(programa_id),
+            self._productions.list_productions_by_program(programa_id),
+            self._activities.list_all_grouped(),
         )
+        producao_ids = {producao["id"] for producao in productions}
+        program_student_ids = {student["id"] for student in students}
 
         validado_em_por_producao: dict[str, date] = {}
-        for atividades in activities_por_aluno:
-            for atividade in atividades:
-                producao_id = atividade.get("producao_id")
-                if atividade.get("status") != "aprovado" or producao_id not in producao_ids:
-                    continue
-                # validado_em pode estar gravado no campo legado aprovado_em (mesmo
-                # fallback que ActivityResponse aplica ao normalizar dados antigos).
-                validado = _to_date(
-                    atividade.get("validado_em") or atividade.get("aprovado_em")
-                )
-                if validado is None:
-                    continue
-                atual = validado_em_por_producao.get(producao_id)
-                if atual is None or validado < atual:
-                    validado_em_por_producao[producao_id] = validado
+        for atividade in all_activities:
+            if atividade.get("student_id") not in program_student_ids:
+                continue
+            producao_id = atividade.get("producao_id")
+            if atividade.get("status") != "aprovado" or producao_id not in producao_ids:
+                continue
+            # validado_em pode estar gravado no campo legado aprovado_em (mesmo
+            # fallback que ActivityResponse aplica ao normalizar dados antigos).
+            validado = _to_date(
+                atividade.get("validado_em") or atividade.get("aprovado_em")
+            )
+            if validado is None:
+                continue
+            atual = validado_em_por_producao.get(producao_id)
+            if atual is None or validado < atual:
+                validado_em_por_producao[producao_id] = validado
 
         buckets = _month_window(meses)
         for validado in validado_em_por_producao.values():
