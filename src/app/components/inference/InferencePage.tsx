@@ -975,7 +975,7 @@ export function InferencePage() {
                     <span className="rounded-lg px-2 py-0.5" style={{ background:r.bg, color:r.color, fontSize:9, fontWeight:800, border:`1px solid ${r.border}`, fontFamily:"monospace" }}>{r.label}</span>
                   </div>
                   <p style={{ fontSize:12, fontWeight:700, color:"#f8fafc" }}>{s.nome}</p>
-                      <p style={{ fontSize:10, color:"#475569", marginTop:2, fontFamily:"monospace" }}>{s.matricula}</p>
+                  <p style={{ fontSize:10, color:"#475569", marginTop:2, fontFamily:"monospace" }}>{s.matricula}</p>
                   <div className="flex items-center gap-1.5 mt-3">
                     <div className="rounded-full" style={{ width:6, height:6, background:r.color }}/>
                     <span style={{ fontSize:9, color:"#475569", fontFamily:"monospace" }}>{s.situacao_inferida}</span>
@@ -1009,15 +1009,12 @@ export function InferencePage() {
                 <Brain size={22} style={{ color:"#3b82f6" }}/>
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h1 style={{ color:"#f8fafc", fontSize:20, fontWeight:900, letterSpacing:-0.5 }}>Motor de Inferência Acadêmica</h1>
-                  <span className="rounded-full px-2 py-0.5" style={{ background:"#0f172a", border:"1px solid #334155", fontSize:9, fontWeight:700, color:"#94a3b8", fontFamily:"monospace" }}>v2.4.1</span>
-                </div>
+                <h1 style={{ color:"#f8fafc", fontSize:20, fontWeight:900, letterSpacing:-0.5 }}>Motor de Inferência Acadêmica</h1>
                 <p style={{ color:"#475569", fontSize:13 }}>Sistema Especialista de Lógica Proposicional para Análise de Situação Acadêmica</p>
               </div>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              {[{ icon:<Database size={11}/>, label:"Base de Fatos: 5 predicados" },{ icon:<GitBranch size={11}/>, label:"4 regras lógicas" },{ icon:<Cpu size={11}/>, label:"Encadeamento progressivo" }].map((item,i) => (
+              {[{ icon:<Database size={11}/>, label:`Base de Fatos: ${student.facts.length} predicados` },{ icon:<GitBranch size={11}/>, label:`${student.rules.length} regras lógicas` },{ icon:<Cpu size={11}/>, label:"Encadeamento progressivo" }].map((item,i) => (
                 <div key={i} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1" style={{ background:"#0f172a", border:"1px solid #1e293b" }}>
                   <span style={{ color:"#475569" }}>{item.icon}</span>
                   <span style={{ fontSize:10, color:"#64748b", fontFamily:"monospace" }}>{item.label}</span>
@@ -1033,13 +1030,7 @@ export function InferencePage() {
                 <p style={{ fontSize:9, color:"#475569", marginTop:3, fontFamily:"monospace" }}>{s.l}</p>
               </div>
             ))}
-            <div className="rounded-xl p-3 text-center" style={{ background:risk.bg, border:`1px solid ${risk.border}`, minWidth:90 }}>
-              <div className="flex items-center justify-center gap-1 mb-1">
-                <div className="rounded-full" style={{ width:6, height:6, background:risk.color }}>
-                  <div style={{ width:"100%", height:"100%", borderRadius:"50%", background:risk.color, animation:"ping 1.5s infinite" }}/>
-                </div>
-                <span style={{ fontSize:9, color:risk.color, fontFamily:"monospace", fontWeight:700 }}>LIVE</span>
-              </div>
+            <div className="rounded-xl p-3 text-center flex items-center justify-center" style={{ background:risk.bg, border:`1px solid ${risk.border}`, minWidth:90 }}>
               <span style={{ fontSize:11, fontWeight:800, color:risk.color }}>{risk.label}</span>
             </div>
           </div>
@@ -1059,7 +1050,7 @@ export function InferencePage() {
               <p style={{ fontSize:10, color:"#475569", fontFamily:"monospace" }}>Predicados atômicos do estado do aluno</p>
             </div>
             <div className="ml-auto rounded-lg px-2 py-1" style={{ background:"#0f172a", border:"1px solid #1e293b" }}>
-              <span style={{ fontSize:10, fontWeight:700, color:FACT_CLR, fontFamily:"monospace" }}>{approvedFacts}/5 TRUE</span>
+              <span style={{ fontSize:10, fontWeight:700, color:FACT_CLR, fontFamily:"monospace" }}>{approvedFacts}/{student.facts.length} TRUE</span>
             </div>
           </div>
           <div className="space-y-2">
