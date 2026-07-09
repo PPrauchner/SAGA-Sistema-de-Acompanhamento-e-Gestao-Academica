@@ -36,10 +36,12 @@ export function RequestsPage() {
   const [filterPeriodo, setFilterPeriodo] = useState<string>("");
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
-  const loadData = async () => {
+  // background=true refaz o fetch sem acionar o estado de loading — evita desmontar a
+  // página inteira ("Carregando…") ao despachar uma solicitação (issue #325).
+  const loadData = async (background = false) => {
     if (!token) return;
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const data = await requestsApi.getRequests(token);
       setRequests(data);
     } catch (err: any) {
@@ -98,7 +100,7 @@ export function RequestsPage() {
         alert(`Ação de ${action} para ${TYPE_LABELS[req.tipo] || req.tipo} em desenvolvimento/API pendente.`);
         return;
       }
-      await loadData();
+      await loadData(true);
     } catch (err: any) {
       alert("Erro na ação: " + err.message);
     }
