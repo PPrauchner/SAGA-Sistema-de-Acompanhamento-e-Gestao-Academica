@@ -15,6 +15,7 @@ Responsabilidades:
 
 from __future__ import annotations
 
+import asyncio
 from calendar import monthrange
 from datetime import datetime
 from typing import Any
@@ -30,13 +31,39 @@ from backend.app.models.student import (
     StudentUpdateRequest,
 )
 from backend.app.models.user import InviteRequest
+from backend.app.models.work_plan import STATUS_CONCLUIDO
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.program_repository import ProgramRepository
 from backend.app.repositories.student_repository import StudentRepository
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.services.auth_service import AuthService
 
 DEFAULT_DURACAO_MESES = 24
 DEFAULT_STUDENT_STATUS = "regular"
+
+
+def _progress_by_student(tasks: list[dict[str, Any]]) -> dict[str, float]:
+    """Percentual de tasks concluídas por aluno a partir da lista agregada.
+
+    Args:
+        tasks: Tasks de todos os alunos, com student_id e status canônico.
+
+    Returns:
+        Mapa student_id → percentual (0-100) arredondado a 1 casa; alunos sem
+        task não aparecem no mapa (progresso 0).
+    """
+    totais: dict[str, list[int]] = {}
+    for task in tasks:
+        sid = task.get("student_id") or ""
+        acc = totais.setdefault(sid, [0, 0])
+        acc[1] += 1
+        if task.get("status") == STATUS_CONCLUIDO:
+            acc[0] += 1
+    return {
+        sid: round(concluidas / total * 100.0, 1)
+        for sid, (concluidas, total) in totais.items()
+        if total > 0
+    }
 
 
 class StudentService:
@@ -45,6 +72,7 @@ class StudentService:
     def __init__(self, auth_service: AuthService | None = None) -> None:
         self._students = StudentRepository()
         self._programs = ProgramRepository()
+        self._work_plan = WorkPlanRepository()
         self._auth = auth_service
 
     @staticmethod
@@ -108,28 +136,34 @@ class StudentService:
         self,
         user: CurrentUser,
     ) -> list[dict]:
-
-        students = await self._students.list_all()
-
-        if user.role == "coordenacao":
-            return [self._normalize_student_response(student) for student in students]
+        # Alunos e tasks agregadas em paralelo: o progresso do plano de cada aluno
+        # é calculado em leitura a partir de uma única consulta (issue #317).
+        students, all_tasks = await asyncio.gather(
+            self._students.list_all(),
+            self._work_plan.list_all_tasks_grouped(),
+        )
+        progresso_por_aluno = _progress_by_student(all_tasks)
 
         if user.role == "orientador":
             advisor_id = await self._get_advisor_id_for_user(user)
-
             if advisor_id is None:
                 return []
-
-            return [
-                self._normalize_student_response(student)
+            students = [
+                student
                 for student in students
                 if student.get("orientador_id") == advisor_id
             ]
+        elif user.role != "coordenacao":
+            students = [
+                student for student in students if student.get("uid") == user.uid
+            ]
 
         return [
-            self._normalize_student_response(student)
+            {
+                **self._normalize_student_response(student),
+                "progresso_plano": progresso_por_aluno.get(student.get("id", ""), 0.0),
+            }
             for student in students
-            if student.get("uid") == user.uid
         ]
 
     async def create_student(
@@ -291,4 +325,9 @@ class StudentService:
                     detail="Acesso negado ao orientando",
                 )
 
-        return self._normalize_student_response(student)
+        tasks = await self._work_plan.get_all_tasks_for_student(student_id)
+        concluidas = sum(1 for task in tasks if task.get("status") == STATUS_CONCLUIDO)
+        return {
+            **self._normalize_student_response(student),
+            "progresso_plano": round(concluidas / len(tasks) * 100.0, 1) if tasks else 0.0,
+        }
