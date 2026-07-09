@@ -787,7 +787,9 @@ export function ReportsPage() {
       .catch(() => { if (active) setError("Não foi possível carregar os relatórios. Tente novamente."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [token]);
+    // `role` nas dependências: o token chega antes do papel (GET /auth/me); sem re-executar
+    // quando o papel resolve, a página ficava presa no spinner sem nunca buscar (issue #320).
+  }, [token, role]);
 
   if (role && role !== "coordenacao") {
     return <EmptyState message="Os relatórios gerenciais são exclusivos da coordenação." />;
