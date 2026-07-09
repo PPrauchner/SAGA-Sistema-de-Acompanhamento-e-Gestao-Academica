@@ -114,6 +114,135 @@ class ExtensionService:
         extension_id = await self._repo.create(payload)
         return self._normalize_response({"id": extension_id, **payload}, student)
 
+    async def approve_extension(
+        self,
+        extension_id: str,
+        user: CurrentUser,
+    ) -> dict[str, Any]:
+        """Aprova uma solicitação de prorrogação/trancamento pendente.
+
+        Recalcula o `prazo_final` do aluno para a `nova_data` solicitada,
+        escrevendo através do `StudentRepository` — o mesmo caminho de
+        atualização já usado pelo cadastro de aluno e pela transferência de
+        orientando — em vez de duplicar a lógica de escrita.
+
+        Args:
+            extension_id: Id do documento em `extensions/`.
+            user: Coordenação autenticada; `programa_id` delimita o escopo.
+
+        Returns:
+            A solicitação normalizada com `status="aprovada"`.
+
+        Raises:
+            HTTPException: 404 se não encontrada, 400 se não estiver
+                pendente, 403 se pertencer a outro programa.
+        """
+        extension = await self._get_pending_extension(extension_id, user)
+
+        now = datetime.now(timezone.utc)
+        student_id = extension.get("student_id")
+        nova_data = extension.get("nova_data") or extension.get("prazo_novo")
+        await self._students.update(student_id, {"prazo_final": nova_data})
+        await self._repo.update(
+            extension_id,
+            {
+                "status": "aprovada",
+                "aprovado_por": user.uid,
+                "aprovado_em": now,
+            },
+        )
+
+        student = await self._find_student(student_id)
+        return self._normalize_response(
+            {
+                **extension,
+                "status": "aprovada",
+                "aprovado_por": user.uid,
+                "aprovado_em": now,
+            },
+            student,
+        )
+
+    async def reject_extension(
+        self,
+        extension_id: str,
+        motivo: str,
+        user: CurrentUser,
+    ) -> dict[str, Any]:
+        """Rejeita uma solicitação de prorrogação/trancamento pendente.
+
+        Args:
+            extension_id: Id do documento em `extensions/`.
+            motivo: Justificativa da rejeição (obrigatória).
+            user: Coordenação autenticada; `programa_id` delimita o escopo.
+
+        Returns:
+            A solicitação normalizada com `status="rejeitada"`.
+
+        Raises:
+            HTTPException: 422 se `motivo` vier vazio, 404 se não encontrada,
+                400 se não estiver pendente, 403 se de outro programa.
+        """
+        if not motivo.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Motivo e obrigatorio para rejeitar a solicitacao",
+            )
+
+        extension = await self._get_pending_extension(extension_id, user)
+
+        now = datetime.now(timezone.utc)
+        await self._repo.update(
+            extension_id,
+            {
+                "status": "rejeitada",
+                "motivo_rejeicao": motivo,
+                "rejeitado_por": user.uid,
+                "rejeitado_em": now,
+            },
+        )
+
+        student = await self._find_student(extension.get("student_id"))
+        return self._normalize_response(
+            {
+                **extension,
+                "status": "rejeitada",
+                "motivo_rejeicao": motivo,
+                "rejeitado_por": user.uid,
+                "rejeitado_em": now,
+            },
+            student,
+        )
+
+    async def _get_pending_extension(
+        self,
+        extension_id: str,
+        user: CurrentUser,
+    ) -> dict[str, Any]:
+        extension = await self._repo.get(extension_id)
+        if extension is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Solicitacao de prorrogacao nao encontrada",
+            )
+        if extension.get("status") != STATUS_PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Solicitacao precisa estar pendente para esta decisao",
+            )
+        if user.programa_id and user.programa_id != extension.get("programa_id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Coordenacao nao pode decidir solicitacao de outro programa",
+            )
+        return extension
+
+    async def _find_student(self, student_id: str | None) -> dict[str, Any] | None:
+        if not student_id:
+            return None
+        students = await self._students.list_all()
+        return next((s for s in students if s.get("id") == student_id), None)
+
     async def _visible_students(self, user: CurrentUser) -> list[dict[str, Any]]:
         students = await self._students.list_all()
 
