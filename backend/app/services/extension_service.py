@@ -222,7 +222,8 @@ class ExtensionService:
 
         Args:
             extension_id: Doc id da prorrogação.
-            payload: Decisão (aprovar/rejeitar).
+            payload: Decisão (aprovar/rejeitar) e observação opcional, persistida
+                em `observacao_coordenacao` em ambos os desfechos.
             coordinator: Coordenação autenticada; `programa_id` delimita o
                 tenant sobre o qual ela pode deliberar.
 
@@ -272,6 +273,10 @@ class ExtensionService:
             }
         else:
             updates = {"status": ExtensionStatus.REJEITADA.value}
+
+        # Fora do if/else: a observação justifica tanto o deferimento quanto o
+        # indeferimento, e o indeferimento não tem outro campo que o registre.
+        updates["observacao_coordenacao"] = payload.observacao
 
         await self._repo.update_extension(extension_id, updates)
         return _to_response({**ext, **updates})
