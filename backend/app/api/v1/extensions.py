@@ -109,5 +109,5 @@ async def decide_extension(
     return await service.process_decision(
         extension_id=extension_id,
         payload=payload,
-        coordinator_uid=current_user.uid,
+        coordinator=current_user,
     )

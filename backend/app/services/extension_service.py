@@ -9,10 +9,13 @@ Responsabilidades:
 - Respeitar `programs.max_prorrogacoes` (fonte canônica) no gate de limite.
 
 Identidade dos parâmetros:
-- `requester_uid`/`orientador_uid`/`coordinator_uid` são uids do Firebase Auth
-  (de current_user.uid). O aluno é resolvido uid → doc id via StudentRepository;
-  o orientador é resolvido uid → doc id via AdvisorRepository. `students.orientador_id`
-  referencia o doc id de `advisors/` (não o uid).
+- `requester_uid`/`orientador_uid` são uids do Firebase Auth (de current_user.uid).
+  O aluno é resolvido uid → doc id via StudentRepository; o orientador é resolvido
+  uid → doc id via AdvisorRepository. `students.orientador_id` referencia o doc id
+  de `advisors/` (não o uid).
+- `process_decision` recebe o `CurrentUser` inteiro, e não só o uid: a deliberação
+  é delimitada pelo `programa_id` da coordenação (tenant), além de registrar o uid
+  em `aprovado_por`.
 """
 
 from __future__ import annotations
@@ -50,11 +53,22 @@ def _dump_for_firestore(doc: ExtensionDocument) -> dict:
     return data
 
 
-def _to_response(data: dict, student_nome: str | None = None) -> ExtensionResponse:
-    """Constrói a resposta pública a partir do documento (que já inclui `id`)."""
+def _to_response(data: dict, student: dict | None = None) -> ExtensionResponse:
+    """Constrói a resposta pública a partir do documento (que já inclui `id`).
+
+    Args:
+        data: Documento da prorrogação, com o campo `id`.
+        student: Aluno referenciado por `student_id`, quando disponível — usado
+            para enriquecer a listagem com nome, matrícula e nível.
+
+    Returns:
+        A representação pública da prorrogação.
+    """
     payload = dict(data)
-    if student_nome is not None:
-        payload["student_nome"] = student_nome
+    if student is not None:
+        payload["student_nome"] = student.get("nome")
+        payload["matricula"] = student.get("matricula")
+        payload["nivel"] = student.get("nivel")
     return ExtensionResponse(**payload)
 
 
@@ -199,7 +213,7 @@ class ExtensionService:
         self,
         extension_id: str,
         payload: DecisionRequest,
-        coordinator_uid: str,
+        coordinator: CurrentUser,
     ) -> ExtensionResponse:
         """Homologa a decisão da coordenação (aprovar/rejeitar).
 
@@ -208,19 +222,30 @@ class ExtensionService:
 
         Args:
             extension_id: Doc id da prorrogação.
-            payload: Decisão (aprovar/rejeitar).
-            coordinator_uid: uid da coordenação.
+            payload: Decisão (aprovar/rejeitar) e observação opcional, persistida
+                em `observacao_coordenacao` em ambos os desfechos.
+            coordinator: Coordenação autenticada; `programa_id` delimita o
+                tenant sobre o qual ela pode deliberar.
 
         Returns:
             A prorrogação deliberada (aprovada ou rejeitada).
 
         Raises:
-            HTTPException: 404 se a prorrogação/aluno não existir; 400 se não
-                estiver pendente.
+            HTTPException: 404 se a prorrogação/aluno não existir; 403 se a
+                prorrogação for de outro programa; 400 se não estiver pendente.
         """
         ext = await self._repo.get_extension(extension_id)
         if ext is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogação não encontrada.")
+
+        # Mesmo escopo de tenant de `list_for_user`: a coordenação só alcança o
+        # próprio programa. `programa_id` nulo é o adm global (ADR-0001).
+        if coordinator.programa_id and ext.get("programa_id") != coordinator.programa_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não pode deliberar prorrogações de outro programa.",
+            )
+
         if ext.get("status") != ExtensionStatus.PENDENTE.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -243,11 +268,15 @@ class ExtensionService:
             updates = {
                 "status": ExtensionStatus.APROVADA.value,
                 "prazo_novo": nova_data,
-                "aprovado_por": coordinator_uid,
+                "aprovado_por": coordinator.uid,
                 "aprovado_em": now,
             }
         else:
             updates = {"status": ExtensionStatus.REJEITADA.value}
+
+        # Fora do if/else: a observação justifica tanto o deferimento quanto o
+        # indeferimento, e o indeferimento não tem outro campo que o registre.
+        updates["observacao_coordenacao"] = payload.observacao
 
         await self._repo.update_extension(extension_id, updates)
         return _to_response({**ext, **updates})
@@ -263,7 +292,7 @@ class ExtensionService:
             if student is None:
                 return []
             exts = await self._repo.list_by_student(student["id"])
-            nome_by_id = {student["id"]: student.get("nome")}
+            student_by_id = {student["id"]: student}
         elif user.role == "orientador":
             advisor_id = await self._resolve_advisor_id(user.uid)
             if advisor_id is None:
@@ -272,15 +301,15 @@ class ExtensionService:
                 s for s in await self._students.list_all()
                 if s.get("orientador_id") == advisor_id
             ]
-            nome_by_id = {s["id"]: s.get("nome") for s in students}
+            student_by_id = {s["id"]: s for s in students}
             exts = [
                 e for e in _sort_by_created_desc(await self._repo.list_all())
-                if e.get("student_id") in nome_by_id
+                if e.get("student_id") in student_by_id
             ]
         else:  # coordenação / adm
-            nome_by_id = {s["id"]: s.get("nome") for s in await self._students.list_all()}
+            student_by_id = {s["id"]: s for s in await self._students.list_all()}
             exts = _sort_by_created_desc(await self._repo.list_all())
             if user.programa_id:
                 exts = [e for e in exts if e.get("programa_id") == user.programa_id]
 
-        return [_to_response(e, nome_by_id.get(e.get("student_id"))) for e in exts]
+        return [_to_response(e, student_by_id.get(e.get("student_id"))) for e in exts]

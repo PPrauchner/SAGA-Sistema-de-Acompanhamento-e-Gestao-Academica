@@ -9,16 +9,11 @@ Pré-requisitos:
   backend/app/core/firebase.py:_build_credentials). Não usa mais um JSON
   único via FIREBASE_SERVICE_ACCOUNT_JSON, pois essa variável não existe
   no .env real do projeto (C2-bis).
-- FIREBASE_INTEGRATION_TEST=1 setada NO SHELL, antes de chamar o pytest
-  (não dentro deste arquivo). O conftest.py desta pasta stuba o
-  firebase_admin globalmente para os testes unitários (via
-  sys.modules.setdefault, no nível de módulo); pytest carrega esse
-  conftest ANTES de importar este arquivo de teste, então setar a
-  variável aqui dentro chegaria tarde demais. Sem essa variável no
-  ambiente do processo pytest, o import `from firebase_admin import
-  credentials` falha com "cannot import name 'credentials' from
-  'firebase_admin' (unknown location)", pois o stub não define esse
-  atributo.
+- FIREBASE_INTEGRATION_TEST=1 setada NO SHELL, antes de chamar o pytest.
+  Sem essa variável o módulo inteiro é pulado (skip no nível de módulo),
+  pois os testes abaixo escrevem em um Firestore real. As fixtures autouse
+  do conftest desta pasta também se desativam sob essa variável, liberando
+  init_firebase/get_firestore_client reais.
 
 Execução (Windows/PowerShell):
     $env:FIREBASE_INTEGRATION_TEST="1"
@@ -39,8 +34,15 @@ Isolamento:
 
 from __future__ import annotations
 
+import os
 import uuid
 import pytest
+
+if not os.environ.get("FIREBASE_INTEGRATION_TEST"):
+    pytest.skip(
+        "Integração real: exige FIREBASE_INTEGRATION_TEST=1 e um projeto Firestore de teste.",
+        allow_module_level=True,
+    )
 
 from datetime import datetime, timedelta, timezone
 

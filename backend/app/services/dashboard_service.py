@@ -16,9 +16,6 @@ from backend.app.models.dashboard import (
     ChecklistResumo,
     CoordDashboardResponse,
     CreditosResumo,
-    DashboardIndiceOrientadorResponse,
-    IndiceModalidade,
-    IndiceOrientadorResponse,
     OrientadorDashboardResponse,
     OrientandoResumo,
     OrientandosPorStatus,
@@ -33,6 +30,8 @@ from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.models.work_plan import STATUS_CONCLUIDO
+
+
 
 
 def _to_iso_date(value: object) -> str | None:
@@ -126,6 +125,8 @@ def _build_orientando_resumo(student: dict) -> OrientandoResumo:
         dias_restantes_prazo=dias,
         alertas=alertas,
     )
+
+
 
 
 class DashboardService:
@@ -300,6 +301,7 @@ class DashboardService:
             atividades_pendentes_validacao=atividades_pendentes,
         )
 
+
     async def get_orientador_dashboard(
         self, advisor_id: str
     ) -> OrientadorDashboardResponse:
@@ -408,125 +410,6 @@ class DashboardService:
             total_concluidos=total_concluidos,
             tempo_medio_integralizacao_meses=tempo_medio,
             auditoria_recente=auditoria_recente,
-        )
-
-    # ------------------------------------------------------------------
-    # US-AN03 — Índice de Produção + Posição Relativa Anônima
-    # ------------------------------------------------------------------
-
-    async def _calcular_indice_de(
-        self,
-        advisor_id: str,
-        modalidade: IndiceModalidade,
-    ) -> tuple[float, int, float]:
-        """Calcula o índice de produção de um orientador.
-
-        Regra: considera apenas activities com status == 'aprovado' que
-        possuam producao_id vinculado. Busca pontuacao_calculada na coleção
-        raiz productions/ via self._productions (FirebaseRepository já
-        instanciado no __init__). Calculado no service layer — nunca no motor.
-
-        Returns:
-            Tupla (indice, total_orientandos, total_pontuacao).
-        """
-        all_students = await self._students.list_all()
-        orientandos = [s for s in all_students if s.get("orientador_id") == advisor_id]
-        total_orientandos = len(orientandos)
-
-        total_pontuacao = 0.0
-        for student in orientandos:
-            activities = await self._activities.list_by_student(student.get("id", ""))
-            for act in activities:
-                if act.get("status") != "aprovado":
-                    continue
-                producao_id = act.get("producao_id")
-                if not producao_id:
-                    continue
-                prod = await self._productions.get(producao_id)
-                if prod:
-                    total_pontuacao += float(prod.get("pontuacao_calculada") or 0.0)
-
-        if modalidade == IndiceModalidade.soma_total:
-            indice = total_pontuacao
-        else:  # media_por_orientando
-            indice = total_pontuacao / total_orientandos if total_orientandos > 0 else 0.0
-
-        return indice, total_orientandos, total_pontuacao
-
-    async def get_dashboard_indice_orientador(
-        self,
-        advisor_id: str,
-        modalidade: IndiceModalidade,
-    ) -> DashboardIndiceOrientadorResponse:
-        """Dashboard de índice de produção + posição relativa anônima.
-
-        Garante Anonimato Restrito: a lista de advisor_ids e os índices
-        individuais dos colegas são variáveis locais — nunca saem deste método
-        nem são incluídos na resposta serializada.
-
-        Args:
-            advisor_id: ID do documento em advisors/ do orientador autenticado.
-            modalidade: Modalidade de cálculo (obrigatória).
-
-        Returns:
-            DashboardIndiceOrientadorResponse com índice próprio e posição
-            relativa anônima.
-
-        Raises:
-            HTTPException(404): Se o orientador não existir.
-        """
-        advisor = await self._advisors.get(advisor_id)
-        if advisor is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Orientador não encontrado",
-            )
-
-        # — Índice do próprio orientador —
-        indice_proprio, total_orientandos, total_pontuacao = await self._calcular_indice_de(
-            advisor_id, modalidade
-        )
-
-        # — Posição relativa anônima —
-        todos_advisors = await self._advisors.list_all()
-        todos_ids = [a.get("id", "") for a in todos_advisors if a.get("id")]
-
-        # Garante presença do próprio na lista (consistência)
-        if advisor_id not in todos_ids:
-            todos_ids.append(advisor_id)
-
-        total_orientadores = len(todos_ids)
-
-        # Índices de todos ficam estritamente locais — nunca serializados
-        indices_programa: list[float] = []
-        for aid in todos_ids:
-            if aid == advisor_id:
-                indices_programa.append(indice_proprio)
-            else:
-                idx, _, _ = await self._calcular_indice_de(aid, modalidade)
-                indices_programa.append(idx)
-
-        media_programa = sum(indices_programa) / total_orientadores
-
-        orientadores_abaixo_ou_igual = sum(
-            1 for x in indices_programa if x <= indice_proprio
-        )
-        percentil = (orientadores_abaixo_ou_igual / total_orientadores) * 100.0
-
-        return DashboardIndiceOrientadorResponse(
-            indice=IndiceOrientadorResponse(
-                advisor_id=advisor_id,
-                modalidade=modalidade,
-                indice=round(indice_proprio, 4),
-                total_orientandos=total_orientandos,
-                total_pontuacao=round(total_pontuacao, 4),
-            ),
-            posicao_relativa=PosicaoRelativaResponse(
-                modalidade=modalidade,
-                media_programa=round(media_programa, 4),
-                percentil=round(percentil, 2),
-                total_orientadores=total_orientadores,
-            ),
         )
 
 

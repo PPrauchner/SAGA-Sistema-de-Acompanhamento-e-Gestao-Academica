@@ -6,6 +6,7 @@ Responsabilidades:
 - get_student(student_id), create_student(data), update_student(student_id, data),
   delete_student(student_id): CRUD básico.
 - list_by_program(programa_id): filtra students por programa_id via consulta no Firestore.
+- get_by_uid(uid): resolve o aluno pelo uid do Firebase Auth (≠ doc_id).
 - get_students_by_advisor(advisor_id): filtra students por orientador_id.
 - get_students_by_status(status): filtra students por situacao_registrada.
 - get_history(student_id): lê sub-coleção students/{id}/history/.
@@ -49,9 +50,29 @@ class StudentRepository(FirebaseRepository):
     async def list_all(self) -> list[dict[str, Any]]:
         """Lista alunos normalizando situacao_registrada legada (rename fase_defesa)."""
         return [_normalize_situacao_registrada(student) for student in await super().list_all()]
-    
+
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        """Lista alunos de um programa via consulta filtrada no Firestore.
+
+        Args:
+            programa_id: Programa cujos alunos devem ser retornados.
+
+        Returns:
+            Alunos do programa, com situacao_registrada legada normalizada — sem ler a
+            coleção inteira e filtrar em memória.
+        """
+        students = await self.query(filters=[("programa_id", "==", programa_id)])
+        return [_normalize_situacao_registrada(student) for student in students]
+
     async def get_by_uid(self, uid: str) -> dict[str, Any] | None:
-        """Busca aluno pelo campo uid (Firebase Auth), não pelo doc_id."""
+        """Resolve o aluno pelo uid do Firebase Auth (≠ doc_id).
+
+        Args:
+            uid: uid do Firebase Auth presente em `current_user.uid`.
+
+        Returns:
+            O aluno correspondente, ou None se nenhum documento tiver esse uid.
+        """
         results = await self.query(filters=[("uid", "==", uid)])
         if not results:
             return None

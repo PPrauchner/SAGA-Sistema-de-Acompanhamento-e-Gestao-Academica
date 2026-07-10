@@ -1,165 +1,236 @@
+"""
+Testes da camada HTTP do router de prorrogações (Spec 08).
+
+Exercita as quatro rotas reais (POST /extensions, GET /extensions,
+PATCH /{id}/review, PATCH /{id}/approve) com o ExtensionService substituído via
+`app.dependency_overrides[get_extension_service]`. A lógica de negócio é coberta
+em backend/app/services/tests/test_extension_service.py — aqui o alvo é o
+roteamento, a serialização do contrato e o gate de papel do aspecto A01.
+"""
+
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.app.api.v1 import extensions as router_module
+from backend.app.api.v1.extensions import get_extension_service
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.main import app
+from backend.app.models.extension import ExtensionResponse
+
+PRAZO_NOVO = datetime(2028, 7, 1, tzinfo=timezone.utc)
+MOTIVO = "Motivo longo o suficiente para passar na validacao"
+PARECER = "Parecer tecnico favoravel do orientador"
 
 
-def _extension_payload(extension_id: str = "ext1") -> dict[str, Any]:
-    return {
-        "id": extension_id,
-        "tipo": "prazo_defesa",
-        "status": "pendente",
-        "student_id": "student1",
-        "aluno_id": "student1",
-        "aluno_nome": "Aluno SAGA",
-        "aluno": "Aluno SAGA",
-        "matricula": "2026001",
-        "nivel": "mestrado",
-        "nova_data": date(2028, 7, 1),
-        "prazo_novo": date(2028, 7, 1),
-        "data_atual": date(2028, 1, 1),
-        "prazo_atual": date(2028, 1, 1),
-        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
-        "solicitacao": datetime(2026, 1, 1, tzinfo=timezone.utc),
-        "motivo": "Ajuste de cronograma",
-        "justificativa": "Ajuste de cronograma",
-        "parecer": None,
-    }
-
-
-class _FakeExtensionService:
-    calls: list[tuple[str, Any]] = []
-
-    async def list_extensions(self, user: CurrentUser) -> list[dict[str, Any]]:
-        self.calls.append(("list", user))
-        return [_extension_payload()]
-
-    async def list_pending_for_coordination(
-        self, user: CurrentUser, status: str = "pendente"
-    ) -> list[dict[str, Any]]:
-        self.calls.append(("pending", (user, status)))
-        return [_extension_payload()]
-
-    async def create_extension(self, body: Any, user: CurrentUser) -> dict[str, Any]:
-        self.calls.append(("create", (body, user)))
-        return _extension_payload("ext2")
-
-
-def _user(role: str = "coordenacao") -> CurrentUser:
-    return CurrentUser(
-        uid=f"uid-{role}",
-        role=role,
+def _response(extension_id: str = "ext1", status: str = "pendente") -> ExtensionResponse:
+    return ExtensionResponse(
+        id=extension_id,
+        student_id="student1",
+        requester_id="uid-aluno",
         programa_id="prog",
-        email=f"{role}@saga.test",
+        tipo="prazo_defesa",
+        motivo=MOTIVO,
+        plano_atualizado="http://plano.test/doc.pdf",
+        status=status,
+        nova_data=PRAZO_NOVO,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        student_nome="Aluno Um",
     )
 
 
+class _FakeExtensionService:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    async def create_extension(self, payload: Any, requester_uid: str) -> ExtensionResponse:
+        self.calls.append(("create", {"payload": payload, "requester_uid": requester_uid}))
+        return _response("ext_new")
+
+    async def list_for_user(self, user: CurrentUser) -> list[ExtensionResponse]:
+        self.calls.append(("list", {"user": user}))
+        return [_response()]
+
+    async def add_review(self, extension_id: str, payload: Any, orientador_uid: str) -> ExtensionResponse:
+        self.calls.append(
+            ("review", {"extension_id": extension_id, "payload": payload, "orientador_uid": orientador_uid})
+        )
+        return _response()
+
+    async def process_decision(
+        self, extension_id: str, payload: Any, coordinator: CurrentUser
+    ) -> ExtensionResponse:
+        self.calls.append(
+            ("decide", {"extension_id": extension_id, "payload": payload, "coordinator": coordinator})
+        )
+        return _response(status="aprovada")
+
+
+def _user(role: str) -> CurrentUser:
+    return CurrentUser(uid=f"uid-{role}", role=role, programa_id="prog", email=f"{role}@saga.test")
+
+
+def _valid_payload() -> dict[str, Any]:
+    return {
+        "tipo": "prazo_defesa",
+        "motivo": MOTIVO,
+        "plano_atualizado": "http://plano.test/doc.pdf",
+        "nova_data": PRAZO_NOVO.isoformat(),
+    }
+
+
 @pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    original_service = router_module.service
-    _FakeExtensionService.calls = []
-    monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
-    router_module.service = _FakeExtensionService()
-    app.dependency_overrides[get_current_user] = lambda: _user()
+def service() -> _FakeExtensionService:
+    return _FakeExtensionService()
+
+
+@pytest.fixture
+def client(service: _FakeExtensionService, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(aspect_config, "ALERTS_ENABLED", False)
+    app.dependency_overrides[get_extension_service] = lambda: service
     yield TestClient(app)
-    router_module.service = original_service
     app.dependency_overrides.clear()
 
 
-def test_get_extensions_lista_solicitacoes_visiveis(client: TestClient) -> None:
+def _as(role: str) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user(role)
+
+
+# ---------------------------------------------------------------------------
+# POST /extensions — solicitação (aluno)
+# ---------------------------------------------------------------------------
+
+def test_post_extensions_aluno_cria_solicitacao(client: TestClient, service: _FakeExtensionService) -> None:
+    _as("aluno")
+
+    response = client.post("/api/v1/extensions", json=_valid_payload())
+
+    assert response.status_code == 201
+    assert response.json()["id"] == "ext_new"
+    name, kwargs = service.calls[0]
+    assert name == "create"
+    # O router repassa o uid do autenticado; nunca aceita student_id do corpo.
+    assert kwargs["requester_uid"] == "uid-aluno"
+
+
+@pytest.mark.parametrize("role", ["orientador", "coordenacao"])
+def test_post_extensions_bloqueia_papel_nao_aluno(client: TestClient, role: str) -> None:
+    _as(role)
+
+    response = client.post("/api/v1/extensions", json=_valid_payload())
+
+    assert response.status_code == 403
+
+
+def test_post_extensions_422_sem_plano_atualizado(client: TestClient) -> None:
+    """plano_atualizado é obrigatório (Spec 08): payload legado deve ser rejeitado."""
+    _as("aluno")
+    payload = _valid_payload()
+    del payload["plano_atualizado"]
+
+    response = client.post("/api/v1/extensions", json=payload)
+
+    assert response.status_code == 422
+
+
+def test_post_extensions_422_motivo_curto(client: TestClient) -> None:
+    _as("aluno")
+
+    response = client.post("/api/v1/extensions", json={**_valid_payload(), "motivo": "curto"})
+
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# GET /extensions — listagem (escopo por papel resolvido no service)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("role", ["aluno", "orientador", "coordenacao"])
+def test_get_extensions_permitido_para_os_tres_papeis(
+    client: TestClient, service: _FakeExtensionService, role: str
+) -> None:
+    _as(role)
+
     response = client.get("/api/v1/extensions")
 
     assert response.status_code == 200
     body = response.json()
     assert body[0]["id"] == "ext1"
-    assert body[0]["aluno_nome"] == "Aluno SAGA"
-    assert _FakeExtensionService.calls[0][0] == "list"
+    assert body[0]["student_nome"] == "Aluno Um"
+    # O escopo é decidido no service a partir do usuário autenticado.
+    assert service.calls[0][1]["user"].role == role
 
 
-def test_get_pending_extensions_coordenacao(client: TestClient) -> None:
-    response = client.get("/api/v1/extensions/pending")
+# ---------------------------------------------------------------------------
+# PATCH /extensions/{id}/review — parecer (orientador)
+# ---------------------------------------------------------------------------
+
+def test_patch_review_orientador_registra_parecer(
+    client: TestClient, service: _FakeExtensionService
+) -> None:
+    _as("orientador")
+
+    response = client.patch("/api/v1/extensions/ext1/review", json={"parecer_orientador": PARECER})
 
     assert response.status_code == 200
-    assert response.json()[0]["id"] == "ext1"
-    assert _FakeExtensionService.calls[0][0] == "pending"
+    name, kwargs = service.calls[0]
+    assert name == "review"
+    assert kwargs["extension_id"] == "ext1"
+    assert kwargs["orientador_uid"] == "uid-orientador"
 
 
-def test_get_pending_extensions_bloqueia_aluno(client: TestClient) -> None:
-    app.dependency_overrides[get_current_user] = lambda: _user("aluno")
+@pytest.mark.parametrize("role", ["aluno", "coordenacao"])
+def test_patch_review_bloqueia_papel_nao_orientador(client: TestClient, role: str) -> None:
+    _as(role)
 
-    response = client.get("/api/v1/extensions/pending")
+    response = client.patch("/api/v1/extensions/ext1/review", json={"parecer_orientador": PARECER})
+
+    assert response.status_code == 403
+
+
+def test_patch_review_422_parecer_curto(client: TestClient) -> None:
+    _as("orientador")
+
+    response = client.patch("/api/v1/extensions/ext1/review", json={"parecer_orientador": "curto"})
+
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# PATCH /extensions/{id}/approve — decisão (coordenação)
+# ---------------------------------------------------------------------------
+
+def test_patch_approve_coordenacao_homologa(client: TestClient, service: _FakeExtensionService) -> None:
+    _as("coordenacao")
+
+    response = client.patch("/api/v1/extensions/ext1/approve", json={"acao": "aprovar"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "aprovada"
+    name, kwargs = service.calls[0]
+    assert name == "decide"
+    # O router repassa o CurrentUser inteiro: o service precisa do programa_id
+    # para barrar deliberação cross-programa, não só do uid.
+    assert kwargs["coordinator"].uid == "uid-coordenacao"
+    assert kwargs["coordinator"].programa_id == "prog"
+
+
+@pytest.mark.parametrize("role", ["aluno", "orientador"])
+def test_patch_approve_bloqueia_papel_nao_coordenacao(client: TestClient, role: str) -> None:
+    _as(role)
+
+    response = client.patch("/api/v1/extensions/ext1/approve", json={"acao": "aprovar"})
 
     assert response.status_code == 403
 
 
-def test_post_extensions_aluno_cria_solicitacao(client: TestClient) -> None:
-    app.dependency_overrides[get_current_user] = lambda: _user("aluno")
+def test_patch_approve_422_acao_invalida(client: TestClient) -> None:
+    _as("coordenacao")
 
-    response = client.post(
-        "/api/v1/extensions",
-        json={
-            "tipo": "prazo_defesa",
-            "nova_data": "2028-07-01",
-            "motivo": "Ajuste de cronograma",
-        },
-    )
+    response = client.patch("/api/v1/extensions/ext1/approve", json={"acao": "talvez"})
 
-    assert response.status_code == 201
-    assert response.json()["id"] == "ext2"
-    assert _FakeExtensionService.calls[0][0] == "create"
-
-
-def test_post_extensions_orientador_cria_para_orientando(client: TestClient) -> None:
-    app.dependency_overrides[get_current_user] = lambda: _user("orientador")
-
-    response = client.post(
-        "/api/v1/extensions",
-        json={
-            "tipo": "prazo_defesa",
-            "student_id": "student1",
-            "nova_data": "2028-07-01",
-            "motivo": "Ajuste de cronograma",
-        },
-    )
-
-    assert response.status_code == 201
-    sent_body = _FakeExtensionService.calls[0][1][0]
-    assert sent_body.student_id == "student1"
-
-
-def test_post_extensions_trancamento_nao_exige_nova_data(client: TestClient) -> None:
-    app.dependency_overrides[get_current_user] = lambda: _user("aluno")
-
-    response = client.post(
-        "/api/v1/extensions",
-        json={
-            "tipo": "trancamento",
-            "motivo": "Trancamento temporario de matricula",
-        },
-    )
-
-    assert response.status_code == 201
-    sent_body = _FakeExtensionService.calls[0][1][0]
-    assert sent_body.tipo == "trancamento"
-    assert sent_body.nova_data is None
-
-
-def test_post_extensions_bloqueia_coordenacao(client: TestClient) -> None:
-    response = client.post(
-        "/api/v1/extensions",
-        json={
-            "tipo": "prazo_defesa",
-            "nova_data": "2028-07-01",
-            "motivo": "Ajuste de cronograma",
-        },
-    )
-
-    assert response.status_code == 403
+    assert response.status_code == 422
