@@ -121,6 +121,35 @@ def _serializar_modelos(value: Any) -> Any:
     return value
 
 
+_ESCALARES_FIRESTORE = (str, int, float, bool, bytes, datetime)
+
+
+def _e_dado_de_entrada(valor: Any) -> bool:
+    """Indica se o argumento é um dado de entrada que o Firestore aceita.
+
+    Endpoints recebem, além do payload, colaboradores injetados por `Depends`
+    (services, repositórios) e objetos de transporte (`UploadFile`). Nenhum
+    deles é dado de entrada, e o Firestore levanta `TypeError` ao serializá-los
+    — o que abortaria a gravação do audit_log inteiro.
+
+    Args:
+        valor: Argumento vindo de `bound.arguments`.
+
+    Returns:
+        True se o valor for serializável pelo Firestore, direta ou
+        recursivamente (modelos Pydantic são convertidos por `_serializar_modelos`).
+    """
+    if valor is None or isinstance(valor, _ESCALARES_FIRESTORE):
+        return True
+    if isinstance(valor, BaseModel):
+        return True
+    if isinstance(valor, dict):
+        return all(_e_dado_de_entrada(item) for item in valor.values())
+    if isinstance(valor, (list, tuple, set)):
+        return all(_e_dado_de_entrada(item) for item in valor)
+    return False
+
+
 def _extrair_valor_entrada(
     sig: inspect.Signature,
     bound: inspect.BoundArguments,
@@ -130,6 +159,10 @@ def _extrair_valor_entrada(
         if isinstance(valor, dict) and "role" in valor:
             continue
         if hasattr(valor, "role") and hasattr(valor, "uid"):
+            continue
+        # Colaboradores injetados (service, repositório, UploadFile) não são
+        # entrada e quebram a serialização do Firestore — ver _e_dado_de_entrada.
+        if not _e_dado_de_entrada(valor):
             continue
         resultado[nome] = _serializar_modelos(valor)
     # Redação A02 (portada da development): nunca persistir segredos no audit_log.
