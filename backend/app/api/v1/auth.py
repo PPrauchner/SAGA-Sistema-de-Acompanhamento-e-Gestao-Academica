@@ -14,11 +14,11 @@ Responsabilidades:
 - GET /api/v1/health: health check público — verifica disponibilidade da API e do Firebase.
 """
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
-from backend.app.core.auth import CurrentUser, get_current_user
+from backend.app.core.auth import CurrentUser, get_current_user, extract_bearer_token
 from backend.app.core.config import settings
 from backend.app.core.firebase import is_initialized
 from backend.app.models.user import (
@@ -49,6 +49,14 @@ async def create_invite(
 async def first_access(body: FirstAccessRequest) -> FirstAccessResponse:
     """Endpoint público: usuário convidado define a senha e ativa a conta."""
     return await AuthService().activate_first_access(body.token, body.senha)
+
+
+@router.post("/auth/google-first-access")
+@audit_operation
+async def google_first_access(authorization: str = Header(...)) -> FirstAccessResponse:
+    """Ativa a conta via Google OAuth se houver convite pendente para o e-mail."""
+    token = extract_bearer_token(authorization)
+    return await AuthService().activate_google_first_access(token)
 
 
 @router.get("/auth/me")

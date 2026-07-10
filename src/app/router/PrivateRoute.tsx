@@ -19,7 +19,7 @@ export const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
   relatorios: ["orientador", "coordenacao"],
   inferencia: ["orientador", "coordenacao"],
   auditoria: ["coordenacao"],
-  solicitacoes: ["orientador", "coordenacao"],
+  solicitacoes: ["aluno", "orientador", "coordenacao"],
   "registration-requests": ["coordenacao"],
 };
 
@@ -61,7 +61,7 @@ export function getPrivateRouteRedirect({
   }
 
   if (profileLoading) {
-    return onAuthPage ? "dashboard" : null;
+    return null;
   }
 
   if (onAuthPage) {

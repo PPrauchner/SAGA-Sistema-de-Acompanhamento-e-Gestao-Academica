@@ -5,10 +5,9 @@ Responsabilidades:
 - Costurar as coleções students/ e programs/ para fornecer os dados que o InferenceService
   consome, mapeando nomes de campos do Firestore ao contrato InferenceDataSource.
 - Converter Timestamps Firestore para strings ISO 'YYYY-MM-DD'.
-- Retornar [] para atividades, tasks e produções enquanto ActivityRepository e
-  WorkPlanRepository não estiverem implementados — o motor opera com créditos zerados
-  e exibe checklist "pendente". Quando esses repositórios forem implementados, basta
-  delegar para eles nos métodos correspondentes.
+- Carregar atividades aprovadas (juntando activity_types para grupo/tipo_ativo), tasks do
+  plano (via WorkPlanRepository) e produções aprovadas do aluno, normalizando cada uma ao
+  contrato InferenceDataSource consumido pelo InferenceService.
 
 Restrição: sem lógica de negócio — apenas leitura e mapeamento de campos.
 """
@@ -19,11 +18,13 @@ from datetime import date, datetime
 from typing import Any
 
 from backend.app.repositories.activity_repository import ActivityRepository
+from backend.app.repositories.activity_type_repository import ActivityTypeRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.qualis_weights_repository import QualisWeightsRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.vehicle_repository import VehicleRepository
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
 
 
 def _to_date_str(value: Any) -> str | None:
@@ -40,12 +41,8 @@ def _to_date_str(value: Any) -> str | None:
 class InferenceRepository:
     """Fonte de dados real do Firestore que implementa o contrato InferenceDataSource.
 
-    Métodos que dependem de repositórios ainda não implementados (ActivityRepository,
-    WorkPlanRepository) retornam listas vazias. O motor de inferência opera normalmente:
-    créditos e produções ficam zerados, o checklist exibe status reais do aluno com
-    requisitos de crédito como 'pendente'. Quando os repositórios correspondentes forem
-    implementados, basta delegar para eles nos métodos get_approved_activities,
-    get_plan_tasks e get_approved_productions.
+    Costura students/, programs/, activities/, activity_types/, o plano de trabalho e as
+    produções raiz, normalizando cada coleção aos campos que o InferenceService espera.
     """
 
     def __init__(self) -> None:
@@ -53,8 +50,10 @@ class InferenceRepository:
         self._programs = FirebaseRepository("programs")
         self._productions = ProductionRepository()
         self._activities = ActivityRepository()
+        self._activity_types = ActivityTypeRepository()
         self._vehicles = VehicleRepository()
         self._qualis_weights = QualisWeightsRepository()
+        self._work_plan = WorkPlanRepository()
 
     async def get_student(self, student_id: str) -> dict[str, Any] | None:
         """Lê o aluno do Firestore e normaliza campos para o contrato InferenceDataSource.
@@ -128,12 +127,45 @@ class InferenceRepository:
         return await self._qualis_weights.list_versions(programa_id)
 
     async def get_approved_activities(self, student_id: str) -> list[dict[str, Any]]:
-        """Retorna [] até ActivityRepository.list_activities estar implementado."""
-        return []
+        """Retorna as atividades aprovadas do aluno normalizadas ao contrato de inferência.
+
+        Lê a sub-coleção students/{id}/activities/, filtra por status='aprovado' e junta cada
+        atividade ao seu activity_type para derivar o grupo (categoria) e se o tipo está ativo.
+        Créditos seguem o override da coordenação: creditos_concedidos quando presente, senão
+        creditos_gerados (mesma regra de ActivityService._approved_credits_in_category).
+
+        Args:
+            student_id: ID do documento em students/.
+
+        Returns:
+            Lista de dicts com id, grupo, creditos, comprovante, tipo_ativo e data.
+        """
+        activities = await self._activities.list_by_student(student_id)
+        types_by_id = {item["id"]: item for item in await self._activity_types.list_all()}
+
+        result: list[dict[str, Any]] = []
+        for activity in activities:
+            if activity.get("status") != "aprovado":
+                continue
+            tipo = types_by_id.get(activity.get("tipo_id"), {})
+            creditos = activity.get("creditos_concedidos")
+            if creditos is None:
+                creditos = activity.get("creditos_gerados", 0)
+            result.append(
+                {
+                    "id": activity["id"],
+                    "grupo": tipo.get("categoria"),
+                    "creditos": float(creditos),
+                    "comprovante": activity.get("comprovante_url"),
+                    "tipo_ativo": bool(tipo.get("ativo", False)),
+                    "data": _to_date_str(activity.get("data_realizacao")),
+                }
+            )
+        return result
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
-        """Retorna [] até WorkPlanRepository.get_all_tasks_for_student estar implementado."""
-        return []
+        """Retorna as tasks do plano do aluno (id, is_defesa, concluida) para a inferência."""
+        return await self._work_plan.get_plan_tasks(student_id)
 
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as produções aprovadas do aluno com nível do veículo e pontuação base.
@@ -173,6 +205,9 @@ class InferenceRepository:
                     "veiculo_id": veiculo_id,
                     "nivel": nivel_by_vehicle.get(veiculo_id),
                     "pontuacao_base": production.get("pontuacao_base", 0),
+                    # Todo documento em productions/ é bibliográfico por definição do domínio
+                    # (RL01 depende do fato producao_bibliografica_validada).
+                    "bibliografica": True,
                     # Resolução de peso por data (ADR-0003): a data de publicação é a
                     # data_realizacao da atividade; status_publicacao distingue publicado
                     # (peso travado na data) de submetido/aceito (peso vigente atual).

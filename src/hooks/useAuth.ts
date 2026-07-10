@@ -24,7 +24,7 @@
  *   (evita flash de tela de login para usuários já autenticados).
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import {
   GoogleAuthProvider,
   onIdTokenChanged,
@@ -35,7 +35,7 @@ import {
 } from "firebase/auth";
 
 import { auth } from "@/lib/firebase";
-import { getMe, type AuthProfile } from "@/api/authApi";
+import { getMe, activateGoogleFirstAccess, type AuthProfile } from "@/api/authApi";
 import { ApiError } from "@/api/http";
 import type { UserRole } from "@/app/context/AppContext";
 
@@ -64,6 +64,7 @@ export function useAuth(): UseAuthResult {
   const [token, setToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
+  const isActivatingRef = useRef(false);
 
   /**
    * Carrega o perfil via GET /auth/me com o ID token dado.
@@ -83,7 +84,9 @@ export function useAuth(): UseAuthResult {
       setProfileError(false);
     } catch (err) {
       if (err instanceof ApiError && err.status < 500) {
-        await signOut(auth);
+        if (!isActivatingRef.current) {
+          await signOut(auth);
+        }
         return;
       }
       setProfileError(true);
@@ -129,28 +132,39 @@ export function useAuth(): UseAuthResult {
    * em paralelo — ambos são idempotentes neste cenário.
    */
   const loginWithGoogle = useCallback(async (): Promise<void> => {
-    const result = await signInWithPopup(auth, new GoogleAuthProvider());
-    const idToken = await result.user.getIdToken();
+    isActivatingRef.current = true;
     try {
-      const p = await getMe(idToken);
-      setProfile(p);
-      setProfileError(false);
-    } catch (err) {
-      const isUnknownAccount = err instanceof ApiError && err.status < 500;
-      if (isUnknownAccount) {
-        // signInWithPopup provisiona uma identidade no pool do Firebase Auth mesmo sem
-        // conta no SAGA, e signOut não a remove. Apagamos a identidade órfã enquanto a
-        // credencial está fresca (sem reauth). Best-effort: não bloqueia o erro de negócio.
-        // Só apagamos em conta desconhecida (4xx) — em falha transitória (5xx/rede) o
-        // usuário pode ser legítimo e deletá-lo quebraria o login dele.
-        await result.user.delete().catch(() => undefined);
+      const result = await signInWithPopup(auth, new GoogleAuthProvider());
+      const idToken = await result.user.getIdToken();
+      try {
+        const p = await getMe(idToken);
+        setProfile(p);
+        setProfileError(false);
+      } catch (err) {
+        const isUnknownAccount = err instanceof ApiError && err.status < 500;
+        if (isUnknownAccount) {
+          try {
+            await activateGoogleFirstAccess(idToken);
+            // Sucesso: forçar refresh do token para pegar as novas claims
+            const refreshedToken = await result.user.getIdToken(true);
+            const newProfile = await getMe(refreshedToken);
+            setProfile(newProfile);
+            setProfileError(false);
+            return;
+          } catch (activationErr) {
+            // signInWithPopup provisiona uma identidade no pool do Firebase Auth mesmo sem
+            // conta no SAGA, e signOut não a remove. Apagamos a identidade órfã enquanto a
+            // credencial está fresca (sem reauth). Best-effort: não bloqueia o erro de negócio.
+            await result.user.delete().catch(() => undefined);
+            await signOut(auth);
+            throw new Error((activationErr as Error).message ?? "E-mail sem convite; procure a coordenação");
+          }
+        }
+        await signOut(auth);
+        throw new Error("Falha ao verificar sua conta. Tente novamente.");
       }
-      await signOut(auth);
-      throw new Error(
-        isUnknownAccount
-          ? "Conta não encontrada. Entre em contato com a coordenação do programa."
-          : "Falha ao verificar sua conta. Tente novamente.",
-      );
+    } finally {
+      isActivatingRef.current = false;
     }
   }, []);
 

@@ -16,9 +16,11 @@ import {
 
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useChecklistStudent } from "@/hooks/useChecklistStudent";
 import { validateReasonableDate } from "@/lib/dateValidation";
 import {
   createActivity,
+  createActivityForOrientando,
   emitirParecer,
   getActivities,
   getActivityTypes,
@@ -59,7 +61,11 @@ function statusCfg(status: string): StatusConfig {
 function formatDate(value: string | null): string {
   if (!value) return "—";
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString("pt-BR");
+  // data_realizacao e uma data de calendario armazenada a meia-noite UTC; formata em UTC
+  // para nao deslocar um dia em fusos negativos (bug #268).
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString("pt-BR", { timeZone: "UTC" });
 }
 
 interface FormState {
@@ -68,6 +74,9 @@ interface FormState {
   data_realizacao: string;
   status: ActivityCreateStatus;
   file: File | null;
+  // Usados apenas quando o orientador cria para um orientando (issue #263).
+  aluno_id: string;
+  parecer: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -76,6 +85,8 @@ const EMPTY_FORM: FormState = {
   data_realizacao: "",
   status: "enviado",
   file: null,
+  aluno_id: "",
+  parecer: "",
 };
 
 // ─── Página ──────────────────────────────────────────────────────────────────
@@ -104,8 +115,14 @@ export function ActivitiesPage() {
   const [validateSaving, setValidateSaving] = useState(false);
 
   const canRegister = role === "aluno";
+  const canCreateForOrientando = role === "orientador";
+  const canCreate = canRegister || canCreateForOrientando;
   const canDarParecer = role === "orientador";
   const canValidar = role === "coordenacao";
+
+  // Lista de orientandos para o seletor do formulário do orientador (mesma fonte do
+  // checklist/plano de trabalho). Para o aluno, o hook retorna students=null.
+  const { students } = useChecklistStudent();
 
   async function loadData(authToken: string): Promise<void> {
     setLoading(true);
@@ -143,6 +160,37 @@ export function ActivitiesPage() {
   async function handleSubmit(event: FormEvent): Promise<void> {
     event.preventDefault();
     if (!token) return;
+
+    // Fluxo do orientador: cria para um orientando, com parecer, direto para a coordenação.
+    if (canCreateForOrientando) {
+      if (!form.aluno_id || !form.tipo_id || !form.descricao || !form.data_realizacao || !form.parecer.trim()) {
+        setError("Selecione o orientando e preencha tipo, descrição, data e parecer.");
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      setFeedback(null);
+      try {
+        await createActivityForOrientando(token, {
+          aluno_id: form.aluno_id,
+          tipo_id: form.tipo_id,
+          descricao: form.descricao,
+          // Meia-noite UTC explicita, consistente com a submissao do aluno (bug #268).
+          data_realizacao: `${form.data_realizacao}T00:00:00Z`,
+          comprovante_url: null,
+          parecer: form.parecer.trim(),
+        });
+        setFeedback("Atividade criada e enviada para a coordenação.");
+        setShowForm(false);
+        await loadData(token);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Falha ao criar atividade");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
     if (!form.tipo_id || !form.descricao || !form.data_realizacao) {
       setError("Preencha tipo, descrição e data de realização.");
       return;
@@ -164,7 +212,9 @@ export function ActivitiesPage() {
       const result = await createActivity(token, {
         tipo_id: form.tipo_id,
         descricao: form.descricao,
-        data_realizacao: form.data_realizacao,
+        // Envia a data como meia-noite UTC explicita para nao depender da interpretacao
+        // de datetime naive no backend (bug #268).
+        data_realizacao: `${form.data_realizacao}T00:00:00Z`,
         comprovante_url: null,
         status: form.status,
       });
@@ -271,14 +321,14 @@ export function ActivitiesPage() {
             {currentUser?.name ? ` · ${currentUser.name}` : ""}
           </p>
         </div>
-        {canRegister && (
+        {canCreate && (
           <button
             onClick={openForm}
             className="flex items-center gap-2 rounded-xl px-4 py-2.5"
             style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}
           >
             <Plus size={16} />
-            Nova Atividade
+            {canCreateForOrientando ? "Nova atividade para orientando" : "Nova Atividade"}
           </button>
         )}
       </div>
@@ -294,20 +344,41 @@ export function ActivitiesPage() {
         </div>
       )}
 
-      {showForm && canRegister && (
+      {showForm && canCreate && (
         <form
           onSubmit={handleSubmit}
           className="rounded-2xl p-5 mb-6"
           style={{ background: "var(--card)", border: "1px solid var(--border)" }}
         >
           <div className="flex items-center justify-between mb-4">
-            <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--foreground)" }}>Nova atividade</h2>
+            <h2 style={{ fontSize: "16px", fontWeight: 700, color: "var(--foreground)" }}>
+              {canCreateForOrientando ? "Nova atividade para orientando" : "Nova atividade"}
+            </h2>
             <button type="button" onClick={() => setShowForm(false)} style={{ color: "var(--muted-foreground)" }}>
               <X size={18} />
             </button>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {canCreateForOrientando && (
+              <label className="flex flex-col gap-1 sm:col-span-2">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>Orientando</span>
+                <select
+                  value={form.aluno_id}
+                  onChange={(e) => setForm((f) => ({ ...f, aluno_id: e.target.value }))}
+                  className="rounded-xl px-3 py-2.5 outline-none"
+                  style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
+                >
+                  <option value="">Selecione o orientando…</option>
+                  {students?.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <label className="flex flex-col gap-1">
               <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>Tipo de atividade</span>
               <select
@@ -352,36 +423,54 @@ export function ActivitiesPage() {
               />
             </label>
 
-            <label className="flex flex-col gap-1">
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>Situação inicial</span>
-              <select
-                value={form.status}
-                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ActivityCreateStatus }))}
-                className="rounded-xl px-3 py-2.5 outline-none"
-                style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
-              >
-                <option value="enviado">Enviar para validação</option>
-                <option value="rascunho">Salvar como rascunho</option>
-              </select>
-            </label>
-
-            <label className="flex flex-col gap-1">
-              <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>
-                Comprovante {selectedType?.exige_comprovante ? "(obrigatório)" : "(opcional)"}
-              </span>
-              <div
-                className="flex items-center gap-2 rounded-xl px-3 py-2.5"
-                style={{ background: "var(--card)", border: "1px dashed var(--border)" }}
-              >
-                <Paperclip size={15} style={{ color: "var(--muted-foreground)" }} />
-                <input
-                  type="file"
-                  accept="application/pdf,image/png,image/jpeg"
-                  onChange={(e) => setForm((f) => ({ ...f, file: e.target.files?.[0] ?? null }))}
-                  style={{ fontSize: "12px", color: "var(--foreground)" }}
+            {canCreateForOrientando && (
+              <label className="flex flex-col gap-1 sm:col-span-2">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>Parecer do orientador</span>
+                <textarea
+                  value={form.parecer}
+                  onChange={(e) => setForm((f) => ({ ...f, parecer: e.target.value }))}
+                  rows={3}
+                  placeholder="Endosso da atividade — vai direto para a fila da coordenação."
+                  className="rounded-xl px-3 py-2.5 outline-none resize-none"
+                  style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
                 />
-              </div>
-            </label>
+              </label>
+            )}
+
+            {canRegister && (
+              <label className="flex flex-col gap-1">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>Situação inicial</span>
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as ActivityCreateStatus }))}
+                  className="rounded-xl px-3 py-2.5 outline-none"
+                  style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
+                >
+                  <option value="enviado">Enviar para validação</option>
+                  <option value="rascunho">Salvar como rascunho</option>
+                </select>
+              </label>
+            )}
+
+            {canRegister && (
+              <label className="flex flex-col gap-1">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                  Comprovante {selectedType?.exige_comprovante ? "(obrigatório)" : "(opcional)"}
+                </span>
+                <div
+                  className="flex items-center gap-2 rounded-xl px-3 py-2.5"
+                  style={{ background: "var(--card)", border: "1px dashed var(--border)" }}
+                >
+                  <Paperclip size={15} style={{ color: "var(--muted-foreground)" }} />
+                  <input
+                    type="file"
+                    accept="application/pdf,image/png,image/jpeg"
+                    onChange={(e) => setForm((f) => ({ ...f, file: e.target.files?.[0] ?? null }))}
+                    style={{ fontSize: "12px", color: "var(--foreground)" }}
+                  />
+                </div>
+              </label>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 mt-5">

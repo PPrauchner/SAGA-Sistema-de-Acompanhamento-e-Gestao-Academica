@@ -3,7 +3,8 @@
  *
  * Responsabilidades:
  * - useOrientadorUpdates(): carrega as entradas mais recentes de audit_logs via
- *   GET /api/v1/audit-logs (page_size limitado) e as mapeia para itens enxutos de timeline,
+ *   GET /api/v1/audit-logs (page_size limitado) e as mapeia para itens enxutos de timeline
+ *   (incluindo o autor pelo nome resolvido no backend, com fallback para o uid),
  *   expondo loading/error/data.
  * - O backend escopa por papel: para o orientador autenticado, retorna apenas os logs dos
  *   seus orientandos (ações executadas por eles). Nenhuma filtragem extra é feita aqui.
@@ -19,6 +20,7 @@ export interface OrientadorUpdateItem {
   id: string;
   operacao: string | null;
   recurso: string | null;
+  autor: string | null;
   resultadoStatus: "sucesso" | "erro" | null;
   timestamp: string | null;
 }
@@ -53,6 +55,7 @@ export function useOrientadorUpdates(): UseOrientadorUpdatesResult {
             id: log.id,
             operacao: log.operacao ?? null,
             recurso: log.recurso ?? null,
+            autor: log.usuario_nome ?? log.usuario_id ?? null,
             resultadoStatus: log.resultado_status ?? null,
             timestamp: log.timestamp ?? null,
           })),

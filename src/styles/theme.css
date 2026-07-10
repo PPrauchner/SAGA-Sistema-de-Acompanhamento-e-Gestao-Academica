@@ -2,6 +2,7 @@
 
 :root {
   --font-size: 16px;
+  --app-font-scale: 1;
   --background: #f4f6f9;
   --foreground: #1a1a2e;
   --card: #ffffff;
@@ -193,6 +194,24 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+
+  #root {
+    min-height: calc(100vh / var(--app-font-scale));
+    width: calc(100% / var(--app-font-scale));
+    transform-origin: top left;
+    zoom: var(--app-font-scale);
+  }
+
+  @supports not (zoom: 1) {
+    html {
+      font-size: calc(var(--font-size) * var(--app-font-scale));
+    }
+
+    #root {
+      min-height: 100vh;
+      width: 100%;
+    }
   }
 
   /* ─── Dark mode adaptive overrides ─────────────────────────────────
@@ -450,4 +469,3 @@
   .stepper-step { min-width: 0; }
   .stepper-step > * { min-width: 0; }
 }
-

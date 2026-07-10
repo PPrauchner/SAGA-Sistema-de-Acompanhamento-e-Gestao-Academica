@@ -8,8 +8,9 @@ import { approveTransferRequest, rejectTransferRequest } from "@/api/transfersAp
 import { TransferModal } from "../transfers/TransferModal";
 
 const TYPE_LABELS: Record<string, string> = {
-  atividade: "Atividade Creditável",
+  atividade: "Validação de atividade",
   prorrogacao: "Prorrogação",
+  trancamento: "Trancamento de matrícula",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",
   producao: "Validação de Produção",
@@ -21,6 +22,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; color: string; ico
   pendente_aprovacao: { label: "Pendente Aprovação", bg: "#fef9c3", color: "#D4A017", icon: <AlertTriangle size={12} /> },
   pendente_aceite: { label: "Aguardando Aceite", bg: "#eef3fc", color: "#123C7A", icon: <Clock size={12} /> },
   pendente: { label: "Pendente", bg: "#fef9c3", color: "#D4A017", icon: <AlertTriangle size={12} /> },
+  concluido: { label: "Concluído", bg: "#dcfce7", color: "#166534", icon: <CheckCircle size={12} /> },
 };
 
 export function RequestsPage() {
@@ -62,10 +64,24 @@ export function RequestsPage() {
         }
       } else if (req.tipo === "transferencia_coordenacao") {
         if (action === "approve") {
-          await coordinationTransfersApi.accept(req.id, token);
+          if (req.payload_original.successor_uid !== currentUser?.id) {
+            alert("Apenas o orientador convidado pode aprovar a transferência.");
+            return;
+          }
+          await coordinationTransfersApi.accept(token, req.id);
         } else {
-          alert("Rejeição de transferência de coordenação ainda não implementada.");
-          return;
+          if (req.payload_original.initiator_uid === currentUser?.id) {
+            if (confirm("Tem certeza que deseja cancelar esta solicitação de transferência?")) {
+              await coordinationTransfersApi.cancel(token, req.id);
+            }
+          } else if (req.payload_original.successor_uid === currentUser?.id) {
+            if (confirm("Tem certeza que deseja rejeitar o convite de coordenação?")) {
+              await coordinationTransfersApi.reject(token, req.id);
+            }
+          } else {
+            alert("Sem permissão para cancelar ou rejeitar.");
+            return;
+          }
         }
       } else if (req.tipo === "transferencia") {
         if (action === "approve") {
@@ -102,6 +118,18 @@ export function RequestsPage() {
       return true;
     });
   }, [requests, filterTipo, filterStatus, filterPeriodo]);
+
+  const typeOptions = useMemo(() => {
+    const receivedTypes = new Set(requests.map((request) => request.tipo));
+    return Object.entries(TYPE_LABELS).filter(([tipo]) => requests.length === 0 || receivedTypes.has(tipo as RequestItem["tipo"]));
+  }, [requests]);
+
+  const statusOptions = useMemo(() => {
+    return Array.from(new Set(requests.map((request) => request.status))).map((status) => [
+      status,
+      STATUS_MAP[status]?.label || status,
+    ] as const);
+  }, [requests]);
 
   if (loading) {
     return <div className="p-8 text-center">Carregando solicitações...</div>;
@@ -141,7 +169,7 @@ export function RequestsPage() {
           style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)", height: "42px" }}
         >
           <option value="">Todos os Tipos</option>
-          {Object.entries(TYPE_LABELS).map(([k, v]) => (
+          {typeOptions.map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
@@ -152,8 +180,8 @@ export function RequestsPage() {
           style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)", height: "42px" }}
         >
           <option value="">Todos os Status</option>
-          {Object.entries(STATUS_MAP).map(([k, v]) => (
-            <option key={k} value={k}>{v.label}</option>
+          {statusOptions.map(([k, label]) => (
+            <option key={k} value={k}>{label}</option>
           ))}
         </select>
         <select
@@ -220,20 +248,26 @@ export function RequestsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm flex gap-2 justify-center">
-                  <button
-                    onClick={() => handleAction(req, "approve")}
-                    className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
-                    title="Aprovar / Aceitar"
-                  >
-                    <CheckCircle size={15} />
-                  </button>
-                  <button
-                    onClick={() => handleAction(req, "reject")}
-                    className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-                    title="Rejeitar"
-                  >
-                    <XCircle size={15} />
-                  </button>
+                  {req.status !== "concluido" && (
+                    <>
+                      {!(req.tipo === "transferencia_coordenacao" && req.payload_original.successor_uid !== currentUser?.id) && (
+                        <button
+                          onClick={() => handleAction(req, "approve")}
+                          className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
+                          title="Aprovar / Aceitar"
+                        >
+                          <CheckCircle size={15} />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleAction(req, "reject")}
+                        className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                        title={req.tipo === "transferencia_coordenacao" && req.payload_original.initiator_uid === currentUser?.id ? "Cancelar" : "Rejeitar"}
+                      >
+                        <XCircle size={15} />
+                      </button>
+                    </>
+                  )}
                   <button
                     onClick={() => alert(`Detalhes da solicitação ${req.id}:\n\n` + JSON.stringify(req.payload_original, null, 2))}
                     className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"

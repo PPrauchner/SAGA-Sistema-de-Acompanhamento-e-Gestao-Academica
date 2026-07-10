@@ -24,7 +24,7 @@ class _FakeCoordinationTransferService:
 
     async def accept_transfer(self, transfer_id: str, user: CurrentUser) -> CoordinationTransferResponse:
         self.chamadas.append(("accept_transfer", (transfer_id, user)))
-        return _response("aceita")
+        return _response("concluido")
 
     async def reject_transfer(self, transfer_id: str, user: CurrentUser) -> CoordinationTransferResponse:
         self.chamadas.append(("reject_transfer", (transfer_id, user)))
@@ -135,7 +135,7 @@ def test_sucessor_aceita(client: TestClient) -> None:
     resp = client.post("/api/v1/coordination-transfers/tr1/accept")
 
     assert resp.status_code == 200
-    assert resp.json()["status"] == "aceita"
+    assert resp.json()["status"] == "concluido"
 
 
 def test_aceitar_notifica_ex_coordenador(
