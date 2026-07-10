@@ -54,6 +54,14 @@ export interface StudentUpdatePayload {
   prazo_final?: string | null;
 }
 
+/** Entrada mínima do diretório de co-autores (GET /students/coauthors), usada pelo
+ * seletor de co-autores do formulário de produção (issue #310). Acessível também a
+ * 'aluno' — diferente de getStudents(), que é orientador/coordenação apenas. */
+export interface CoauthorCandidate {
+  uid: string;
+  nome: string;
+}
+
 async function request<T>(
   path: string,
   token: string,
@@ -102,4 +110,8 @@ export function updateStudent(
     method: "PUT",
     body: JSON.stringify(data),
   });
+}
+
+export function getCoauthorCandidates(token: string): Promise<CoauthorCandidate[]> {
+  return request<CoauthorCandidate[]>("/api/v1/students/coauthors", token);
 }

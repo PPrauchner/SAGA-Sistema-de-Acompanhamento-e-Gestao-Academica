@@ -208,24 +208,43 @@
     },
     {
       "path": "/api/v1/extensions/{extension_id}/approve",
-      "method": "PATCH",
-      "descricao": "Coordenação aprova ou rejeita a prorrogação. Se aprovada, prazo_final do aluno é atualizado.",
+      "method": "POST",
+      "descricao": "Coordenação aprova a prorrogação/trancamento pendente. Recalcula prazo_final do aluno quando há nova_data; prorrogação (prazo_defesa|prazo_qualificacao) também move situacao_registrada do aluno para 'em_prorrogacao' (CONTEXT.md → Prorrogação). NOTA DE IMPLEMENTAÇÃO (desvio registrado): aprovar e rejeitar são endpoints POST separados (approve/reject), não um único PATCH com {acao}; a resposta devolve o ExtensionResponse completo, e o campo situacao_registrada (=situacao_aluno_atualizada) reflete a transição.",
       "papeis_autorizados": ["coordenacao"],
       "aspectos_aplicados": [
         "@requires_role('coordenacao')",
         "@audit_operation",
-        "@trigger_alerts (notifica aluno com resultado e novo prazo)"
+        "@trigger_alerts (A05 — notifica aluno: 'Sua solicitação de {prorrogação|trancamento} foi aprovada. Novo prazo: {data}')"
+      ],
+      "request_body": null,
+      "response_200": {
+        "_schema": "ExtensionResponse",
+        "id": "string",
+        "status": "string ('aprovada')",
+        "tipo": "string",
+        "nova_data": "string (ISO8601) | null",
+        "situacao_registrada": "string | null (='em_prorrogacao' para prorrogação; null para trancamento)"
+      }
+    },
+    {
+      "path": "/api/v1/extensions/{extension_id}/reject",
+      "method": "POST",
+      "descricao": "Coordenação rejeita a prorrogação/trancamento pendente, com motivo obrigatório. Não altera prazo_final nem situacao_registrada do aluno.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": [
+        "@requires_role('coordenacao')",
+        "@audit_operation"
       ],
       "request_body": {
-        "acao": "string ('aprovar'|'rejeitar')",
-        "observacao": "string | null"
+        "motivo": "string (obrigatório, min_length=1)"
       },
       "response_200": {
-        "message": "string",
-        "novo_prazo_final": "string (ISO8601) | null",
-        "situacao_aluno_atualizada": "string | null",
-        "notificacao_enviada": "boolean"
-      }
+        "_schema": "ExtensionResponse",
+        "id": "string",
+        "status": "string ('rejeitada')",
+        "motivo": "string"
+      },
+      "response_422": {"detail": "Motivo e obrigatorio para rejeitar a solicitacao"}
     }
   ]
 }
