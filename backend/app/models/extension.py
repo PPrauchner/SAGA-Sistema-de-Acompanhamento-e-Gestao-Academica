@@ -58,6 +58,7 @@ class ExtensionDocument(BaseModel):
         motivo: Justificativa do aluno.
         plano_atualizado: Descrição/URL do plano de trabalho revisado.
         parecer_orientador: Parecer técnico do orientador (campo, não estado).
+        observacao_coordenacao: Observação registrada pela coordenação ao deliberar.
         status: Estado atual do ciclo de vida.
         nova_data: Novo prazo pretendido, informado pelo aluno.
         data_atual: `prazo_final` vigente do aluno no momento da solicitação.
@@ -67,20 +68,21 @@ class ExtensionDocument(BaseModel):
         created_at: Momento da criação da solicitação.
     """
 
-    student_id:         str
-    requester_id:       str
-    programa_id:        str | None = None
-    tipo:               ExtensionTipo
-    motivo:             str = Field(..., min_length=10)
-    plano_atualizado:   str
-    parecer_orientador: str | None = None
-    status:             ExtensionStatus = ExtensionStatus.PENDENTE
-    nova_data:          datetime
-    data_atual:         datetime | None = None
-    prazo_novo:         datetime | None = None
-    aprovado_por:       str | None = None
-    aprovado_em:        datetime | None = None
-    created_at:         datetime
+    student_id:             str
+    requester_id:           str
+    programa_id:            str | None = None
+    tipo:                   ExtensionTipo
+    motivo:                 str = Field(..., min_length=10)
+    plano_atualizado:       str
+    parecer_orientador:     str | None = None
+    observacao_coordenacao: str | None = None
+    status:                 ExtensionStatus = ExtensionStatus.PENDENTE
+    nova_data:              datetime
+    data_atual:             datetime | None = None
+    prazo_novo:             datetime | None = None
+    aprovado_por:           str | None = None
+    aprovado_em:            datetime | None = None
+    created_at:             datetime
 
 
 # ---------------------------------------------------------------------------
@@ -116,25 +118,26 @@ class DecisionRequest(BaseModel):
 class ExtensionResponse(BaseModel):
     """Representação pública de uma prorrogação retornada pelos endpoints."""
 
-    id:                 str
-    student_id:         str
-    requester_id:       str
-    programa_id:        str | None = None
-    tipo:               ExtensionTipo
-    motivo:             str
-    plano_atualizado:   str
-    parecer_orientador: str | None = None
-    status:             ExtensionStatus
-    nova_data:          datetime
-    data_atual:         datetime | None = None
-    prazo_novo:         datetime | None = None
-    aprovado_por:       str | None = None
-    aprovado_em:        datetime | None = None
-    created_at:         datetime
+    id:                     str
+    student_id:             str
+    requester_id:           str
+    programa_id:            str | None = None
+    tipo:                   ExtensionTipo
+    motivo:                 str
+    plano_atualizado:       str
+    parecer_orientador:     str | None = None
+    observacao_coordenacao: str | None = None
+    status:                 ExtensionStatus
+    nova_data:              datetime
+    data_atual:             datetime | None = None
+    prazo_novo:             datetime | None = None
+    aprovado_por:           str | None = None
+    aprovado_em:            datetime | None = None
+    created_at:             datetime
     # Enriquecidos pelo service nas listagens, a partir do aluno referenciado por
     # student_id. Ausentes na resposta de criação (não há listagem a enriquecer).
-    student_nome:       str | None = None
-    matricula:          str | None = None
-    nivel:              str | None = None
+    student_nome:           str | None = None
+    matricula:              str | None = None
+    nivel:                  str | None = None
 
     model_config = ConfigDict(from_attributes=True)
