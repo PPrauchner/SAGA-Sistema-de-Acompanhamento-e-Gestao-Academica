@@ -5,7 +5,7 @@ Responsabilidades:
 - Rejeitar datas irreais (ano 1800, ano 9999) com mensagem descritiva,
   resultando em 422 quando aplicadas a um schema de entrada.
 - Oferecer dois tipos `Annotated`, conforme a semântica do campo:
-    - `DataFutura`: data que pode estar no futuro (ex.: novo prazo de
+    - `DataFutura`: data-hora que pode estar no futuro (ex.: novo prazo de
       prorrogação) — intervalo [2000-01-01, hoje + 10 anos].
     - `DataEventoRealizacao`: evento já ocorrido (ex.: data de realização de
       atividade/produção) — intervalo [2000-01-01, hoje], sem futuro.
@@ -30,9 +30,8 @@ DateT = TypeVar("DateT", bound=date)
 def _como_data(valor: date) -> date:
     """Reduz um `datetime` à sua parte de data para comparação de intervalo.
 
-    `datetime` é subclasse de `date`; campos `data_realizacao` chegam como
-    `datetime` e `nova_data` como `date`. A comparação de intervalo é feita
-    sempre no nível de dia.
+    `datetime` é subclasse de `date`; `data_realizacao` e `nova_data` chegam
+    como `datetime`. A comparação de intervalo é feita sempre no nível de dia.
 
     Args:
         valor: Data ou data-hora a normalizar.
@@ -101,5 +100,5 @@ def validar_data_evento(valor: DateT) -> DateT:
     return valor
 
 
-DataFutura = Annotated[date, AfterValidator(validar_data_futura)]
+DataFutura = Annotated[datetime, AfterValidator(validar_data_futura)]
 DataEventoRealizacao = Annotated[datetime, AfterValidator(validar_data_evento)]

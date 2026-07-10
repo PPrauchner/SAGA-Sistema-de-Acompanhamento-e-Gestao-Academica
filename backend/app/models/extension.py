@@ -18,6 +18,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from backend.app.models.validators import DataFutura
+
 
 # ---------------------------------------------------------------------------
 # Enums
@@ -91,7 +93,7 @@ class ExtensionCreateRequest(BaseModel):
     tipo:             ExtensionTipo = Field(..., description="Natureza da prorrogação solicitada.")
     motivo:           str = Field(..., min_length=10, description="Justificativa (mínimo 10 caracteres).")
     plano_atualizado: str = Field(..., min_length=1, description="Descrição ou URL do plano de trabalho revisado.")
-    nova_data:        datetime = Field(..., description="Novo prazo pretendido pelo aluno.")
+    nova_data:        DataFutura = Field(..., description="Novo prazo pretendido pelo aluno.")
 
 
 class ReviewRequest(BaseModel):
