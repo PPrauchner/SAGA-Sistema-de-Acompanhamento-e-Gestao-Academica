@@ -487,6 +487,10 @@ erDiagram
 | `descricao` | string | | |
 | `data_realizacao` | timestamp | | |
 | `comprovante_url` | string\|null | | URL de download (Firebase Storage) |
+| `coauthor_student_uids` | array | ->`users.uid` | coautores discentes cadastrados em atividade standalone |
+| `external_authors` | array | | autores externos informativos; nao geram copia nem credito |
+| `activity_group_id` | string\|null | | agrupa copias independentes da mesma atividade standalone |
+| `origin_activity_id` | string\|null | ->`activities` | preenchido nas copias de coautores; a copia original fica null |
 | `creditos_gerados` | float | `calc` | default = `pontuacao_base` do tipo |
 | `creditos_concedidos` | float\|null | | override da coordenação no `/validate` (sobrescreve crédito) |
 | `status` | string | | `rascunho`\|`enviado`\|`aprovado`\|`rejeitado` |
@@ -495,6 +499,15 @@ erDiagram
 | `validado_por` | string\|null | →`users.uid` | |
 | `validado_em` | timestamp\|null | | |
 | `criado_em` / `atualizado_em` | timestamp | | |
+
+Atividades creditaveis standalone tambem suportam coautoria. O aluno que registra recebe a
+copia original em sua subcolecao `activities`; cada coautor cadastrado selecionado recebe uma
+copia independente em sua propria subcolecao, com ID proprio, `status='enviado'`,
+`activity_group_id` comum e `origin_activity_id` apontando para a copia original. Cada copia e
+validada separadamente pelo orientador do aluno dono e, quando aprovada, gera credito cheio.
+Autores externos ficam apenas em `external_authors`: nao geram copia, validacao nem credito. A
+RL04 continua escopada por aluno/subcolecao; copias equivalentes em alunos diferentes nao sao
+duplicatas entre si.
 
 ### `productions` 🔲 — **coleção raiz** — chave: `auto-id`
 

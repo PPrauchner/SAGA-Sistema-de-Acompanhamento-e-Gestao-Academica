@@ -92,14 +92,23 @@ class ComprovanteService:
             path_bucket, content, arquivo.content_type
         )
 
-        await self._activities.update_activity(
-            student_id,
-            activity_id,
-            {
-                "comprovante_url": comprovante_url,
-                "atualizado_em": datetime.now(timezone.utc),
-            },
-        )
+        atualizado_em = datetime.now(timezone.utc)
+        activity_group_id = activity.get("activity_group_id")
+        if activity_group_id:
+            await self._activities.update_group_comprovante(
+                activity_group_id,
+                comprovante_url,
+                atualizado_em,
+            )
+        else:
+            await self._activities.update_activity(
+                student_id,
+                activity_id,
+                {
+                    "comprovante_url": comprovante_url,
+                    "atualizado_em": atualizado_em,
+                },
+            )
 
         return {
             "comprovante_url": comprovante_url,
