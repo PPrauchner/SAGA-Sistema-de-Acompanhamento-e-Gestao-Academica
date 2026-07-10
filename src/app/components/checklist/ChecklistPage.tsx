@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Circle, AlertTriangle, Loader2, Search, ChevronDown } from "lucide-react";
+import { CheckCircle2, Circle, AlertTriangle, Loader2, Search, ChevronDown, FileDown } from "lucide-react";
 import { useChecklistStudent } from "@/hooks/useChecklistStudent";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -8,6 +8,7 @@ import {
   type RequisitoStatus,
 } from "@/api/checklistApi";
 import { updateProficiencia, updateQualificacao } from "@/api/studentsApi";
+import { exportChecklistPdf } from "@/utils/exportChecklistPdf";
 import {
   Accordion,
   AccordionContent,
@@ -80,6 +81,7 @@ export function ChecklistPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
   const [savingAcademicFact, setSavingAcademicFact] = useState<"proficiencia" | "qualificacao" | null>(null);
   const [academicForm, setAcademicForm] = useState({
     proficienciaComprovada: false,
@@ -181,6 +183,19 @@ export function ChecklistPage() {
     }
   }
 
+  function handleExportPdf(): void {
+    if (!data) return;
+    setExportingPdf(true);
+    setError(null);
+    try {
+      exportChecklistPdf(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao exportar checklist em PDF.");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
     <div>
       {/* Header */}
@@ -193,6 +208,18 @@ export function ChecklistPage() {
         </div>
 
         {/* Seletor de aluno — orientador e coordenação apenas */}
+        <button
+          type="button"
+          onClick={handleExportPdf}
+          disabled={!data || loading || exportingPdf}
+          className="flex items-center gap-2 rounded-xl px-4 py-2 transition-opacity disabled:opacity-60"
+          style={{ background: "#eef3fc", border: "1px solid #c7d9f5", color: "#123C7A", fontSize: "13px", fontWeight: 700 }}
+          aria-label="Exportar checklist em PDF"
+        >
+          {exportingPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+          Exportar checklist em PDF
+        </button>
+
         {students && (
           <div className="relative">
             <button
