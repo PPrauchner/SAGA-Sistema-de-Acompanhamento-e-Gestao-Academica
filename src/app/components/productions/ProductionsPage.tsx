@@ -377,8 +377,9 @@ export function ProductionsPage() {
                 </select>
                 {selectedVehicle && (
                   <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 6 }}>
-                    Nível <strong>{selectedVehicle.nivel}</strong> · peso{" "}
-                    <strong>{selectedVehicle.peso}</strong> (resolvidos para o programa atual)
+                    Nível <strong>{selectedVehicle.nivel}</strong> · peso de referência{" "}
+                    <strong>{selectedVehicle.peso}</strong>. O peso aplicado à pontuação é
+                    resolvido pelo programa na data de publicação.
                   </p>
                 )}
               </div>
