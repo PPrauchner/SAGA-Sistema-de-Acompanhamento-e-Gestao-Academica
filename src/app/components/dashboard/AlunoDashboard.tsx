@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { getChecklist, type ChecklistResponse, type RequisitoStatus } from "@/api/checklistApi";
 import { getWorkPlan, type WorkPlan, type StageStatus } from "@/api/workPlanApi";
 import { ApiError } from "@/api/http";
+import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
 import {
   CheckCircle2, X, Calendar, ChevronRight, AlertTriangle,
   Bell, Clock,
@@ -781,18 +782,33 @@ function ChecklistSection({ items, loading, error, onOpen }: { items: ChecklistI
 // ─── PROGRESS GRAPH ───────────────────────────────────────────────────────────
 
 function ProgressGraph() {
+  const chartRef = useRef<HTMLDivElement>(null);
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Evolução dos Créditos"
         sub="Créditos acumulados vs. meta por semestre"
         right={
-          <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1" style={{ background: "#fef9c3", border: "1px solid #fde68a" }}>
-            <AlertTriangle size={12} style={{ color: "#D4A017" }} />
-            <span style={{ fontSize: "11px", fontWeight: 700, color: "#D4A017" }}>Plateou no Sem 2/24</span>
+          <div className="flex flex-wrap items-center gap-2 justify-end">
+            <div className="flex items-center gap-1.5 rounded-lg px-2.5 py-1" style={{ background: "#fef9c3", border: "1px solid #fde68a" }}>
+              <AlertTriangle size={12} style={{ color: "#D4A017" }} />
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "#D4A017" }}>Plateou no Sem 2/24</span>
+            </div>
+            <ChartExportMenu
+              title="Evolucao dos Creditos"
+              fileName="evolucao-creditos"
+              chartRef={chartRef}
+              data={GRAPH_DATA}
+              columns={[
+                { key: "sem", label: "Semestre" },
+                { key: "atual", label: "Creditos obtidos" },
+                { key: "esperado", label: "Meta esperada" },
+              ]}
+            />
           </div>
         }
       />
+      <div ref={chartRef}>
       <ResponsiveContainer width="100%" height={200}>
         <AreaChart data={GRAPH_DATA} margin={{ top: 8, right: 10, left: -20, bottom: 0 }}>
           <defs>
@@ -823,6 +839,7 @@ function ProgressGraph() {
           />
         </AreaChart>
       </ResponsiveContainer>
+      </div>
       <div className="flex flex-wrap items-center gap-3 mt-3 justify-center">
         {[
           { color: "#1F8A70", label: "Créditos Obtidos" },
