@@ -1,8 +1,18 @@
-import { useState, useEffect } from "react";
-import axios from "axios";
-import { useAuth } from "@/hooks/useAuth";
+/**
+ * Cliente HTTP e hook React do domínio de prorrogações de prazo (Spec 08).
+ *
+ * Responsabilidades:
+ * - extensionsApi: list/create/review/decide contra /api/v1/extensions, via http.ts.
+ * - useExtensionsApi(): carrega a lista no escopo do papel e expõe as mutações.
+ *
+ * O escopo por papel é resolvido no backend (GET /extensions): aluno vê as próprias,
+ * orientador as dos orientandos, coordenação as do programa.
+ */
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { useCallback, useEffect, useState } from "react";
+import { apiGet, apiPatch, apiPost } from "@/api/http";
+import { useAuth } from "@/hooks/useAuth";
+import type { UserRole } from "@/app/context/AppContext";
 
 export type ExtensionStatus = "pendente" | "em_analise" | "aprovada" | "rejeitada";
 export type ExtensionTipo =
@@ -15,6 +25,8 @@ export interface Extension {
   id: string;
   student_id: string;
   student_nome?: string | null;
+  matricula?: string | null;
+  nivel?: string | null;
   requester_id: string;
   programa_id?: string | null;
   tipo: ExtensionTipo;
@@ -37,68 +49,94 @@ export interface CreateExtensionInput {
   nova_data: string; // ISO 8601
 }
 
-export const useExtensionsApi = () => {
-  const { token, currentUser, role } = useAuth();
+export const extensionsApi = {
+  list(token: string): Promise<Extension[]> {
+    return apiGet<Extension[]>("/extensions", token);
+  },
+
+  create(token: string, payload: CreateExtensionInput): Promise<Extension> {
+    return apiPost<Extension>("/extensions", payload, token);
+  },
+
+  review(token: string, extensionId: string, parecer: string): Promise<Extension> {
+    return apiPatch<Extension>(
+      `/extensions/${extensionId}/review`,
+      { parecer_orientador: parecer },
+      token,
+    );
+  },
+
+  decide(token: string, extensionId: string, acao: "aprovar" | "rejeitar"): Promise<Extension> {
+    return apiPatch<Extension>(`/extensions/${extensionId}/approve`, { acao }, token);
+  },
+};
+
+interface UseExtensionsApiResult {
+  extensions: Extension[];
+  loading: boolean;
+  error: string | null;
+  role: UserRole | null;
+  createRequest: (data: CreateExtensionInput) => Promise<Extension>;
+  submitReview: (extensionId: string, parecer: string) => Promise<Extension>;
+  submitDecision: (extensionId: string, acao: "aprovar" | "rejeitar") => Promise<Extension>;
+  refresh: () => Promise<void>;
+}
+
+export function useExtensionsApi(): UseExtensionsApiResult {
+  const { token, role } = useAuth();
   const [extensions, setExtensions] = useState<Extension[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const getHeaders = () => ({ headers: { Authorization: `Bearer ${token}` } });
-
-  // Escopo por papel é resolvido no backend (Spec 08 — GET /extensions).
-  const loadExtensions = async () => {
-    if (!token) return;
+  const loadExtensions = useCallback(async (): Promise<void> => {
+    if (!token) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
+    setError(null);
     try {
-      const response = await axios.get<Extension[]>(`${API_URL}/api/v1/extensions`, getHeaders());
-      setExtensions(response.data);
+      setExtensions(await extensionsApi.list(token));
     } catch (err) {
-      console.error("Erro ao carregar prorrogações:", err);
+      setError(err instanceof Error ? err.message : "Erro ao carregar prorrogações.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
-    if (token) loadExtensions();
-  }, [token, role]);
+    void loadExtensions();
+  }, [loadExtensions, role]);
 
   const createRequest = async (data: CreateExtensionInput): Promise<Extension> => {
-    const response = await axios.post<Extension>(`${API_URL}/api/v1/extensions`, data, getHeaders());
+    const created = await extensionsApi.create(token!, data);
     await loadExtensions();
-    return response.data;
+    return created;
   };
 
   const submitReview = async (extensionId: string, parecer: string): Promise<Extension> => {
-    const response = await axios.patch<Extension>(
-      `${API_URL}/api/v1/extensions/${extensionId}/review`,
-      { parecer_orientador: parecer },
-      getHeaders(),
-    );
+    const reviewed = await extensionsApi.review(token!, extensionId, parecer);
     await loadExtensions();
-    return response.data;
+    return reviewed;
   };
 
   const submitDecision = async (
     extensionId: string,
     acao: "aprovar" | "rejeitar",
   ): Promise<Extension> => {
-    const response = await axios.patch<Extension>(
-      `${API_URL}/api/v1/extensions/${extensionId}/approve`,
-      { acao },
-      getHeaders(),
-    );
+    const decided = await extensionsApi.decide(token!, extensionId, acao);
     await loadExtensions();
-    return response.data;
+    return decided;
   };
 
   return {
     extensions,
     loading,
+    error,
     role,
-    currentUser,
     createRequest,
     submitReview,
     submitDecision,
     refresh: loadExtensions,
   };
-};
+}
