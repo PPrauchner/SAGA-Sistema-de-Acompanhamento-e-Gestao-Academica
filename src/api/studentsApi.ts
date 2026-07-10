@@ -28,6 +28,8 @@ export interface Student {
   proficiencia_comprovada?: boolean;
   qualificacao_data?: string | null;
   proficiencia_data?: string | null;
+  qualificacao_comprovante_url?: string | null;
+  proficiencia_comprovante_url?: string | null;
 }
 
 export interface StudentCreatePayload {
@@ -52,6 +54,18 @@ export interface StudentUpdatePayload {
   orientador_id?: string;
   coorientador_id?: string | null;
   prazo_final?: string | null;
+}
+
+export interface UpdateProficienciaPayload {
+  comprovada: boolean;
+  data_proficiencia?: string | null;
+  comprovante_url?: string | null;
+}
+
+export interface UpdateQualificacaoPayload {
+  aprovada: boolean;
+  data_qualificacao: string;
+  comprovante_url?: string | null;
 }
 
 /** Entrada mínima do diretório de co-autores (GET /students/coauthors), usada pelo
@@ -110,6 +124,36 @@ export function updateStudent(
     method: "PUT",
     body: JSON.stringify(data),
   });
+}
+
+export function updateProficiencia(
+  token: string,
+  studentId: string,
+  data: UpdateProficienciaPayload,
+): Promise<{ message: string; situacao_inferida?: string; situacao_inferida_atualizada?: boolean }> {
+  return request<{ message: string; situacao_inferida?: string; situacao_inferida_atualizada?: boolean }>(
+    `/api/v1/students/${studentId}/proficiencia`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    },
+  );
+}
+
+export function updateQualificacao(
+  token: string,
+  studentId: string,
+  data: UpdateQualificacaoPayload,
+): Promise<{ message: string; situacao_inferida?: string; situacao_inferida_atualizada?: boolean }> {
+  return request<{ message: string; situacao_inferida?: string; situacao_inferida_atualizada?: boolean }>(
+    `/api/v1/students/${studentId}/qualificacao`,
+    token,
+    {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    },
+  );
 }
 
 export function getCoauthorCandidates(token: string): Promise<CoauthorCandidate[]> {
