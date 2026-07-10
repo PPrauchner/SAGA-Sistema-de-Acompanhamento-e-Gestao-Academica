@@ -304,7 +304,7 @@ async def test_process_decision_aprovar_recalcula_prazo_final_do_aluno() -> None
     result = await _service(repo, students=students).process_decision(
         extension_id="ext1",
         payload=DecisionRequest(acao="aprovar"),
-        coordinator_uid="uid-coord",
+        coordinator=_user("coordenacao", "uid-coord"),
     )
 
     assert result.status == ExtensionStatus.APROVADA
@@ -322,7 +322,7 @@ async def test_process_decision_aprovar_e_idempotente_no_prazo() -> None:
     await _service(students=students).process_decision(
         extension_id="ext1",
         payload=DecisionRequest(acao="aprovar"),
-        coordinator_uid="uid-coord",
+        coordinator=_user("coordenacao", "uid-coord"),
     )
 
     assert students.updates[0][1]["prazo_final"] == PRAZO_NOVO
@@ -336,12 +336,46 @@ async def test_process_decision_rejeitar_nao_toca_no_prazo_final() -> None:
     result = await _service(repo, students=students).process_decision(
         extension_id="ext1",
         payload=DecisionRequest(acao="rejeitar"),
-        coordinator_uid="uid-coord",
+        coordinator=_user("coordenacao", "uid-coord"),
     )
 
     assert result.status == ExtensionStatus.REJEITADA
     assert students.updates == []
     assert repo.updates == [("ext1", {"status": "rejeitada"})]
+
+
+@pytest.mark.asyncio
+async def test_process_decision_403_quando_prorrogacao_e_de_outro_programa() -> None:
+    """A coordenação do programa A não delibera prorrogação do programa B."""
+    repo = _FakeExtensionRepository(extensions=[_extension(programa_id="prog-b")])
+    students = _FakeStudentRepository()
+
+    with pytest.raises(HTTPException) as exc:
+        await _service(repo, students=students).process_decision(
+            extension_id="ext1",
+            payload=DecisionRequest(acao="aprovar"),
+            coordinator=_user("coordenacao", "uid-coord", programa_id="prog-a"),
+        )
+
+    assert exc.value.status_code == 403
+    # O prazo do aluno alheio não pode ter sido reescrito.
+    assert students.updates == []
+    assert repo.updates == []
+
+
+@pytest.mark.asyncio
+async def test_process_decision_adm_sem_programa_delibera_qualquer_programa() -> None:
+    """`programa_id` nulo é o adm global (ADR-0001) — não é bloqueado pelo tenant."""
+    repo = _FakeExtensionRepository(extensions=[_extension(programa_id="prog-b")])
+    students = _FakeStudentRepository()
+
+    result = await _service(repo, students=students).process_decision(
+        extension_id="ext1",
+        payload=DecisionRequest(acao="aprovar"),
+        coordinator=_user("adm", "uid-adm", programa_id=None),
+    )
+
+    assert result.status == ExtensionStatus.APROVADA
 
 
 @pytest.mark.asyncio
@@ -352,7 +386,7 @@ async def test_process_decision_400_quando_nao_esta_pendente() -> None:
         await _service(repo).process_decision(
             extension_id="ext1",
             payload=DecisionRequest(acao="aprovar"),
-            coordinator_uid="uid-coord",
+            coordinator=_user("coordenacao", "uid-coord"),
         )
 
     assert exc.value.status_code == 400
@@ -364,7 +398,7 @@ async def test_process_decision_404_quando_prorrogacao_inexistente() -> None:
         await _service().process_decision(
             extension_id="inexistente",
             payload=DecisionRequest(acao="aprovar"),
-            coordinator_uid="uid-coord",
+            coordinator=_user("coordenacao", "uid-coord"),
         )
 
     assert exc.value.status_code == 404

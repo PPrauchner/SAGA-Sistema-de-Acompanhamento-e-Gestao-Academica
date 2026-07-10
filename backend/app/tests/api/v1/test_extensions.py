@@ -61,9 +61,11 @@ class _FakeExtensionService:
         )
         return _response()
 
-    async def process_decision(self, extension_id: str, payload: Any, coordinator_uid: str) -> ExtensionResponse:
+    async def process_decision(
+        self, extension_id: str, payload: Any, coordinator: CurrentUser
+    ) -> ExtensionResponse:
         self.calls.append(
-            ("decide", {"extension_id": extension_id, "payload": payload, "coordinator_uid": coordinator_uid})
+            ("decide", {"extension_id": extension_id, "payload": payload, "coordinator": coordinator})
         )
         return _response(status="aprovada")
 
@@ -211,7 +213,10 @@ def test_patch_approve_coordenacao_homologa(client: TestClient, service: _FakeEx
     assert response.json()["status"] == "aprovada"
     name, kwargs = service.calls[0]
     assert name == "decide"
-    assert kwargs["coordinator_uid"] == "uid-coordenacao"
+    # O router repassa o CurrentUser inteiro: o service precisa do programa_id
+    # para barrar deliberação cross-programa, não só do uid.
+    assert kwargs["coordinator"].uid == "uid-coordenacao"
+    assert kwargs["coordinator"].programa_id == "prog"
 
 
 @pytest.mark.parametrize("role", ["aluno", "orientador"])
