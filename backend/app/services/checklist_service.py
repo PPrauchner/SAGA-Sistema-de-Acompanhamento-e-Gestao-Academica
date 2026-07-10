@@ -138,10 +138,12 @@ class ChecklistService:
             proficiencia=ProficienciaRequisito(
                 status=checklist.proficiencia.status,
                 data_comprovacao=student.get("proficiencia_data"),
+                comprovante_url=student.get("proficiencia_comprovante_url"),
             ),
             qualificacao=QualificacaoRequisito(
                 status=checklist.qualificacao.status,
                 data_aprovacao=student.get("qualificacao_data"),
+                comprovante_url=student.get("qualificacao_comprovante_url"),
             ),
             producao_validada=ProducaoRequisito(
                 status=checklist.producao_validada.status,
