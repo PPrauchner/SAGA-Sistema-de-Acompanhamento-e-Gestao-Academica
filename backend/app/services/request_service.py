@@ -300,11 +300,7 @@ class RequestService:
             Lista de RequestItem de `transferencia_coordenacao` com status pendente.
         """
         requests: list[RequestItem] = []
-        all_coord_transfers = (
-            await self._coord_transfers.list_all()
-            if hasattr(self._coord_transfers, "list_all")
-            else []
-        )
+        all_coord_transfers = await self._coord_transfers.list_all()
         for ct in all_coord_transfers:
             if ct.get("status") == "pendente":
                 initiator_name = await self._get_user_name(ct.get("initiator_uid"))
