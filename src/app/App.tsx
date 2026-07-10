@@ -15,6 +15,7 @@ import { ProfileUnavailablePage } from "./components/auth/ProfileUnavailablePage
 // para o `default` que o React.lazy espera.
 const Dashboard = lazy(() => import("./components/dashboard/Dashboard").then((m) => ({ default: m.Dashboard })));
 const StudentsPage = lazy(() => import("./components/students/StudentsPage").then((m) => ({ default: m.StudentsPage })));
+const StudentDetailPage = lazy(() => import("./components/students/StudentDetailPage").then((m) => ({ default: m.StudentDetailPage })));
 const AdvisorsPage = lazy(() => import("./components/advisors/AdvisorsPage").then((m) => ({ default: m.AdvisorsPage })));
 const WorkPlanPage = lazy(() => import("./components/workplan/WorkPlanPage").then((m) => ({ default: m.WorkPlanPage })));
 const ActivitiesPage = lazy(() => import("./components/activities/ActivitiesPage").then((m) => ({ default: m.ActivitiesPage })));
@@ -29,64 +30,6 @@ const InferencePage = lazy(() => import("./components/inference/InferencePage").
 const AuditPage = lazy(() => import("./components/audit/AuditPage").then((m) => ({ default: m.AuditPage })));
 const NotificationsPage = lazy(() => import("./components/notifications/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
 const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
-
-import { useState } from "react";
-import { TransferModal } from "./components/transfers/TransferModal";
-
-function StudentDetailPage() {
-  const { currentUser, setCurrentPage, selectedStudentId } = useApp();
-  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
-
-  return (
-    <div>
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <button
-          onClick={() => setCurrentPage("alunos")}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl"
-          style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "13px", fontWeight: 600 }}
-        >
-          ← Voltar para Alunos
-        </button>
-        {currentUser?.role === "coordenacao" && (
-          <button
-            onClick={() => setIsTransferModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl"
-            style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
-          >
-            Transferir orientador
-          </button>
-        )}
-      </div>
-      <div className="rounded-2xl p-6" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-        <h1 style={{ color: "var(--foreground)", marginBottom: "8px" }}>Detalhes do Aluno</h1>
-        <p style={{ color: "var(--muted-foreground)" }}>ID: {selectedStudentId}</p>
-        <div className="mt-6 grid grid-cols-2 gap-4">
-          {[
-            { label: "Plano de Trabalho", color: "#123C7A" },
-            { label: "Atividades Creditáveis", color: "#1F8A70" },
-            { label: "Produções Científicas", color: "#D4A017" },
-            { label: "Checklist de Conclusão", color: "#8b5cf6" },
-          ].map((item) => (
-            <div key={item.label} className="rounded-xl p-4" style={{ background: `${item.color}10`, border: `1px solid ${item.color}30` }}>
-              <p style={{ fontWeight: 600, color: item.color }}>{item.label}</p>
-              <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "4px" }}>Clique para visualizar</p>
-            </div>
-          ))}
-        </div>
-      </div>
-      {isTransferModalOpen && (
-        <TransferModal
-          onClose={() => setIsTransferModalOpen(false)}
-          onSuccess={() => {
-            setIsTransferModalOpen(false);
-            alert("Transferência realizada/solicitada com sucesso!");
-          }}
-          initialStudentId={selectedStudentId || undefined}
-        />
-      )}
-    </div>
-  );
-}
 
 function PageRouter() {
   const { currentPage } = useApp();
