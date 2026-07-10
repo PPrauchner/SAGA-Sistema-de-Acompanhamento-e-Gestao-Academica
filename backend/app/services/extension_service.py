@@ -9,10 +9,13 @@ Responsabilidades:
 - Respeitar `programs.max_prorrogacoes` (fonte canônica) no gate de limite.
 
 Identidade dos parâmetros:
-- `requester_uid`/`orientador_uid`/`coordinator_uid` são uids do Firebase Auth
-  (de current_user.uid). O aluno é resolvido uid → doc id via StudentRepository;
-  o orientador é resolvido uid → doc id via AdvisorRepository. `students.orientador_id`
-  referencia o doc id de `advisors/` (não o uid).
+- `requester_uid`/`orientador_uid` são uids do Firebase Auth (de current_user.uid).
+  O aluno é resolvido uid → doc id via StudentRepository; o orientador é resolvido
+  uid → doc id via AdvisorRepository. `students.orientador_id` referencia o doc id
+  de `advisors/` (não o uid).
+- `process_decision` recebe o `CurrentUser` inteiro, e não só o uid: a deliberação
+  é delimitada pelo `programa_id` da coordenação (tenant), além de registrar o uid
+  em `aprovado_por`.
 """
 
 from __future__ import annotations
@@ -210,7 +213,7 @@ class ExtensionService:
         self,
         extension_id: str,
         payload: DecisionRequest,
-        coordinator_uid: str,
+        coordinator: CurrentUser,
     ) -> ExtensionResponse:
         """Homologa a decisão da coordenação (aprovar/rejeitar).
 
@@ -220,18 +223,28 @@ class ExtensionService:
         Args:
             extension_id: Doc id da prorrogação.
             payload: Decisão (aprovar/rejeitar).
-            coordinator_uid: uid da coordenação.
+            coordinator: Coordenação autenticada; `programa_id` delimita o
+                tenant sobre o qual ela pode deliberar.
 
         Returns:
             A prorrogação deliberada (aprovada ou rejeitada).
 
         Raises:
-            HTTPException: 404 se a prorrogação/aluno não existir; 400 se não
-                estiver pendente.
+            HTTPException: 404 se a prorrogação/aluno não existir; 403 se a
+                prorrogação for de outro programa; 400 se não estiver pendente.
         """
         ext = await self._repo.get_extension(extension_id)
         if ext is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Prorrogação não encontrada.")
+
+        # Mesmo escopo de tenant de `list_for_user`: a coordenação só alcança o
+        # próprio programa. `programa_id` nulo é o adm global (ADR-0001).
+        if coordinator.programa_id and ext.get("programa_id") != coordinator.programa_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Você não pode deliberar prorrogações de outro programa.",
+            )
+
         if ext.get("status") != ExtensionStatus.PENDENTE.value:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -254,7 +267,7 @@ class ExtensionService:
             updates = {
                 "status": ExtensionStatus.APROVADA.value,
                 "prazo_novo": nova_data,
-                "aprovado_por": coordinator_uid,
+                "aprovado_por": coordinator.uid,
                 "aprovado_em": now,
             }
         else:
