@@ -17,6 +17,11 @@ from backend.app.repositories.extension_repository import (
 from backend.app.repositories.student_repository import StudentRepository
 
 
+# Subtipos de prorrogação que movem o aluno para "Em Prorrogação" ao serem aprovados
+# (CONTEXT.md → Prorrogação). Trancamento e mudança de nível não disparam esta transição.
+PRORROGACAO_TYPES = {"prorrogacao", "prazo_defesa", "prazo_qualificacao"}
+
+
 def _to_date(value: object) -> date | None:
     if isinstance(value, datetime):
         return value.date()
@@ -145,8 +150,15 @@ class ExtensionService:
         now = datetime.now(timezone.utc)
         student_id = extension.get("student_id")
         nova_data = extension.get("nova_data") or extension.get("prazo_novo")
+        student_updates: dict[str, Any] = {}
         if nova_data is not None:
-            await self._students.update(student_id, {"prazo_final": nova_data})
+            student_updates["prazo_final"] = nova_data
+        situacao_atualizada: str | None = None
+        if extension.get("tipo") in PRORROGACAO_TYPES:
+            situacao_atualizada = "em_prorrogacao"
+            student_updates["situacao_registrada"] = situacao_atualizada
+        if student_updates:
+            await self._students.update(student_id, student_updates)
         await self._repo.update(
             extension_id,
             {
@@ -163,6 +175,7 @@ class ExtensionService:
                 "status": "aprovada",
                 "aprovado_por": user.uid,
                 "aprovado_em": now,
+                "situacao_registrada": situacao_atualizada,
             },
             student,
         )
