@@ -129,7 +129,10 @@ class ExtensionResponse(BaseModel):
     aprovado_por:       str | None = None
     aprovado_em:        datetime | None = None
     created_at:         datetime
-    # Enriquecido pelo service nas listagens (nome do aluno para a coordenação).
+    # Enriquecidos pelo service nas listagens, a partir do aluno referenciado por
+    # student_id. Ausentes na resposta de criação (não há listagem a enriquecer).
     student_nome:       str | None = None
+    matricula:          str | None = None
+    nivel:              str | None = None
 
     model_config = ConfigDict(from_attributes=True)
