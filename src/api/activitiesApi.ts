@@ -65,6 +65,16 @@ export interface ActivityCreatePayload {
   status: ActivityCreateStatus;
 }
 
+/** Payload de POST /activities/orientador — orientador cria atividade para um orientando. */
+export interface ActivityCreateForOrientandoPayload {
+  aluno_id: string;
+  tipo_id: string;
+  descricao: string;
+  data_realizacao: string;
+  comprovante_url?: string | null;
+  parecer: string;
+}
+
 export interface ActivityCreateResult {
   id: string;
   elegibilidade_preliminar: boolean;
@@ -156,6 +166,17 @@ export function createActivity(
   payload: ActivityCreatePayload,
 ): Promise<ActivityCreateResult> {
   return request<ActivityCreateResult>("/api/v1/activities", token, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Orientador cria atividade para um orientando (nasce 'enviado' com parecer preenchido). */
+export function createActivityForOrientando(
+  token: string,
+  payload: ActivityCreateForOrientandoPayload,
+): Promise<ActivityCreateResult> {
+  return request<ActivityCreateResult>("/api/v1/activities/orientador", token, {
     method: "POST",
     body: JSON.stringify(payload),
   });

@@ -1,19 +1,34 @@
 import { useEffect, useState, useMemo } from "react";
-import { Clock, CheckCircle, XCircle, FileText, AlertTriangle, Filter } from "lucide-react";
-import { useApp } from "@/app/context/AppContext";
+import { Clock, CheckCircle, XCircle, FileText, AlertTriangle, Filter, ExternalLink } from "lucide-react";
+import { useApp, PageId } from "@/app/context/AppContext";
 import { requestsApi, RequestItem } from "@/api/requestsApi";
-import * as activitiesApi from "@/api/activitiesApi";
-import { coordinationTransfersApi } from "@/api/coordinationTransfersApi";
+import { solicitacoesApi } from "@/api/solicitacoesApi";
 import { approveTransferRequest, rejectTransferRequest } from "@/api/transfersApi";
 import { TransferModal } from "../transfers/TransferModal";
+
+// Decisão em-linha só para os subtipos criados pelo formulário "Nova Solicitação"
+// (origem="formulario"); os demais (origem="agregado") apenas deep-linkam para a
+// tela existente que já implementa a regra (issue #308, decisão #8 do grilling).
+const DEEP_LINK_PAGE: Partial<Record<RequestItem["tipo"], PageId>> = {
+  atividade: "atividades",
+  // Produção é validada pela coordenação na tela de Atividades (a activity
+  // vinculada nasce em "enviado"); a tela de Produções é somente-leitura.
+  producao: "atividades",
+  transferencia_coordenacao: "configuracoes",
+};
 
 const TYPE_LABELS: Record<string, string> = {
   atividade: "Validação de atividade",
   prorrogacao: "Prorrogação",
-  trancamento: "Trancamento de matrícula",
+  trancamento: "Trancamento de Matrícula",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",
   producao: "Validação de Produção",
+};
+
+const ORIGEM_LABELS: Record<string, string> = {
+  formulario: "Nova Solicitação",
+  agregado: "Fluxo agregado",
 };
 
 const STATUS_MAP: Record<string, { label: string; bg: string; color: string; icon: JSX.Element }> = {
@@ -26,7 +41,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; color: string; ico
 };
 
 export function RequestsPage() {
-  const { token, currentUser } = useApp();
+  const { token, setCurrentPage } = useApp();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,55 +68,42 @@ export function RequestsPage() {
     loadData();
   }, [token]);
 
-  const handleAction = async (req: RequestItem, action: "approve" | "reject" | "parecer") => {
+  // Decisão em-linha: só para os subtipos de formulário (prorrogação, trancamento,
+  // transferência de orientando). Reusa os services existentes de cada subtipo —
+  // sem duplicar a regra de negócio aqui.
+  const handleDecide = async (req: RequestItem, action: "approve" | "reject") => {
     if (!token) return;
     try {
-      if (req.tipo === "atividade") {
-        if (currentUser?.role === "orientador") {
-          await activitiesApi.emitirParecer(token, req.id, action === "approve" ? "Deferido" : "Indeferido");
-        } else if (currentUser?.role === "coordenacao") {
-          await activitiesApi.validarAtividade(token, req.id, { acao: action === "approve" ? "aprovar" : "rejeitar", observacao: "" });
-        }
-      } else if (req.tipo === "transferencia_coordenacao") {
-        if (action === "approve") {
-          if (req.payload_original.successor_uid !== currentUser?.id) {
-            alert("Apenas o orientador convidado pode aprovar a transferência.");
-            return;
-          }
-          await coordinationTransfersApi.accept(token, req.id);
-        } else {
-          if (req.payload_original.initiator_uid === currentUser?.id) {
-            if (confirm("Tem certeza que deseja cancelar esta solicitação de transferência?")) {
-              await coordinationTransfersApi.cancel(token, req.id);
-            }
-          } else if (req.payload_original.successor_uid === currentUser?.id) {
-            if (confirm("Tem certeza que deseja rejeitar o convite de coordenação?")) {
-              await coordinationTransfersApi.reject(token, req.id);
-            }
-          } else {
-            alert("Sem permissão para cancelar ou rejeitar.");
-            return;
-          }
-        }
-      } else if (req.tipo === "transferencia") {
+      if (req.tipo === "transferencia") {
         if (action === "approve") {
           await approveTransferRequest(token, req.id);
         } else {
           const motivo = prompt("Motivo da rejeição:");
-          if (motivo !== null) {
-            await rejectTransferRequest(token, req.id, motivo);
-          } else {
-            return;
-          }
+          if (motivo === null) return;
+          await rejectTransferRequest(token, req.id, motivo);
+        }
+      } else if (req.tipo === "prorrogacao" || req.tipo === "trancamento") {
+        if (action === "approve") {
+          await solicitacoesApi.approve(token, req.id);
+        } else {
+          const motivo = prompt("Motivo da rejeição:");
+          if (motivo === null) return;
+          await solicitacoesApi.reject(token, req.id, motivo);
         }
       } else {
-        alert(`Ação de ${action} para ${TYPE_LABELS[req.tipo] || req.tipo} em desenvolvimento/API pendente.`);
         return;
       }
       await loadData();
     } catch (err: any) {
       alert("Erro na ação: " + err.message);
     }
+  };
+
+  // Subtipos de efeito pesado (validação de atividade/produção, transferência de
+  // coordenação) apenas deep-linkam para a tela existente — não decidem em-linha.
+  const handleDeepLink = (req: RequestItem) => {
+    const page = DEEP_LINK_PAGE[req.tipo];
+    if (page) setCurrentPage(page);
   };
 
   const filteredRequests = useMemo(() => {
@@ -201,7 +203,7 @@ export function RequestsPage() {
         <table className="w-full">
           <thead>
             <tr style={{ borderBottom: "1px solid var(--border)", background: "var(--muted)" }}>
-              {["Tipo", "Solicitante", "Data", "Status", "Ações"].map((h) => (
+              {["Tipo", "Origem", "Solicitante", "Data", "Status", "Ações"].map((h) => (
                 <th
                   key={h}
                   className={`px-4 py-3 text-sm ${h === "Ações" ? "text-center" : "text-left"}`}
@@ -229,6 +231,9 @@ export function RequestsPage() {
                   {TYPE_LABELS[req.tipo] || req.tipo}
                 </td>
                 <td className="px-4 py-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
+                  {ORIGEM_LABELS[req.origem] || req.origem}
+                </td>
+                <td className="px-4 py-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
                   {req.solicitante_nome}
                 </td>
                 <td className="px-4 py-3 text-sm" style={{ color: "var(--muted-foreground)" }}>
@@ -249,24 +254,32 @@ export function RequestsPage() {
                 </td>
                 <td className="px-4 py-3 text-sm flex gap-2 justify-center">
                   {req.status !== "concluido" && (
-                    <>
-                      {!(req.tipo === "transferencia_coordenacao" && req.payload_original.successor_uid !== currentUser?.id) && (
+                    req.origem === "formulario" ? (
+                      <>
                         <button
-                          onClick={() => handleAction(req, "approve")}
+                          onClick={() => handleDecide(req, "approve")}
                           className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
-                          title="Aprovar / Aceitar"
+                          title="Aprovar"
                         >
                           <CheckCircle size={15} />
                         </button>
-                      )}
+                        <button
+                          onClick={() => handleDecide(req, "reject")}
+                          className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                          title="Rejeitar"
+                        >
+                          <XCircle size={15} />
+                        </button>
+                      </>
+                    ) : (
                       <button
-                        onClick={() => handleAction(req, "reject")}
-                        className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
-                        title={req.tipo === "transferencia_coordenacao" && req.payload_original.initiator_uid === currentUser?.id ? "Cancelar" : "Rejeitar"}
+                        onClick={() => handleDeepLink(req)}
+                        className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                        title={`Ir para ${TYPE_LABELS[req.tipo] || req.tipo}`}
                       >
-                        <XCircle size={15} />
+                        <ExternalLink size={15} />
                       </button>
-                    </>
+                    )
                   )}
                   <button
                     onClick={() => alert(`Detalhes da solicitação ${req.id}:\n\n` + JSON.stringify(req.payload_original, null, 2))}

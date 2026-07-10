@@ -137,6 +137,33 @@ async def test_trigger_alerts_lista_persiste_varias(
     assert {doc["destinatario_id"] for doc in _NotifRepo.created} == {"aluno", "orientador"}
 
 
+async def test_notifica_coordenacao_na_criacao_pelo_orientador(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Prova a fiação da issue #263: quando a função retorna o dict do service (com
+    # coord_uids), o builder emite uma notificação por coordenador. O endpoint
+    # submit_activity_by_advisor retorna esse dict justamente para o advice enxergar.
+    from backend.app.api.v1.activities import _build_notificacao_criacao_orientador
+
+    _NotifRepo.created = []
+    monkeypatch.setattr(alerts_module, "FirebaseRepository", _NotifRepo)
+
+    @trigger_alerts(_build_notificacao_criacao_orientador)
+    async def op() -> dict[str, Any]:
+        return {
+            "id": "a1",
+            "aluno_nome": "Maria",
+            "programa_id": "prog_default",
+            "coord_uids": ["c1", "c2"],
+        }
+
+    await op()
+
+    assert {doc["destinatario_id"] for doc in _NotifRepo.created} == {"c1", "c2"}
+    assert all(doc["tipo"] == "atividade_submetida" for doc in _NotifRepo.created)
+    assert all(doc["entidade_id"] == "a1" for doc in _NotifRepo.created)
+
+
 async def test_trigger_alerts_nao_dispara_em_excecao(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -97,3 +97,20 @@ export async function activateFirstAccess(
   }
   return { uid: data.uid, role: data.role, email: data.email };
 }
+
+export async function activateGoogleFirstAccess(
+  token: string,
+): Promise<FirstAccessResult> {
+  const response = await fetch(`${API_URL}/api/v1/auth/google-first-access`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail ?? `Falha ao ativar conta (HTTP ${response.status})`);
+  }
+  return { uid: data.uid, role: data.role, email: data.email };
+}

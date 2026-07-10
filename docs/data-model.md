@@ -687,6 +687,9 @@ erDiagram
 | `prazo_atual` | timestamp\|null | | alias de compatibilidade para `data_atual` |
 | `aprovado_por` | string\|null | →`users.uid` | |
 | `aprovado_em` | timestamp\|null | | |
+| `motivo_rejeicao` | string\|null | | justificativa da rejeição (obrigatória na decisão) |
+| `rejeitado_por` | string\|null | →`users.uid` | |
+| `rejeitado_em` | timestamp\|null | | |
 | `created_at` | timestamp | | data de criação |
 | `solicitacao` | timestamp | | alias de compatibilidade para `created_at` |
 | `criado_em` | timestamp\|null | | campo legado |

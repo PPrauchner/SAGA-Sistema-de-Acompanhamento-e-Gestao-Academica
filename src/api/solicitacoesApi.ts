@@ -53,4 +53,14 @@ export const solicitacoesApi = {
   create(token: string, payload: CreateSolicitacaoPayload): Promise<Solicitacao> {
     return apiPost<Solicitacao>("/extensions", payload, token);
   },
+
+  // Decisao em-linha da coordenacao para prorrogacao/trancamento (issue #308):
+  // aprovar recalcula o prazo do aluno no backend; rejeitar exige motivo.
+  approve(token: string, extensionId: string): Promise<Solicitacao> {
+    return apiPost<Solicitacao>(`/extensions/${extensionId}/approve`, {}, token);
+  },
+
+  reject(token: string, extensionId: string, motivo: string): Promise<Solicitacao> {
+    return apiPost<Solicitacao>(`/extensions/${extensionId}/reject`, { motivo }, token);
+  },
 };

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { AlertCircle, Calendar, CheckCircle2, Circle, Clock3, Loader2, Plus, Send, Trash2, X } from "lucide-react";
+import { AlertCircle, Calendar, CheckCircle2, ChevronDown, Circle, Clock3, Loader2, Plus, Search, Send, Trash2, X } from "lucide-react";
 
 import {
   addProgressUpdate,
@@ -20,6 +20,7 @@ import {
 import { ApiError } from "@/api/http";
 import { useApp } from "@/app/context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
+import { useChecklistStudent } from "@/hooks/useChecklistStudent";
 
 type Modal =
   | { kind: "task"; stage: WorkPlanStage }
@@ -72,16 +73,21 @@ function applyTaskStatus(plan: WorkPlan, taskId: string, status: TaskStatus): Wo
 }
 
 export function WorkPlanPage() {
-  const { currentUser, selectedStudentId, activeView } = useApp();
-  const { token, studentId } = useAuth();
+  const { currentUser, activeView } = useApp();
+  const { token } = useAuth();
+  // Seletor de aluno (issue #262): sem auto-selecionar o primeiro orientando — nada e
+  // carregado/alterado sem escolha explicita (revisao do PR #301).
+  const { studentId, students, setStudentId } = useChecklistStudent({ autoSelectFirst: false });
   const [plan, setPlan] = useState<WorkPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [modal, setModal] = useState<Modal>(null);
+  const [selectorOpen, setSelectorOpen] = useState(false);
+  const [selectorSearch, setSelectorSearch] = useState("");
 
-  const targetStudentId = selectedStudentId ?? studentId ?? "aluno_regular";
+  const targetStudentId = studentId;
   const isAdvisor = currentUser?.role === "orientador" || currentUser?.role === "coordenacao" || !currentUser;
   const isStudent = currentUser?.role === "aluno" || !currentUser;
   // Aluno dono e orientador/coorientador podem mover (backend autoriza via
@@ -92,13 +98,16 @@ export function WorkPlanPage() {
   // (kanban read-only, issue #248) e nao ve o botao. O backend ainda garante ownership.
   const canEdit = activeView === "orientador";
 
-  async function load() {
+  async function load(isActive: () => boolean = () => true) {
+    if (!targetStudentId) return;
     setLoading(true);
     setError(null);
     setNotFound(false);
     try {
-      setPlan(await getWorkPlan(targetStudentId, token ?? undefined));
+      const result = await getWorkPlan(targetStudentId, token ?? undefined);
+      if (isActive()) setPlan(result);
     } catch (err) {
+      if (!isActive()) return;
       setPlan(null);
       if (err instanceof ApiError && err.status === 404) {
         setNotFound(true);
@@ -106,7 +115,7 @@ export function WorkPlanPage() {
         setError("Nao foi possivel carregar o plano de trabalho.");
       }
     } finally {
-      setLoading(false);
+      if (isActive()) setLoading(false);
     }
   }
 
@@ -114,7 +123,17 @@ export function WorkPlanPage() {
     // Aguarda o token resolver antes de chamar a API: sem ele o header
     // Authorization nao e enviado e o backend rejeita na validacao (422).
     if (!token) return;
-    void load();
+    if (!targetStudentId) {
+      // Sem aluno selecionado: nada e carregado nem alterado.
+      setPlan(null);
+      setNotFound(false);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+    let active = true;
+    void load(() => active);
+    return () => { active = false; };
   }, [targetStudentId, token]);
 
   const tasks = useMemo(() => plan?.stages.flatMap((stage) => stage.tasks.map((task) => ({ ...task, stage }))) ?? [], [plan]);
@@ -177,6 +196,7 @@ export function WorkPlanPage() {
   }
 
   async function handleCreatePlan(data: { titulo: string; dataInicio: string; dataFim: string; etapaNome: string }) {
+    if (!targetStudentId) return;
     setSaving(true);
     try {
       const { plan_id } = await createWorkPlan(
@@ -214,18 +234,107 @@ export function WorkPlanPage() {
     }
   }
 
+  const selectedStudent = students?.find((s) => s.id === targetStudentId);
+  const filteredStudents = students?.filter((s) =>
+    s.label.toLowerCase().includes(selectorSearch.toLowerCase())
+  ) ?? [];
+
+  // Cabecalho com titulo e seletor de aluno (orientador/coordenacao), reaproveitado em
+  // todos os estados (sem selecao / carregando / sem plano / com plano) — issue #262.
+  const header = (
+    <div className="flex items-start justify-between gap-4 flex-wrap">
+      <div>
+        <h1 style={{ color: "var(--foreground)", marginBottom: 4 }}>Plano de Trabalho</h1>
+        <p style={{ color: "var(--muted-foreground)", fontSize: 14 }}>
+          Acompanhe etapas, tarefas e progresso do discente
+        </p>
+      </div>
+      {students && (
+        <div className="relative">
+          <button
+            onClick={() => setSelectorOpen((o) => !o)}
+            className="flex items-center gap-2 rounded-xl px-4 py-2"
+            style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: 13, fontWeight: 600 }}
+          >
+            {selectedStudent?.label ?? "Selecionar aluno"}
+            <ChevronDown size={14} style={{ color: "var(--muted-foreground)" }} />
+          </button>
+          {selectorOpen && (
+            <div className="absolute right-0 mt-1 rounded-xl shadow-lg z-10" style={{ background: "var(--card)", border: "1px solid var(--border)", width: 220 }}>
+              <div className="p-2">
+                <div className="flex items-center gap-2 rounded-lg px-3 py-2" style={{ background: "var(--muted)" }}>
+                  <Search size={13} style={{ color: "var(--muted-foreground)" }} />
+                  <input
+                    autoFocus
+                    type="text"
+                    placeholder="Buscar aluno..."
+                    value={selectorSearch}
+                    onChange={(e) => setSelectorSearch(e.target.value)}
+                    className="flex-1 bg-transparent outline-none"
+                    style={{ fontSize: 13, color: "var(--foreground)" }}
+                  />
+                </div>
+              </div>
+              <div className="pb-2 max-h-48 overflow-y-auto">
+                {filteredStudents.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => { setStudentId(s.id); setSelectorOpen(false); setSelectorSearch(""); }}
+                    className="w-full text-left px-4 py-2.5"
+                    style={{
+                      fontSize: 13,
+                      fontWeight: s.id === targetStudentId ? 700 : 400,
+                      color: s.id === targetStudentId ? "#123C7A" : "var(--foreground)",
+                      background: s.id === targetStudentId ? "#eef3fc" : "transparent",
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+                {filteredStudents.length === 0 && (
+                  <p className="px-4 py-2" style={{ fontSize: 12, color: "var(--muted-foreground)" }}>
+                    Nenhum aluno encontrado
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  if (!targetStudentId) {
+    return (
+      <div className="space-y-5">
+        {header}
+        <div className="rounded-lg p-6 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+          <Calendar className="mx-auto" size={28} style={{ color: "var(--muted-foreground)" }} />
+          <p style={{ color: "var(--foreground)", fontWeight: 800, marginTop: 12 }}>Selecione um aluno</p>
+          <p style={{ color: "var(--muted-foreground)", fontSize: 13, marginTop: 6 }}>
+            Escolha um discente no seletor acima para visualizar o plano de trabalho.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="flex min-h-[360px] items-center justify-center">
-        <Loader2 className="animate-spin" size={26} style={{ color: "var(--muted-foreground)" }} />
+      <div className="space-y-5">
+        {header}
+        <div className="flex min-h-[360px] items-center justify-center">
+          <Loader2 className="animate-spin" size={26} style={{ color: "var(--muted-foreground)" }} />
+        </div>
       </div>
     );
   }
 
   if (!plan) {
-    if (notFound && isAdvisor) {
-      return (
-        <>
+    return (
+      <div className="space-y-5">
+        {header}
+        {notFound && isAdvisor ? (
           <div className="rounded-lg p-6 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
             <Calendar className="mx-auto" size={28} style={{ color: "var(--muted-foreground)" }} />
             <p style={{ color: "var(--foreground)", fontWeight: 800, marginTop: 12 }}>Nenhum plano de trabalho ainda</p>
@@ -241,15 +350,14 @@ export function WorkPlanPage() {
               <Plus size={15} /> Criar plano de trabalho
             </button>
           </div>
-          {modal?.kind === "plan" && <PlanModal saving={saving} onClose={() => setModal(null)} onSave={handleCreatePlan} />}
-        </>
-      );
-    }
-    return (
-      <div className="rounded-lg p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-        <p style={{ color: "var(--foreground)", fontWeight: 700 }}>
-          {error ?? (notFound ? "Nenhum plano de trabalho cadastrado para este discente." : "Plano nao encontrado.")}
-        </p>
+        ) : (
+          <div className="rounded-lg p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+            <p style={{ color: "var(--foreground)", fontWeight: 700 }}>
+              {error ?? (notFound ? "Nenhum plano de trabalho cadastrado para este discente." : "Plano nao encontrado.")}
+            </p>
+          </div>
+        )}
+        {modal?.kind === "plan" && <PlanModal saving={saving} onClose={() => setModal(null)} onSave={handleCreatePlan} />}
       </div>
     );
   }
@@ -257,6 +365,7 @@ export function WorkPlanPage() {
   return (
     <DndProvider backend={HTML5Backend}>
     <div className="space-y-5">
+      {header}
       {error && (
         <div className="rounded-lg p-3" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
           <p style={{ color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>{error}</p>
@@ -266,11 +375,11 @@ export function WorkPlanPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p style={{ fontSize: 12, color: "var(--muted-foreground)", fontWeight: 700 }}>
-              {plan.student_id} · {concludedStages}/{plan.stages.length} etapas concluidas
+              {selectedStudent?.label ?? plan.student_id} · {concludedStages}/{plan.stages.length} etapas concluidas
             </p>
-            <h1 style={{ fontSize: 22, lineHeight: 1.2, fontWeight: 800, color: "var(--foreground)", marginTop: 4 }}>
+            <h2 style={{ fontSize: 22, lineHeight: 1.2, fontWeight: 800, color: "var(--foreground)", marginTop: 4 }}>
               {plan.titulo}
-            </h1>
+            </h2>
             <p style={{ fontSize: 13, color: "var(--muted-foreground)", marginTop: 8, maxWidth: 760 }}>
               {plan.descricao ?? "Plano de trabalho do discente com etapas, tarefas e atualizacoes de progresso."}
             </p>

@@ -6,6 +6,9 @@
  *   (usuario_id, operacao, modulo, resultado_status, data_inicio, data_fim) e paginação
  *   (page, page_size), devolvendo o envelope AuditLogPage. O backend escopa por papel:
  *   coordenação recebe a visão total; orientador recebe apenas os logs dos seus orientandos.
+ * - getAuditFilterOptions(token): consome GET /api/v1/audit-logs/filters e devolve as
+ *   opções distintas (operações, módulos e usuários com nome) para os dropdowns de filtro,
+ *   também escopadas por papel.
  */
 
 import { API_URL } from "@/api/authApi";
@@ -15,6 +18,7 @@ export type ResultadoStatus = "sucesso" | "erro";
 export interface AuditLog {
   id: string;
   usuario_id?: string | null;
+  usuario_nome?: string | null;
   role?: string | null;
   programa_id?: string | null;
   operacao?: string | null;
@@ -32,6 +36,17 @@ export interface AuditLogPage {
   page: number;
   page_size: number;
   total: number;
+}
+
+export interface AuditUserOption {
+  id: string;
+  nome: string;
+}
+
+export interface AuditFilterOptions {
+  operacoes: string[];
+  modulos: string[];
+  usuarios: AuditUserOption[];
 }
 
 export interface AuditLogFilters {
@@ -71,4 +86,18 @@ export async function getAuditLogs(
     throw new Error(data.detail ?? `Falha na API (HTTP ${response.status})`);
   }
   return data as AuditLogPage;
+}
+
+export async function getAuditFilterOptions(token: string): Promise<AuditFilterOptions> {
+  const response = await fetch(`${API_URL}/api/v1/audit-logs/filters`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail ?? `Falha na API (HTTP ${response.status})`);
+  }
+  return data as AuditFilterOptions;
 }

@@ -5,6 +5,11 @@ Responsabilidades:
 - GET /api/v1/students: lista alunos com filtros opcionais de status, orientador_id e
   programa_id. Coordenação vê todos; orientador vê apenas próprios orientandos.
   Aplica @check_deadlines para recalcular status de prazo na listagem.
+- GET /api/v1/students/coauthors: diretório mínimo (uid, nome) dos alunos cadastrados do
+  programa, para o seletor de co-autores do formulário de produção/atividade (issue #310).
+  Acessível também a 'aluno' — diferente de GET /students, que é orientador/coordenação
+  apenas. Registrado antes de /students/{student_id} para não ser capturado pela rota
+  de path param.
 - GET /api/v1/students/{student_id}: detalhe do aluno. Aluno vê apenas o próprio.
 - POST /api/v1/students: cria aluno e dispara convite de primeiro acesso.
   Aplica @requires_role('coordenacao') e @audit_operation.
@@ -25,6 +30,7 @@ from backend.app.aspects.authorization import requires_role
 from backend.app.aspects.history import track_history
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.student import (
+    CoauthorCandidate,
     ProficienciaRequest,
     QualificacaoRequest,
     SituacaoRequest,
@@ -45,6 +51,14 @@ async def list_students(
     user: CurrentUser = Depends(get_current_user),
 ) -> list[StudentResponse]:
     return await service.list_students(user)
+
+
+@router.get("/students/coauthors", response_model=list[CoauthorCandidate])
+@requires_role("coordenacao", "orientador", "aluno")
+async def list_coauthor_candidates(
+    user: CurrentUser = Depends(get_current_user),
+) -> list[CoauthorCandidate]:
+    return await service.list_coauthor_candidates(user)
 
 
 @router.get("/students/{student_id}", response_model=StudentResponse)

@@ -19,6 +19,7 @@ from backend.app.repositories.coordination_transfer_repository import (
     CoordinationTransferRepository,
 )
 from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.services.advisor_service import AdvisorService
 
 _PENDING = "pendente"
 _ACCEPTED = "concluido"
@@ -31,11 +32,13 @@ class CoordinationTransferService:
         user_repo: FirebaseRepository | None = None,
         advisor_repo: AdvisorRepository | None = None,
         auth_client: Any | None = None,
+        advisor_service: AdvisorService | None = None,
     ) -> None:
         self._transfers = transfer_repo or CoordinationTransferRepository()
         self._users = user_repo or FirebaseRepository("users")
         self._advisors = advisor_repo or AdvisorRepository()
         self._auth = auth_client if auth_client is not None else get_auth_client()
+        self._advisor_service = advisor_service or AdvisorService(advisor_repo=self._advisors)
 
     async def start_transfer(
         self,
@@ -138,7 +141,7 @@ class CoordinationTransferService:
             initiator_claims,
         )
 
-        advisor_id = await self._ensure_initiator_advisor(initiator)
+        advisor_id = await self._advisor_service.ensure_advisor_for_coordenacao(initiator)
 
         await self._users.update(
             transfer["successor_uid"],
@@ -283,30 +286,6 @@ class CoordinationTransferService:
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Programa possui outra coordenacao ativa",
             )
-
-    async def _ensure_initiator_advisor(self, initiator: dict[str, Any]) -> str | None:
-        existing_id = initiator.get("advisor_id")
-        if existing_id and await self._advisors.get(existing_id):
-            return existing_id
-
-        advisors = await self._advisors.query(filters=[("uid", "==", initiator["uid"])], limit=1)
-        if advisors:
-            return advisors[0]["id"]
-
-        advisor_id = existing_id or initiator["uid"]
-        await self._advisors.set(
-            advisor_id,
-            {
-                "uid": initiator["uid"],
-                "nome": initiator.get("nome", initiator.get("email", initiator["uid"])),
-                "email": initiator.get("email", ""),
-                "departamento": initiator.get("departamento", ""),
-                "programa_id": initiator["programa_id"],
-                "lattes": initiator.get("lattes"),
-                "limite_orientandos": 5,
-            },
-        )
-        return advisor_id
 
     @staticmethod
     def _to_response(data: dict[str, Any]) -> CoordinationTransferResponse:

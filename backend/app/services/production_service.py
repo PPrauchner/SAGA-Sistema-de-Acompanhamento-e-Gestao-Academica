@@ -31,6 +31,7 @@ from backend.app.repositories.activity_repository import ActivityRepository
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.repositories.production_repository import ProductionRepository
+from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.vehicle_repository import VehicleRepository
 from backend.app.services.inference_service import InferenceService
 from backend.app.services.qualis_weights_service import QualisWeightsService
@@ -79,6 +80,7 @@ class ProductionService:
         self._activities = ActivityRepository()
         self._advisors = AdvisorRepository()
         self._vehicles = VehicleRepository()
+        self._students = StudentRepository()
         self._students_service = StudentService()
         self._inference = InferenceService(InferenceRepository())
         self._qualis_weights = QualisWeightsService()
@@ -99,7 +101,12 @@ class ProductionService:
         return level["nivel"], float(level["peso"])
 
     async def create_production(self, data: ProductionCreate, user: CurrentUser) -> dict:
-        students = await self._students_service.list_students(user)
+        # Resolução de co-autores precisa enxergar todo aluno cadastrado no programa, não só
+        # os visíveis ao papel do usuário atual: StudentService.list_students(user) escopa a
+        # visibilidade por papel (um 'aluno' só vê a si mesmo), o que faria co-autores
+        # cadastrados nunca serem encontrados. StudentRepository.list_by_program() é a leitura
+        # não-escopada correta aqui (ADR-0006: crédito cheio a cada co-autor cadastrado).
+        students = await self._students.list_by_program(user.programa_id)
         student_by_uid = {s["uid"]: s for s in students if s.get("uid")}
         author_student = student_by_uid.get(user.uid)
         if author_student is None:
