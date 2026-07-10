@@ -32,8 +32,19 @@ ANO_1800 = date(1800, 1, 1)
 ANTES_DO_MINIMO = DATA_MINIMA - timedelta(days=1)
 
 
-def _ext(nova_data: date) -> ExtensionCreateRequest:
-    return ExtensionCreateRequest(tipo="prorrogacao", nova_data=nova_data, motivo="x")
+def _ext(nova_data: datetime) -> ExtensionCreateRequest:
+    """Monta um payload válido em todos os campos, variando apenas `nova_data`.
+
+    Os demais campos precisam ser válidos: se o payload falhar por `tipo`,
+    `motivo` ou `plano_atualizado`, o teste de rejeição passa sem nunca
+    exercitar o intervalo de datas (falso-verde).
+    """
+    return ExtensionCreateRequest(
+        tipo="prazo_defesa",
+        motivo="Motivo suficientemente longo para o schema",
+        plano_atualizado="Plano de trabalho revisado",
+        nova_data=nova_data,
+    )
 
 
 def _act(data_realizacao: datetime) -> ActivityCreateRequest:
@@ -98,13 +109,24 @@ def test_maximo_futuro_trata_29_de_fevereiro() -> None:
 
 
 def test_extension_aceita_data_futura_razoavel() -> None:
-    assert _ext(HOJE + timedelta(days=365 * 5)).nova_data == HOJE + timedelta(days=365 * 5)
+    futuro = datetime(HOJE.year + 5, 1, 1)
+    assert _ext(futuro).nova_data == futuro
 
 
-@pytest.mark.parametrize("valor", [ANO_1800, ANO_9999, ANTES_DO_MINIMO])
-def test_extension_rejeita_data_irreal(valor: date) -> None:
-    with pytest.raises(ValidationError):
+@pytest.mark.parametrize(
+    "valor",
+    [
+        datetime.combine(ANO_1800, datetime.min.time()),
+        datetime.combine(ANO_9999, datetime.min.time()),
+        datetime.combine(ANTES_DO_MINIMO, datetime.min.time()),
+    ],
+)
+def test_extension_rejeita_data_irreal(valor: datetime) -> None:
+    with pytest.raises(ValidationError) as exc_info:
         _ext(valor)
+    # Pinado: a rejeição precisa vir de `nova_data`, não de outro campo do
+    # payload — caso contrário o teste passaria sem exercitar o intervalo.
+    assert [erro["loc"] for erro in exc_info.value.errors()] == [("nova_data",)]
 
 
 # --- schema ActivityCreateRequest (data_realizacao: sem futuro) -------------
