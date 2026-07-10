@@ -244,8 +244,7 @@ class ExtensionService:
     async def _find_student(self, student_id: str | None) -> dict[str, Any] | None:
         if not student_id:
             return None
-        students = await self._students.list_all()
-        return next((s for s in students if s.get("id") == student_id), None)
+        return await self._students.get(student_id)
 
     async def _visible_students(self, user: CurrentUser) -> list[dict[str, Any]]:
         students = await self._students.list_all()
