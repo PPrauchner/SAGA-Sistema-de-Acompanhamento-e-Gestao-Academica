@@ -38,6 +38,10 @@ export interface Activity {
   data_realizacao: string | null;
   criado_em: string | null;
   comprovante_url: string | null;
+  coauthor_student_uids: string[];
+  external_authors: string[];
+  activity_group_id: string | null;
+  origin_activity_id: string | null;
   creditos_gerados: number;
   status: ActivityStatus | string;
   parecer_orientador: string | null;
@@ -63,6 +67,8 @@ export interface ActivityCreatePayload {
   data_realizacao: string;
   comprovante_url?: string | null;
   status: ActivityCreateStatus;
+  coauthor_student_uids?: string[];
+  external_authors?: string[];
 }
 
 /** Payload de POST /activities/orientador — orientador cria atividade para um orientando. */
@@ -79,6 +85,8 @@ export interface ActivityCreateResult {
   id: string;
   elegibilidade_preliminar: boolean;
   notificacao_enviada: boolean;
+  created_activity_ids: string[];
+  activity_group_id: string | null;
 }
 
 export interface ComprovanteUploadResult {
