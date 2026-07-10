@@ -32,6 +32,8 @@ import {
   type ValidateAction,
 } from "@/api/activitiesApi";
 import { getCoauthorCandidates, type CoauthorCandidate } from "@/api/studentsApi";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
+import type { ExportColumn } from "@/utils/exportData";
 
 // ─── Config de apresentação ─────────────────────────────────────────────────
 
@@ -164,6 +166,30 @@ export function ActivitiesPage() {
   const pickableCoauthors = useMemo(
     () => coauthorCandidates.filter((candidate) => candidate.uid !== currentUser?.id),
     [coauthorCandidates, currentUser],
+  );
+  const activityExportColumns = useMemo<ExportColumn<Activity>[]>(
+    () => [
+      { key: "tipo_nome", label: "Tipo", value: (activity) => activity.tipo_nome ?? "Atividade" },
+      { key: "categoria", label: "Categoria", value: (activity) => activity.categoria ? CATEGORIA_LABEL[activity.categoria] ?? activity.categoria : "" },
+      { key: "status", label: "Status", value: (activity) => statusCfg(activity.status).label },
+      { key: "descricao", label: "Descricao" },
+      {
+        key: "coauthor_student_uids",
+        label: "Coautoria",
+        value: (activity) =>
+          [
+            ...(activity.coauthor_student_uids ?? []).map((uid) => nameByUid.get(uid) ?? uid),
+            ...(activity.external_authors ?? []),
+          ].join(", "),
+      },
+      { key: "data_realizacao", label: "Data", value: (activity) => formatDate(activity.data_realizacao) },
+      { key: "creditos_gerados", label: "Creditos" },
+      { key: "elegivel", label: "Elegivel RL04", value: (activity) => typeof activity.elegivel === "boolean" ? (activity.elegivel ? "Sim" : "Nao") : "" },
+      { key: "comprovante_url", label: "Comprovante" },
+      { key: "parecer_orientador", label: "Parecer do orientador" },
+      { key: "observacao_coordenacao", label: "Observacao da coordenacao" },
+    ],
+    [nameByUid],
   );
 
   function openForm(): void {
@@ -351,16 +377,19 @@ export function ActivitiesPage() {
             {currentUser?.name ? ` · ${currentUser.name}` : ""}
           </p>
         </div>
-        {canCreate && (
-          <button
-            onClick={openForm}
-            className="flex items-center gap-2 rounded-xl px-4 py-2.5"
-            style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}
-          >
-            <Plus size={16} />
-            {canCreateForOrientando ? "Nova atividade para orientando" : "Nova Atividade"}
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <TableExportMenu title="Atividades" fileName="atividades" rows={activities} columns={activityExportColumns} />
+          {canCreate && (
+            <button
+              onClick={openForm}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5"
+              style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}
+            >
+              <Plus size={16} />
+              {canCreateForOrientando ? "Nova atividade para orientando" : "Nova Atividade"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
