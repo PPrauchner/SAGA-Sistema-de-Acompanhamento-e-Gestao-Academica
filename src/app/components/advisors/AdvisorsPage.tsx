@@ -30,7 +30,7 @@ const fieldStyle = {
 };
 
 export function AdvisorsPage() {
-  const { token, role } = useAuth();
+  const { token, role, currentUser } = useAuth();
   const [advisors, setAdvisors] = useState<Advisor[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
@@ -183,6 +183,9 @@ export function AdvisorsPage() {
             const usage = advisor.limite_orientandos > 0 ? advisor.orientandos_ativos / advisor.limite_orientandos : 0;
             const statusColor = usage >= 1 ? "#dc2626" : usage >= 0.8 ? "#D4A017" : "#1F8A70";
             const isPendingInvite = !advisor.uid;
+            // Auto-gestão bloqueada (issue #309): a coordenação não edita o próprio
+            // registro de orientador — o backend retorna 403; aqui escondemos o botão.
+            const isSelf = Boolean(advisor.uid) && advisor.uid === currentUser?.uid;
             return (
               <div key={advisor.id} className="rounded-2xl p-5 transition-all" style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
                 <div className="flex items-start gap-4 mb-4">
@@ -217,10 +220,12 @@ export function AdvisorsPage() {
                   <Metric icon={<Users size={13} />} label="Orientandos" value={`${advisor.orientandos_ativos}/${advisor.limite_orientandos}`} color="#123C7A" />
                   <Metric icon={<BookOpen size={13} />} label="Programa" value={advisor.programa_id} color="#1F8A70" />
                   <div className="flex flex-col gap-1 items-center justify-center">
-                    <button onClick={() => openEditForm(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ background: "#eef3fc", color: "#123C7A", fontSize: "12px", fontWeight: 600 }}>
-                      <Eye size={13} /> Editar
-                    </button>
-                    {role === "coordenacao" && advisor.uid && (
+                    {!isSelf && (
+                      <button onClick={() => openEditForm(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ background: "#eef3fc", color: "#123C7A", fontSize: "12px", fontWeight: 600 }}>
+                        <Eye size={13} /> Editar
+                      </button>
+                    )}
+                    {role === "coordenacao" && advisor.uid && !isSelf && (
                       <button onClick={() => setConfirmTransferAdvisor(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 600 }}>
                         <ArrowRightLeft size={11} /> Coordenação
                       </button>

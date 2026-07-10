@@ -9,6 +9,13 @@ Responsabilidades:
 - get_advisors_with_count(): lista orientadores enriquecendo cada registro com contagem
   de orientandos_ativos calculada por query na coleção students/.
 - Verificar limite_orientandos antes de permitir associação de novo orientando ao orientador.
+- ensure_advisor_for_coordenacao(): garante doc em advisors/ (chave = uid) para um usuário
+  coordenacao, de modo que todo coordenador-orientador apareça no dropdown de orientador
+  (issue #309). Chamado no momento em que o papel coordenacao é atribuído — por
+  UserService.create_coordinator e CoordinationTransferService.accept_transfer — e, para
+  coordenadores pré-existentes, por scripts/seed_firestore.py. Nunca a partir de uma rota
+  de leitura: list_advisors() não escreve.
+- Bloquear coordenacao de editar/excluir o próprio registro de orientador (auto-gestão).
 - A01/A02 são aplicados nos endpoints, conforme ordem canônica do projeto.
 """
 
@@ -36,8 +43,12 @@ DEFAULT_LEGACY_ADVISOR_UID = ""
 
 
 class AdvisorService:
-    def __init__(self, auth_service: AuthService | None = None) -> None:
-        self._advisors = AdvisorRepository()
+    def __init__(
+        self,
+        auth_service: AuthService | None = None,
+        advisor_repo: AdvisorRepository | None = None,
+    ) -> None:
+        self._advisors = advisor_repo or AdvisorRepository()
         self._auth = auth_service
 
     @staticmethod
@@ -54,6 +65,10 @@ class AdvisorService:
         return normalized
 
     async def list_advisors(self, user: CurrentUser | None = None) -> list[dict]:
+        # Leitura pura: o provisionamento do advisor de coordenação ocorre no momento
+        # da atribuição do papel (UserService.create_coordinator e
+        # CoordinationTransferService.accept_transfer) e, para os pré-existentes, no
+        # seed_firestore — nunca como side-effect desta rota de leitura (issue #309 / M5).
         advisors = await self._advisors.get_advisors_with_student_count()
         normalized_advisors = [
             self._normalize_advisor_response(advisor)
@@ -134,6 +149,8 @@ class AdvisorService:
         data: AdvisorUpdateRequest,
         user: CurrentUser,
     ) -> dict:
+        await self._reject_self_management(advisor_id, user)
+
         update_data = data.model_dump(exclude_none=True)
 
         if "limite_orientandos" in update_data:
@@ -160,6 +177,8 @@ class AdvisorService:
         advisor_id: str,
         user: CurrentUser,
     ) -> dict:
+        await self._reject_self_management(advisor_id, user)
+
         students = await StudentRepository().list_all()
 
         has_students = any(
@@ -180,3 +199,42 @@ class AdvisorService:
         return {
             "message": "Orientador removido",
         }
+
+    async def _reject_self_management(self, advisor_id: str, user: CurrentUser) -> None:
+        """Bloqueia coordenacao de editar/excluir o próprio registro de orientador (issue #309)."""
+        advisor = await self._advisors.get(advisor_id)
+        if advisor is not None and advisor.get("uid") == user.uid:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Coordenação não pode gerenciar o próprio registro de orientador",
+            )
+
+    async def ensure_advisor_for_coordenacao(self, user: dict[str, Any]) -> str | None:
+        """Garante doc em advisors/ (chave = uid) para um usuário coordenacao.
+
+        Reaproveitado por CoordinationTransferService.accept_transfer (transferência de
+        coordenação) e por list_advisors (issue #309). Idempotente: se já existe
+        advisor_id válido ou doc com o mesmo uid, apenas retorna o id existente.
+        """
+        existing_id = user.get("advisor_id")
+        if existing_id and await self._advisors.get(existing_id):
+            return existing_id
+
+        advisors = await self._advisors.query(filters=[("uid", "==", user["uid"])], limit=1)
+        if advisors:
+            return advisors[0]["id"]
+
+        advisor_id = existing_id or user["uid"]
+        await self._advisors.set(
+            advisor_id,
+            {
+                "uid": user["uid"],
+                "nome": user.get("nome", user.get("email", user["uid"])),
+                "email": user.get("email", ""),
+                "departamento": user.get("departamento", ""),
+                "programa_id": user["programa_id"],
+                "lattes": user.get("lattes"),
+                "limite_orientandos": 5,
+            },
+        )
+        return advisor_id
