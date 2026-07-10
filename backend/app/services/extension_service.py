@@ -50,11 +50,22 @@ def _dump_for_firestore(doc: ExtensionDocument) -> dict:
     return data
 
 
-def _to_response(data: dict, student_nome: str | None = None) -> ExtensionResponse:
-    """Constrói a resposta pública a partir do documento (que já inclui `id`)."""
+def _to_response(data: dict, student: dict | None = None) -> ExtensionResponse:
+    """Constrói a resposta pública a partir do documento (que já inclui `id`).
+
+    Args:
+        data: Documento da prorrogação, com o campo `id`.
+        student: Aluno referenciado por `student_id`, quando disponível — usado
+            para enriquecer a listagem com nome, matrícula e nível.
+
+    Returns:
+        A representação pública da prorrogação.
+    """
     payload = dict(data)
-    if student_nome is not None:
-        payload["student_nome"] = student_nome
+    if student is not None:
+        payload["student_nome"] = student.get("nome")
+        payload["matricula"] = student.get("matricula")
+        payload["nivel"] = student.get("nivel")
     return ExtensionResponse(**payload)
 
 
@@ -263,7 +274,7 @@ class ExtensionService:
             if student is None:
                 return []
             exts = await self._repo.list_by_student(student["id"])
-            nome_by_id = {student["id"]: student.get("nome")}
+            student_by_id = {student["id"]: student}
         elif user.role == "orientador":
             advisor_id = await self._resolve_advisor_id(user.uid)
             if advisor_id is None:
@@ -272,15 +283,15 @@ class ExtensionService:
                 s for s in await self._students.list_all()
                 if s.get("orientador_id") == advisor_id
             ]
-            nome_by_id = {s["id"]: s.get("nome") for s in students}
+            student_by_id = {s["id"]: s for s in students}
             exts = [
                 e for e in _sort_by_created_desc(await self._repo.list_all())
-                if e.get("student_id") in nome_by_id
+                if e.get("student_id") in student_by_id
             ]
         else:  # coordenação / adm
-            nome_by_id = {s["id"]: s.get("nome") for s in await self._students.list_all()}
+            student_by_id = {s["id"]: s for s in await self._students.list_all()}
             exts = _sort_by_created_desc(await self._repo.list_all())
             if user.programa_id:
                 exts = [e for e in exts if e.get("programa_id") == user.programa_id]
 
-        return [_to_response(e, nome_by_id.get(e.get("student_id"))) for e in exts]
+        return [_to_response(e, student_by_id.get(e.get("student_id"))) for e in exts]
