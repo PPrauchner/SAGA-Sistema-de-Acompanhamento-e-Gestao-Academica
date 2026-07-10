@@ -328,6 +328,7 @@ class ExtensionService:
             {
                 "student_id": student_id,
                 "aluno_id": student_id,
+                "aluno_uid": student.get("uid") if student else result.get("aluno_uid"),
                 "aluno_nome": aluno_nome,
                 "aluno": aluno_nome,
                 "matricula": student.get("matricula") if student else result.get("matricula"),
