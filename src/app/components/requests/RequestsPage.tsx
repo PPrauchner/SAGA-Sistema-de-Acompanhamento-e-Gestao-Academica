@@ -11,6 +11,9 @@ import { TransferModal } from "../transfers/TransferModal";
 // tela existente que já implementa a regra (issue #308, decisão #8 do grilling).
 const DEEP_LINK_PAGE: Partial<Record<RequestItem["tipo"], PageId>> = {
   atividade: "atividades",
+  // Produção é validada pela coordenação na tela de Atividades (a activity
+  // vinculada nasce em "enviado"); a tela de Produções é somente-leitura.
+  producao: "atividades",
   transferencia_coordenacao: "configuracoes",
 };
 
