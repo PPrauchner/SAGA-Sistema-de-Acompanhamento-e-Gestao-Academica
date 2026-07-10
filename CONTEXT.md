@@ -38,6 +38,8 @@ Quando as duas divergem, o sistema sinaliza conflito.
 ### Orientador
 Docente responsável por orientar discentes. Cria e mantém o plano de trabalho, emite pareceres em atividades e produções, e aprova etapas de progresso.
 
+Ser Orientador é **ortogonal ao papel administrativo**: uma [Coordenação](#coordenação) que assume orientandos é, para efeitos de orientação, também um Orientador — representada por um registro de orientador próprio, sem deixar de ser `coordenacao` no claim (ver [ADR-0002](./docs/adr/0002-papel-unico-com-toggle-de-visao.md)). Orientar é **opcional** para a coordenação. Ninguém gerencia o próprio registro de orientador com os privilégios de coordenação.
+
 ### Coordenação
 Papel administrativo do programa. Realiza CRUD completo, valida atividades e produções em segunda instância, configura tipos de atividade e veículos, e emite relatórios gerenciais.
 
@@ -60,10 +62,13 @@ Atividade que gera créditos para o discente (disciplinas cursadas, participaç�
 | Tecnológico | Máximo de 4 créditos |
 | Total | Mínimo de 24 créditos |
 
-Fluxo de validação: discente submete → orientador emite parecer → coordenação valida. Elegibilidade verificada pela RL04.
+Fluxo de validação: discente submete → orientador emite parecer → coordenação valida. Elegibilidade verificada pela RL04. Pode ter [Coautoria](#coautoria).
 
 ### Produção Bibliográfica
-Publicação científica associada ao discente. Associada a um **veículo** (fator de pontuação configurado pela coordenação). A pontuação ponderada é calculada pela RL05. Pelo menos uma produção validada é condição para aptidão à defesa.
+Publicação científica associada ao discente. Associada a um **veículo** (fator de pontuação configurado pela coordenação). A pontuação ponderada é calculada pela RL05. Pelo menos uma produção validada é condição para aptidão à defesa. Pode ter [Coautoria](#coautoria).
+
+### Coautoria
+Participação de mais de um discente cadastrado numa mesma [Produção Bibliográfica](#produção-bibliográfica) ou [Atividade Creditável](#atividade-creditável). Cada co-autor recebe uma **cópia independente** da atividade em sua própria conta, validada separadamente pelo seu orientador, e recebe **crédito/pontuação cheios** (sem rateio). Não há aceite do co-autor — a validação do orientador é o único gate. Autores não cadastrados entram apenas como texto livre (informativo, não geram crédito). Ver [ADR-0006](./docs/adr/0006-coautoria-copias-independentes-credito-cheio.md).
 
 ### Solicitação
 Pedido formal que requer decisão da coordenação, consolidado numa lista única para revisão. Distingue-se pela **origem**:
