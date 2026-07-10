@@ -135,6 +135,23 @@ def test_post_extensions_orientador_cria_para_orientando(client: TestClient) -> 
     assert sent_body.student_id == "student1"
 
 
+def test_post_extensions_trancamento_nao_exige_nova_data(client: TestClient) -> None:
+    app.dependency_overrides[get_current_user] = lambda: _user("aluno")
+
+    response = client.post(
+        "/api/v1/extensions",
+        json={
+            "tipo": "trancamento",
+            "motivo": "Trancamento temporario de matricula",
+        },
+    )
+
+    assert response.status_code == 201
+    sent_body = _FakeExtensionService.calls[0][1][0]
+    assert sent_body.tipo == "trancamento"
+    assert sent_body.nova_data is None
+
+
 def test_post_extensions_bloqueia_coordenacao(client: TestClient) -> None:
     response = client.post(
         "/api/v1/extensions",

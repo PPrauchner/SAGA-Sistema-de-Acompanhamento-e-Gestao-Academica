@@ -74,10 +74,9 @@ class ProgramRepository(FirebaseRepository):
             True se a atualização foi bem-sucedida.
         """
         collection_path = f"{self.collection}/{programa_id}/vehicle_levels"
-        
+
         def _update():
             get_firestore_client().collection(collection_path).document(veiculo_id).set(data, merge=True)
             return True
-            
-        return await asyncio.to_thread(_update)
 
+        return await asyncio.to_thread(_update)

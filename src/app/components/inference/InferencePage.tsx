@@ -126,7 +126,7 @@ function deriveProfile(student: Student, inf: InferenceResult): StudentProfile {
     name: student.nome,
     short: shortName(student.nome),
     matricula: student.matricula,
-    programa: student.nivel === "doutorado" ? "Doutorado" : "Mestrado",
+    programa: student.programa_id,
     overallRisk: riskFromInference(inf),
     facts,
     rules,
@@ -971,7 +971,7 @@ export function InferencePage() {
                     <span className="rounded-lg px-2 py-0.5" style={{ background:r.bg, color:r.color, fontSize:9, fontWeight:800, border:`1px solid ${r.border}`, fontFamily:"monospace" }}>{r.label}</span>
                   </div>
                   <p style={{ fontSize:12, fontWeight:700, color:"#f8fafc" }}>{s.nome}</p>
-                  <p style={{ fontSize:10, color:"#475569", marginTop:2, fontFamily:"monospace" }}>{s.matricula} · {s.nivel === "doutorado" ? "Doutorado" : "Mestrado"}</p>
+                      <p style={{ fontSize:10, color:"#475569", marginTop:2, fontFamily:"monospace" }}>{s.matricula}</p>
                   <div className="flex items-center gap-1.5 mt-3">
                     <div className="rounded-full" style={{ width:6, height:6, background:r.color }}/>
                     <span style={{ fontSize:9, color:"#475569", fontFamily:"monospace" }}>{s.situacao_inferida}</span>

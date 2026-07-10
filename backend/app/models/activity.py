@@ -37,6 +37,21 @@ class ActivityCreateRequest(BaseModel):
     status: ActivityCreateStatus = "enviado"
 
 
+class ActivityCreateByAdvisorRequest(BaseModel):
+    """Corpo de POST /activities/orientador — orientador cria atividade para um orientando.
+
+    A criação pelo orientador já é o endosso: a atividade nasce em `enviado` com o parecer
+    preenchido, sem passo separado de parecer (não há status a escolher).
+    """
+
+    aluno_id: str
+    tipo_id: str
+    descricao: str
+    data_realizacao: datetime
+    comprovante_url: str | None = None
+    parecer: str = Field(..., min_length=1, description="Parecer/endosso do orientador")
+
+
 class ActivityCreateResponse(BaseModel):
     id: str
     elegibilidade_preliminar: bool

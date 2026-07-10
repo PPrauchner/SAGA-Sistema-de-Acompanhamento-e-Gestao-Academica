@@ -8,7 +8,7 @@ from fastapi import HTTPException
 
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
-from backend.app.models.advisor import AdvisorCreateRequest
+from backend.app.models.advisor import AdvisorCreateRequest, AdvisorUpdateRequest
 from backend.app.models.student import SituacaoRequest, StudentCreateRequest
 from backend.app.models.user import InviteRequest
 from backend.app.services import advisor_service as advisor_module
@@ -22,7 +22,7 @@ class _FakeRepo:
     prefix = "doc"
     counter = 0
 
-    def __init__(self) -> None:
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         pass
 
     async def create(self, data: dict[str, Any]) -> str:
@@ -47,11 +47,26 @@ class _FakeRepo:
     async def list_all(self) -> list[dict[str, Any]]:
         return [{"id": key, **value} for key, value in type(self).store.items()]
 
+    async def query(
+        self,
+        filters: list[tuple[str, str, Any]] | None = None,
+        order_by: str | None = None,
+        limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        results = [{"id": key, **value} for key, value in type(self).store.items()]
+        for field, op, value in filters or []:
+            if op == "==":
+                results = [item for item in results if item.get(field) == value]
+        return results[:limit] if limit else results
+
 
 class _FakeStudentRepository(_FakeRepo):
     store: dict[str, dict[str, Any]] = {}
     prefix = "student"
     counter = 0
+
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return await self.query(filters=[("programa_id", "==", programa_id)])
 
 
 class _FakeAdvisorRepository(_FakeRepo):
@@ -285,6 +300,20 @@ async def test_get_student_orientador_filtra_por_propriedade() -> None:
     assert exc_info.value.status_code == 403
 
 
+async def test_list_coauthor_candidates_ignora_escopo_de_papel_do_chamador() -> None:
+    _FakeStudentRepository.store = {
+        "student1": {"uid": "uid-student", "nome": "Aluno Chamador", "programa_id": "prog"},
+        "student2": {"uid": "uid-outro", "nome": "Outro Aluno", "programa_id": "prog"},
+        "student3": {"uid": None, "nome": "Convite pendente", "programa_id": "prog"},
+        "student4": {"uid": "uid-fora", "nome": "Aluno de outro programa", "programa_id": "outro"},
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    result = await service.list_coauthor_candidates(_student_user())
+
+    assert {c["uid"] for c in result} == {"uid-student", "uid-outro"}
+
+
 async def test_update_situacao_nao_grava_observacao_no_documento() -> None:
     _FakeStudentRepository.store = {
         "student1": {"nome": "Aluno", "situacao_registrada": "regular"},
@@ -374,3 +403,172 @@ async def test_get_advisor_retorna_orientandos_ativos() -> None:
     result = await service.get_advisor("advisor1")
 
     assert result["orientandos_ativos"] == 1
+
+
+async def test_update_advisor_altera_nome_lattes_e_limite() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {
+            "uid": "uid-advisor",
+            "nome": "Nome Antigo",
+            "email": "advisor@x.com",
+            "departamento": "Computacao",
+            "programa_id": "prog",
+            "lattes": None,
+            "limite_orientandos": 5,
+        },
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.update_advisor(
+        "advisor1",
+        AdvisorUpdateRequest(
+            nome="Nome Novo",
+            lattes="https://lattes.cnpq.br/123",
+            limite_orientandos=7,
+        ),
+        _coord(),
+    )
+
+    assert result["message"] == "Orientador atualizado"
+    assert _FakeAdvisorRepository.store["advisor1"]["nome"] == "Nome Novo"
+    assert _FakeAdvisorRepository.store["advisor1"]["lattes"] == "https://lattes.cnpq.br/123"
+    assert _FakeAdvisorRepository.store["advisor1"]["limite_orientandos"] == 7
+    assert _FakeAdvisorRepository.store["advisor1"]["departamento"] == "Computacao"
+
+
+async def test_update_advisor_rejeita_limite_menor_que_orientandos_ativos() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {
+            "uid": "uid-advisor",
+            "nome": "Orientador",
+            "email": "advisor@x.com",
+            "departamento": "Computacao",
+            "programa_id": "prog",
+            "limite_orientandos": 5,
+        },
+    }
+    _FakeStudentRepository.store = {
+        "student1": {"orientador_id": "advisor1", "situacao_registrada": "regular"},
+        "student2": {"orientador_id": "advisor1", "situacao_registrada": "em_risco"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.update_advisor(
+            "advisor1",
+            AdvisorUpdateRequest(limite_orientandos=1),
+            _coord(),
+        )
+
+    assert exc_info.value.status_code == 400
+    assert _FakeAdvisorRepository.store["advisor1"]["limite_orientandos"] == 5
+
+
+async def test_coordenacao_provisionada_aparece_no_dropdown_do_orientador() -> None:
+    """Issue #309: orientador vendo o dropdown já enxerga o coordenador-orientador."""
+    service = AdvisorService(auth_service=_FakeAuthService())
+    await service.ensure_advisor_for_coordenacao(
+        {"uid": "coord1", "nome": "Coord", "email": "coord@x.com", "programa_id": "prog"}
+    )
+
+    result = await service.list_advisors(_advisor_user())
+
+    assert [advisor["id"] for advisor in result] == ["coord1"]
+    assert _FakeAdvisorRepository.store["coord1"]["uid"] == "coord1"
+
+
+async def test_ensure_advisor_for_coordenacao_e_idempotente() -> None:
+    service = AdvisorService(auth_service=_FakeAuthService())
+    coordinator = {
+        "uid": "coord1",
+        "nome": "Coord",
+        "email": "coord@x.com",
+        "programa_id": "prog",
+    }
+
+    first = await service.ensure_advisor_for_coordenacao(coordinator)
+    second = await service.ensure_advisor_for_coordenacao(coordinator)
+
+    assert first == second == "coord1"
+    assert list(_FakeAdvisorRepository.store.keys()) == ["coord1"]
+
+
+async def test_list_advisors_nao_escreve_no_firestore() -> None:
+    """M5: GET /advisors é leitura pura — não provisiona nem faz backfill."""
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.list_advisors(_coord())
+
+    assert result == []
+    assert _FakeAdvisorRepository.store == {}
+
+
+async def test_update_advisor_bloqueia_auto_gestao_da_coordenacao() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor-self": {"uid": "coord1", "nome": "Coord", "programa_id": "prog"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.update_advisor(
+            "advisor-self",
+            AdvisorUpdateRequest(nome="Novo Nome"),
+            _coord(),
+        )
+
+    assert exc_info.value.status_code == 403
+    assert _FakeAdvisorRepository.store["advisor-self"]["nome"] == "Coord"
+
+
+async def test_delete_advisor_bloqueia_auto_gestao_da_coordenacao() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor-self": {"uid": "coord1", "nome": "Coord", "programa_id": "prog"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.delete_advisor("advisor-self", _coord())
+
+    assert exc_info.value.status_code == 403
+    assert "advisor-self" in _FakeAdvisorRepository.store
+
+
+async def test_vincula_aluno_a_coordenador_orientador_como_qualquer_orientador() -> None:
+    """Issue #309: um coordenador-orientador é um orientador válido para orientador_id."""
+    advisor_service = AdvisorService(auth_service=_FakeAuthService())
+    await advisor_service.ensure_advisor_for_coordenacao(
+        {"uid": "coord1", "nome": "Coord", "email": "coord@x.com", "programa_id": "prog"}
+    )
+    advisors = await advisor_service.list_advisors(_advisor_user())
+    coord_advisor_id = advisors[0]["id"]
+
+    student_service = StudentService(auth_service=_FakeAuthService())
+    result = await student_service.create_student(
+        StudentCreateRequest(
+            nome="Aluno Y",
+            email="aluno-y@x.com",
+            matricula="2026099",
+            orientador_id=coord_advisor_id,
+            nivel="mestrado",
+            data_ingresso=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            programa_id="prog",
+        ),
+        _coord(),
+    )
+
+    assert _FakeStudentRepository.store[result["id"]]["orientador_id"] == coord_advisor_id
+
+
+async def test_update_advisor_de_outro_orientador_continua_permitido() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Antigo", "programa_id": "prog"},
+    }
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    await service.update_advisor(
+        "advisor1",
+        AdvisorUpdateRequest(nome="Novo Nome"),
+        _coord(),
+    )
+
+    assert _FakeAdvisorRepository.store["advisor1"]["nome"] == "Novo Nome"

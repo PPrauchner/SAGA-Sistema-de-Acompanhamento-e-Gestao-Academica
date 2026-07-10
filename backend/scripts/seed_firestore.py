@@ -7,9 +7,9 @@ Responsabilidades:
   creditos_grupo_basico_min=12, creditos_grupo_especifico_min=8,
   creditos_grupo_tecnologico_max=4, creditos_total_min=24, max_prorrogacoes=1,
   duracao_prorrogacao_meses=6, meses_ate_qualificacao=12.
-- Popular programs/prog_default/vehicle_levels/ com os níveis de relevância default
-  (escala Qualis Único monotônica A1–A8 + fallback): A1 (1.0), A2 (0.85), A3 (0.7),
-  A4 (0.55), A5 (0.45), A6 (0.35), A7 (0.25), A8 (0.15), SC (0.1).
+- Popular programs/prog_default/qualis_weights/ com os níveis de relevância default
+  (escala Qualis Único monotônica A1–A8 + fallback): A1 (1.0), A2 (0.9), A3 (0.8),
+  A4 (0.7), A5 (0.6), A6 (0.5), A7 (0.4), A8 (0.3), SC (0.2).
 - Criar a versão inicial (bootstrap) de pesos Qualis em
   programs/prog_default/qualis_weights/ a partir de PESO_POR_NIVEL — fonte versionada da
   RL05 (ADR-0003), vigente desde uma data-base que cobre toda produção histórica.
@@ -17,6 +17,10 @@ Responsabilidades:
   pontuacao_base=10), Artigo Submetido (específico, 5), Disciplina Cursada (básico, 4),
   Estágio Docência (básico, 2), Software Registrado (tecnológico, 3, limite=4),
   Participação Banca (básico, 1).
+- Provisionar advisors/ para coordenadores pré-existentes (issue #309): coordenação é
+  superset de orientador (ADR-0002) e precisa de um doc em advisors/ para aparecer no
+  dropdown de orientador. Coordenadores novos são provisionados na atribuição do papel,
+  de modo que GET /advisors permaneça uma rota de leitura pura.
 - Executar uma única vez no setup do ambiente de desenvolvimento ou produção.
 - Idempotente: verificar existência de documentos antes de criar para evitar duplicatas.
 """
@@ -39,9 +43,13 @@ from backend.app.models.work_plan import STATUS_CONCLUIDO  # noqa: E402
 from backend.app.repositories.firebase_repository import (
     FirebaseRepository,
 )  # noqa: E402
+from backend.app.repositories.advisor_repository import (
+    AdvisorRepository,
+)  # noqa: E402
 from backend.app.repositories.work_plan_repository import (
     WorkPlanRepository,
 )  # noqa: E402
+from backend.app.services.advisor_service import AdvisorService  # noqa: E402
 
 PROGRAM_ID = "prog_default"
 SEED_USER_ID = "seed_firestore"
@@ -214,6 +222,36 @@ async def _create_if_missing(
     return True
 
 
+async def _backfill_coordinator_advisors() -> int:
+    """Provisiona advisors/ para coordenadores pré-existentes (issue #309).
+
+    Coordenação é superset de orientador (ADR-0002), então todo `coordenacao` precisa de
+    um doc em advisors/ para aparecer no dropdown de orientador. Coordenadores criados a
+    partir de agora são provisionados na atribuição do papel (UserService.create_coordinator
+    e CoordinationTransferService.accept_transfer); este passo cobre os anteriores, para que
+    a rota de leitura GET /advisors nunca precise escrever.
+
+    Returns:
+        Quantidade de documentos advisors/ criados.
+    """
+    users = FirebaseRepository("users")
+    advisors = AdvisorRepository()
+    advisor_service = AdvisorService(advisor_repo=advisors)
+
+    coordinators = await users.query(filters=[("role", "==", "coordenacao")])
+    created = 0
+    for coordinator in coordinators:
+        coordinator.setdefault("uid", coordinator["id"])
+        # `adm` é global (programa_id nulo) e não orienta; só coordenação de um programa.
+        if not coordinator.get("programa_id"):
+            continue
+        if await advisors.get(coordinator["uid"]) is not None:
+            continue
+        await advisor_service.ensure_advisor_for_coordenacao(coordinator)
+        created += 1
+    return created
+
+
 async def seed_firestore() -> dict[str, int]:
     now = datetime.now(timezone.utc)
     programs = FirebaseRepository("programs")
@@ -227,6 +265,7 @@ async def seed_firestore() -> dict[str, int]:
         "qualis_weights": 0,
         "activity_types": 0,
         "work_plans": 0,
+        "coordinator_advisors": 0,
     }
 
     if await _create_if_missing(
@@ -266,6 +305,7 @@ async def seed_firestore() -> dict[str, int]:
             created["activity_types"] += 1
 
     created["work_plans"] += await _seed_example_work_plan(now)
+    created["coordinator_advisors"] += await _backfill_coordinator_advisors()
 
     return created
 
@@ -282,6 +322,7 @@ def main() -> None:
     print(f"qualis_weights criados: {created['qualis_weights']}")
     print(f"activity_types criados: {created['activity_types']}")
     print(f"work_plans criados: {created['work_plans']}")
+    print(f"advisors de coordenadores criados: {created['coordinator_advisors']}")
 
 
 if __name__ == "__main__":

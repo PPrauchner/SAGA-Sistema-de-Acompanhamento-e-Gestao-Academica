@@ -5,6 +5,7 @@ import { useOrientadorDashboard } from "@/hooks/useDashboard";
 import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useOrientadorUpdates } from "@/hooks/useOrientadorUpdates";
+import { useOrientandos, type OrientandoView, type StudentStatus } from "@/hooks/useOrientandos";
 import {
   AlertTriangle, X, Calendar, ChevronRight,
   CheckCircle2, Bell, Plus, RefreshCw, Star, Send,
@@ -17,18 +18,9 @@ import {
 } from "recharts";
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
-type StudentStatus = "regular" | "em-risco" | "qualificado" | "fase-defesa" | "prorrogacao";
+// StudentStatus e a forma de Student vêm do hook useOrientandos (dados reais da API).
+type Student = OrientandoView;
 type QA = "task" | "plano" | "producao" | "reuniao" | null;
-
-interface Student {
-  id: string; name: string; init: string;
-  nivel: "Mestrado" | "Doutorado"; ingresso: string;
-  prazo: string; prazoMeses: number;
-  progress: number; creditos: number; creditosMax: number;
-  producoes: number; producoesMin: number;
-  status: StudentStatus; fase: string;
-  ultimaAtual: string; proximo: string; bolsa: string;
-}
 
 // ─── STATUS CONFIG ────────────────────────────────────────────────────────────
 const ST: Record<StudentStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -37,19 +29,12 @@ const ST: Record<StudentStatus, { label: string; color: string; bg: string; bord
   qualificado: { label: "Qualificado", color: "#123C7A", bg: "#eef3fc", border: "#c7d9f5" },
   "fase-defesa": { label: "Apto à Defesa", color: "#8b5cf6", bg: "#f5f3ff", border: "#ddd6fe" },
   prorrogacao: { label: "Prorrogação", color: "#f97316", bg: "#fff7ed", border: "#fed7aa" },
+  concluido: { label: "Concluído", color: "#1F8A70", bg: "#dcfce7", border: "#bbf7d0" },
+  desligado: { label: "Desligado", color: "#64748b", bg: "#f1f5f9", border: "#e2e8f0" },
 };
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
-const STUDENTS: Student[] = [
-  { id: "1", name: "Ana Paula Costa", init: "AP", nivel: "Doutorado", ingresso: "2021", prazo: "Mar/2026", prazoMeses: 9, progress: 78, creditos: 52, creditosMax: 80, producoes: 4, producoesMin: 3, status: "qualificado", fase: "Escrita da Tese", ultimaAtual: "há 2 dias", proximo: "Entrega cap. 4", bolsa: "CNPq" },
-  { id: "2", name: "Carlos Eduardo Lima", init: "CE", nivel: "Mestrado", ingresso: "2023", prazo: "Jul/2025", prazoMeses: 1, progress: 45, creditos: 18, creditosMax: 30, producoes: 0, producoesMin: 1, status: "em-risco", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Relatório semestral", bolsa: "CAPES" },
-  { id: "3", name: "Fernanda Souza Gomes", init: "FS", nivel: "Doutorado", ingresso: "2020", prazo: "Dez/2025", prazoMeses: 6, progress: 92, creditos: 72, creditosMax: 80, producoes: 6, producoesMin: 3, status: "fase-defesa", fase: "Defesa", ultimaAtual: "ontem", proximo: "Agendar banca", bolsa: "FAPESP" },
-  { id: "4", name: "Marcos Vinícius Oliveira", init: "MV", nivel: "Mestrado", ingresso: "2022", prazo: "Dez/2024", prazoMeses: -6, progress: 30, creditos: 12, creditosMax: 30, producoes: 0, producoesMin: 1, status: "prorrogacao", fase: "Desenvolvimento", ultimaAtual: "há 3 semanas", proximo: "Formalizar prorrogação", bolsa: "Sem bolsa" },
-  { id: "5", name: "Juliana Mendes Martins", init: "JM", nivel: "Doutorado", ingresso: "2022", prazo: "Ago/2026", prazoMeses: 14, progress: 55, creditos: 44, creditosMax: 80, producoes: 2, producoesMin: 3, status: "regular", fase: "Experimentos", ultimaAtual: "há 3 dias", proximo: "Submissão artigo SBES", bolsa: "CAPES" },
-  { id: "6", name: "Ricardo Alves Santos", init: "RA", nivel: "Mestrado", ingresso: "2024", prazo: "Dez/2026", prazoMeses: 18, progress: 25, creditos: 8, creditosMax: 30, producoes: 0, producoesMin: 1, status: "regular", fase: "Revisão Bibliográfica", ultimaAtual: "há 5 dias", proximo: "Atualizar plano 2026/2", bolsa: "CNPq" },
-  { id: "7", name: "Patrícia Lima Farias", init: "PL", nivel: "Doutorado", ingresso: "2021", prazo: "Mar/2027", prazoMeses: 21, progress: 62, creditos: 48, creditosMax: 80, producoes: 3, producoesMin: 3, status: "qualificado", fase: "Experimentos", ultimaAtual: "há 4 dias", proximo: "Relatório anual", bolsa: "CNPq" },
-  { id: "8", name: "Bruno Carvalho Neves", init: "BC", nivel: "Doutorado", ingresso: "2022", prazo: "Jul/2026", prazoMeses: 13, progress: 48, creditos: 38, creditosMax: 80, producoes: 1, producoesMin: 3, status: "regular", fase: "Desenvolvimento", ultimaAtual: "há 1 semana", proximo: "Reunião orientação", bolsa: "CAPES" },
-];
+// A lista de orientandos agora vem de useOrientandos (GET /students + dashboards + planos).
 
 const DISTRIB_DATA = [
   { name: "Regular", value: 3, color: "#1F8A70" },
@@ -58,13 +43,6 @@ const DISTRIB_DATA = [
   { name: "Qualificado", value: 2, color: "#123C7A" },
   { name: "Apto à Defesa", value: 1, color: "#8b5cf6" },
 ];
-
-const CREDIT_CHART = STUDENTS.map((s) => ({
-  name: s.init,
-  fullName: s.name,
-  Obtidos: s.creditos,
-  Restantes: Math.max(s.creditosMax - s.creditos, 0),
-}));
 
 // API prop types for components
 interface OrientadorStatsProps {
@@ -135,10 +113,7 @@ function StudentModal({ student: s, onClose }: { student: Student; onClose: () =
             <div>
               <p style={{ fontSize: "18px", fontWeight: 800, color: sc.color }}>{s.name}</p>
               <div className="flex items-center gap-2 mt-1">
-                <span className="rounded-full px-2 py-0.5" style={{ fontSize: "10px", fontWeight: 700, color: sc.color, background: "rgba(255,255,255,0.6)" }}>
-                  {s.nivel}
-                </span>
-                <span style={{ fontSize: "12px", color: sc.color, opacity: 0.75 }}>Ingresso: {s.ingresso} · {s.bolsa}</span>
+                <span style={{ fontSize: "12px", color: sc.color, opacity: 0.75 }}>Ingresso: {s.ingresso}</span>
               </div>
             </div>
           </div>
@@ -215,9 +190,9 @@ function StudentModal({ student: s, onClose }: { student: Student; onClose: () =
   );
 }
 
-function QuickActionModal({ type, onClose }: { type: Exclude<QA, null>; onClose: () => void }) {
+function QuickActionModal({ type, onClose, students }: { type: Exclude<QA, null>; onClose: () => void; students: Student[] }) {
   const [done, setDone] = useState(false);
-  const names = STUDENTS.map((s) => s.name);
+  const names = students.map((s) => s.name);
 
   const cfg = {
     task: { title: "Criar Tarefa para Orientando", color: "#123C7A", bg: "#eef3fc", icon: <Plus size={18} /> },
@@ -420,12 +395,9 @@ function QuickActionModal({ type, onClose }: { type: Exclude<QA, null>; onClose:
 
 function KpiCards({ total, emRisco, qualificados, defesa, prorrogacao }: OrientadorStatsProps) {
   const atRisk = emRisco + prorrogacao;
-  // Doutorado/Mestrado counts are not returned by the API yet, keeping placeholder logic for sub-text
-  const dout = Math.round(total * 0.6); 
-  const mest = total - dout;
 
   const cards = [
-    { icon: <Users size={20} />, label: "Total de Orientandos", value: total, sub: `${dout} doutorado · ${mest} mestrado`, color: "#123C7A", bg: "#eef3fc" },
+    { icon: <Users size={20} />, label: "Total de Orientandos", value: total, sub: "Orientandos ativos", color: "#123C7A", bg: "#eef3fc" },
     { icon: <AlertTriangle size={20} />, label: "Em Risco / Prorrogação", value: atRisk, sub: "Requerem atenção imediata", color: "#dc2626", bg: "#fef2f2" },
     { icon: <GraduationCap size={20} />, label: "Qualificados", value: qualificados, sub: "Fase avançada de pesquisa", color: "#123C7A", bg: "#eef3fc" },
     { icon: <Star size={20} />, label: "Aptos à Defesa", value: defesa, sub: "Prontos para a banca", color: "#8b5cf6", bg: "#f5f3ff" },
@@ -470,13 +442,13 @@ function QuickBar({ onAction }: { onAction: (t: Exclude<QA, null>) => void }) {
   );
 }
 
-function StudentTable({ onSelect }: { onSelect: (s: Student) => void }) {
+function StudentTable({ students, onSelect }: { students: Student[]; onSelect: (s: Student) => void }) {
   const [sortBy, setSortBy] = useState<"status" | "progress" | "prazo" | "name">("status");
   const [filterStatus, setFilterStatus] = useState<StudentStatus | "todos">("todos");
 
-  const statusOrder: Record<StudentStatus, number> = { prorrogacao: 0, "em-risco": 1, qualificado: 2, "fase-defesa": 3, regular: 4 };
+  const statusOrder: Record<StudentStatus, number> = { prorrogacao: 0, "em-risco": 1, qualificado: 2, "fase-defesa": 3, regular: 4, concluido: 5, desligado: 6 };
 
-  const sorted = [...STUDENTS]
+  const sorted = [...students]
     .filter((s) => filterStatus === "todos" || s.status === filterStatus)
     .sort((a, b) => {
       if (sortBy === "progress") return b.progress - a.progress;
@@ -489,7 +461,7 @@ function StudentTable({ onSelect }: { onSelect: (s: Student) => void }) {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Lista de Orientandos"
-        sub={`${STUDENTS.length} orientandos ativos`}
+        sub={`${students.length} orientandos ativos`}
         right={
           <div className="flex items-center gap-2 flex-wrap">
             <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as StudentStatus | "todos")}
@@ -535,7 +507,7 @@ function StudentTable({ onSelect }: { onSelect: (s: Student) => void }) {
                     <Avt init={s.init} size={32} color={ST[s.status].color} />
                     <div>
                       <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)", whiteSpace: "nowrap" }}>{s.name}</p>
-                      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{s.nivel} · {s.ingresso} · {s.bolsa}</p>
+                      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Ingresso {s.ingresso}</p>
                     </div>
                   </div>
                 </td>
@@ -634,7 +606,13 @@ function SituationChart({ total, emRisco, qualificados, defesa, prorrogacao }: O
   );
 }
 
-function CreditBarChart() {
+function CreditBarChart({ students }: { students: Student[] }) {
+  const chartData = students.map((s) => ({
+    name: s.init,
+    fullName: s.name,
+    Obtidos: s.creditos,
+    Restantes: Math.max(s.creditosMax - s.creditos, 0),
+  }));
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
@@ -642,7 +620,7 @@ function CreditBarChart() {
         sub="Créditos obtidos vs. restantes para conclusão do programa"
       />
       <ResponsiveContainer width="100%" height={175}>
-        <BarChart data={CREDIT_CHART} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid key="cb-grid" strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
           <XAxis key="cb-x" dataKey="name" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
           <YAxis key="cb-y" width={28} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
@@ -650,7 +628,7 @@ function CreditBarChart() {
             contentStyle={{ borderRadius: 10, fontSize: 12, border: "1px solid var(--border)", background: "var(--card)" }}
             formatter={(val: number, name: string) => [`${val} cr`, name === "Obtidos" ? "Créditos Obtidos" : "Créditos Restantes"]}
             labelFormatter={(label) => {
-              const s = CREDIT_CHART.find((c) => c.name === label);
+              const s = chartData.find((c) => c.name === label);
               return s ? s.fullName : label;
             }}
           />
@@ -670,7 +648,7 @@ function CreditBarChart() {
   );
 }
 
-function WorkPlanMonitoring({ onSelect }: { onSelect: (s: Student) => void }) {
+function WorkPlanMonitoring({ students, onSelect }: { students: Student[]; onSelect: (s: Student) => void }) {
   const phaseColor: Record<string, string> = {
     "Revisão Bibliográfica": "#123C7A", "Definição do Problema": "#1F8A70",
     "Desenvolvimento": "#8b5cf6", "Experimentos": "#D4A017",
@@ -684,7 +662,7 @@ function WorkPlanMonitoring({ onSelect }: { onSelect: (s: Student) => void }) {
         sub="Fase atual, progresso e próximos marcos de cada orientando"
       />
       <div className="space-y-2.5">
-        {STUDENTS.map((s) => {
+        {students.map((s) => {
           const pc = phaseColor[s.fase] || "#94a3b8";
           return (
             <div key={s.id}
@@ -698,7 +676,7 @@ function WorkPlanMonitoring({ onSelect }: { onSelect: (s: Student) => void }) {
                 <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 128 }}>
                   {s.name}
                 </p>
-                <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{s.nivel} · {s.ingresso}</p>
+                <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Ingresso {s.ingresso}</p>
               </div>
 
               <div className="flex items-center gap-1.5" style={{ minWidth: 130, flexShrink: 0 }}>
@@ -752,9 +730,91 @@ const REVIEW_TIPO_CFG: Record<ValidationQueueItem["tipo"], { label: string; colo
   producao: { label: "Produção", color: "var(--tint-teal-text)", icon: <Star size={13} /> },
 };
 
+const REVIEW_CATEGORIA_LABEL: Record<string, string> = {
+  basico: "Básico",
+  especifico: "Específico",
+  tecnologico: "Tecnológico",
+};
+
+function ReviewDetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex justify-between gap-4">
+      <span style={{ color: "var(--muted-foreground)" }}>{label}</span>
+      <span style={{ color: "var(--foreground)", fontWeight: 600, textAlign: "right" }}>{children}</span>
+    </div>
+  );
+}
+
+// Modal read-only de detalhes de um item da fila de verificação (#264). Fechar apenas
+// fecha — nenhuma mutação na solicitação.
+function ReviewDetailModal({ item, onClose }: { item: ValidationQueueItem; onClose: () => void }) {
+  const tc = REVIEW_TIPO_CFG[item.tipo];
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ background: "rgba(15,23,42,0.45)" }}
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl p-5"
+        style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 24px 70px rgba(0,0,0,0.25)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between mb-4 gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="rounded-full px-1.5 py-0.5" style={{ fontSize: "9px", fontWeight: 800, color: tc.color, background: `${tc.color}15` }}>{tc.label}</span>
+            <h2 style={{ fontSize: "15px", fontWeight: 800, color: "var(--foreground)" }}>{item.aluno}</h2>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fechar" style={{ color: "var(--muted-foreground)", flexShrink: 0 }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <p style={{ fontSize: "13px", color: "var(--foreground)", marginBottom: 12 }}>{item.descricao}</p>
+
+        <div className="space-y-1.5" style={{ fontSize: "12px" }}>
+          {item.tipoNome && <ReviewDetailRow label="Tipo">{item.tipoNome}</ReviewDetailRow>}
+          {item.categoria && (
+            <ReviewDetailRow label="Categoria">{REVIEW_CATEGORIA_LABEL[item.categoria] ?? item.categoria}</ReviewDetailRow>
+          )}
+          {item.dataRealizacao && <ReviewDetailRow label="Data de realização">{formatDataBR(item.dataRealizacao)}</ReviewDetailRow>}
+          {typeof item.creditos === "number" && <ReviewDetailRow label="Créditos">{item.creditos}</ReviewDetailRow>}
+          {typeof item.elegivel === "boolean" && (
+            <div className="flex justify-between gap-4">
+              <span style={{ color: "var(--muted-foreground)" }}>Elegível (RL04)</span>
+              <span style={{ color: item.elegivel ? "#1F8A70" : "#dc2626", fontWeight: 600 }}>{item.elegivel ? "Sim" : "Não"}</span>
+            </div>
+          )}
+          <ReviewDetailRow label="Enviado em">{formatDataBR(item.data)}</ReviewDetailRow>
+        </div>
+
+        {item.comprovanteUrl && (
+          <a
+            href={item.comprovanteUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center gap-1.5 mt-3"
+            style={{ fontSize: "12px", color: "#123C7A", fontWeight: 700 }}
+          >
+            <ArrowUpRight size={14} /> Ver comprovante
+          </a>
+        )}
+
+        {item.parecerOrientador && (
+          <div className="mt-3 rounded-xl px-3 py-2.5" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+            <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted-foreground)", marginBottom: 4 }}>Parecer do orientador</p>
+            <p style={{ fontSize: "12px", color: "var(--foreground)", whiteSpace: "pre-wrap" }}>{item.parecerOrientador}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PendingReviews() {
   const { data, loading, error } = useValidationQueue();
   const items = data ?? [];
+  const [selected, setSelected] = useState<ValidationQueueItem | null>(null);
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
@@ -790,15 +850,19 @@ function PendingReviews() {
                     <Calendar size={9} className="inline mr-1" />Enviado em: {formatDataBR(item.data)}
                   </p>
                 </div>
-                <button className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
+                <button
+                  onClick={() => setSelected(item)}
+                  className="px-3 py-1.5 rounded-lg flex-shrink-0 transition-all hover:opacity-90"
                   style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700, whiteSpace: "nowrap" }}>
-                  Avaliar
+                  Ver detalhes
                 </button>
               </div>
             );
           })}
         </div>
       )}
+
+      {selected && <ReviewDetailModal item={selected} onClose={() => setSelected(null)} />}
     </div>
   );
 }
@@ -855,6 +919,9 @@ function RecentUpdates() {
                   </div>
                   {item.recurso && (
                     <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.4, wordBreak: "break-all" }}>{item.recurso}</p>
+                  )}
+                  {item.autor && (
+                    <p style={{ fontSize: "10px", color: "var(--muted-foreground)", lineHeight: 1.4 }}>por {item.autor}</p>
                   )}
                 </div>
               </div>
@@ -933,13 +1000,15 @@ function AcademicAlerts() {
 }
 
 function AttentionStudents({
+  students,
   onSelect,
   onAction,
 }: {
+  students: Student[];
   onSelect: (s: Student) => void;
   onAction: (t: Exclude<QA, null>) => void;
 }) {
-  const atRisk = STUDENTS.filter((s) => s.status === "em-risco" || s.status === "prorrogacao");
+  const atRisk = students.filter((s) => s.status === "em-risco" || s.status === "prorrogacao");
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
@@ -958,7 +1027,7 @@ function AttentionStudents({
                   <Avt init={s.init} size={40} color={sc.color} />
                   <div>
                     <p style={{ fontSize: "14px", fontWeight: 800, color: sc.color }}>{s.name}</p>
-                    <p style={{ fontSize: "11px", color: sc.color, opacity: 0.75 }}>{s.nivel} · Ingresso {s.ingresso} · {s.bolsa}</p>
+                    <p style={{ fontSize: "11px", color: sc.color, opacity: 0.75 }}>Ingresso {s.ingresso}</p>
                   </div>
                 </div>
                 <SBadge status={s.status} />
@@ -1029,13 +1098,19 @@ function AttentionStudents({
 export function OrientadorDashboard() {
   const { currentUser } = useApp();
   const { advisorId } = useAuth();
-  const { data: dashData, loading, error } = useOrientadorDashboard(
-    currentUser?.advisor_id ?? advisorId ?? currentUser?.id,
-  );
+  const resolvedAdvisorId = currentUser?.advisor_id ?? advisorId ?? currentUser?.id;
+  const { data: dashData, loading, error } = useOrientadorDashboard(resolvedAdvisorId);
+  const {
+    data: orientandos,
+    loading: orientandosLoading,
+    error: orientandosError,
+  } = useOrientandos(resolvedAdvisorId);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [quickAction, setQuickAction] = useState<QA>(null);
 
-  if (loading) {
+  const students = orientandos ?? [];
+
+  if (loading || orientandosLoading) {
     return (
       <div className="flex items-center justify-center" style={{ minHeight: 400 }}>
         <div className="text-center">
@@ -1046,11 +1121,14 @@ export function OrientadorDashboard() {
     );
   }
 
-  if (error) {
+  if (error || orientandosError) {
+    const mensagens = [error, orientandosError].filter((msg): msg is string => Boolean(msg));
     return (
       <div className="rounded-2xl p-6 text-center" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
         <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--tint-danger-text)" }}>Erro ao carregar dashboard</p>
-        <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{error}</p>
+        {mensagens.map((msg) => (
+          <p key={msg} style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{msg}</p>
+        ))}
       </div>
     );
   }
@@ -1105,16 +1183,16 @@ export function OrientadorDashboard() {
       {/* ── Row: Table + Distribution ── */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
         <div className="lg:col-span-3">
-          <StudentTable onSelect={setSelectedStudent} />
+          <StudentTable students={students} onSelect={setSelectedStudent} />
         </div>
         <SituationChart {...stats} />
       </div>
 
       {/* ── Credit Bar Chart ── */}
-      <CreditBarChart />
+      <CreditBarChart students={students} />
 
       {/* ── Work Plan Monitoring ── */}
-      <WorkPlanMonitoring onSelect={setSelectedStudent} />
+      <WorkPlanMonitoring students={students} onSelect={setSelectedStudent} />
 
       {/* ── Row: Pending Reviews + Recent Updates ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -1126,7 +1204,7 @@ export function OrientadorDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <AcademicAlerts />
         <div className="lg:col-span-2">
-          <AttentionStudents onSelect={setSelectedStudent} onAction={(t) => setQuickAction(t)} />
+          <AttentionStudents students={students} onSelect={setSelectedStudent} onAction={(t) => setQuickAction(t)} />
         </div>
       </div>
 
@@ -1135,7 +1213,7 @@ export function OrientadorDashboard() {
         <StudentModal student={selectedStudent} onClose={() => setSelectedStudent(null)} />
       )}
       {quickAction && (
-        <QuickActionModal type={quickAction} onClose={() => setQuickAction(null)} />
+        <QuickActionModal type={quickAction} onClose={() => setQuickAction(null)} students={students} />
       )}
     </div>
   );

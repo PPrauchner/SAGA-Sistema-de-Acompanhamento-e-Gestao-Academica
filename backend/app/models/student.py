@@ -9,6 +9,9 @@ Responsabilidades:
 - Definir StudentResponse para leitura, incluindo situacao_registrada, situacao_inferida,
   proficiencia_comprovada, qualificacao_aprovada e campos de data.
 - Definir modelos de patch para qualificacao, proficiencia e situacao (PATCH endpoints).
+- Definir CoauthorCandidate: entrada mínima (uid, nome) exposta por GET
+  /students/coauthors para popular o seletor de co-autores de produções/atividades
+  (issue #310, ADR-0006), sem vazar o StudentResponse completo a pares do programa.
 - Mapear o documento Firestore da coleção students/ — entidade central do sistema.
 """
 
@@ -40,7 +43,7 @@ class StudentCreateRequest(BaseModel):
     orientador_id: str
     coorientador_id: str | None = None
 
-    nivel: StudentLevel
+    nivel: StudentLevel = "mestrado"
     data_ingresso: datetime
     programa_id: str
 
@@ -91,3 +94,8 @@ class StudentResponse(BaseModel):
 
     qualificacao_data: datetime | None = None
     proficiencia_data: datetime | None = None
+
+
+class CoauthorCandidate(BaseModel):
+    uid: str
+    nome: str

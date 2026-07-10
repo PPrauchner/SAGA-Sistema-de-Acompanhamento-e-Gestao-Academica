@@ -228,7 +228,7 @@ class InferenceService:
         min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
         max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
         min_total = int(program.get("creditos_total_min", 24))
-        
+
         facts.append(Compound("min_creditos_basico", [prog, Atom(min_basico)]))
         facts.append(Compound("min_creditos_especifico", [prog, Atom(min_especifico)]))
         facts.append(Compound("max_creditos_tecnologico", [prog, Atom(max_tecnologico)]))

@@ -19,7 +19,11 @@ from pydantic import ValidationError
 
 from backend.app.aspects.authorization import requires_role
 from backend.app.core.auth import CurrentUser
-from backend.app.models.user import CreateCoordinatorRequest, ProfileUpdateRequest
+from backend.app.models.user import (
+    CreateCoordinatorRequest,
+    NotificationPreferences,
+    ProfileUpdateRequest,
+)
 from backend.app.services.user_service import UserService
 
 
@@ -89,8 +93,22 @@ class _FakeAuth:
 
 
 def _service(auth: _FakeAuth | None = None) -> tuple[UserService, _FakeRepo]:
+    service, users, _ = _service_with_advisors(auth)
+    return service, users
+
+
+def _service_with_advisors(
+    auth: _FakeAuth | None = None,
+) -> tuple[UserService, _FakeRepo, _FakeRepo]:
+    """UserService com repositórios fakes, incluindo o de advisors (issue #309)."""
     users = _FakeRepo()
-    return UserService(user_repo=users, auth_client=auth or _FakeAuth()), users
+    advisors = _FakeRepo()
+    service = UserService(
+        user_repo=users,
+        auth_client=auth or _FakeAuth(),
+        advisor_repo=advisors,
+    )
+    return service, users, advisors
 
 
 def _req(**kwargs: Any) -> CreateCoordinatorRequest:
@@ -119,8 +137,22 @@ async def test_create_coordinator_persiste_usuario() -> None:
     assert doc["role"] == "coordenacao"
     assert doc["programa_id"] == "prog_default"
     assert doc["ativo"] is True
+    assert doc["notification_preferences"] == NotificationPreferences().model_dump()
     assert doc["primeiro_acesso_completo"] is True
     assert auth.claims[resp.uid] == {"role": "coordenacao", "programa_id": "prog_default"}
+
+
+async def test_create_coordinator_provisiona_advisor() -> None:
+    """Issue #309/M5: o advisor do coordenador nasce na atribuição do papel,
+    não como side-effect de GET /advisors."""
+    service, _, advisors = _service_with_advisors()
+
+    resp = await service.create_coordinator(_req())
+
+    advisor = advisors.store[resp.uid]
+    assert advisor["uid"] == resp.uid
+    assert advisor["programa_id"] == "prog_default"
+    assert advisor["limite_orientandos"] == 5
 
 
 async def test_create_coordinator_email_existente_409() -> None:
@@ -256,6 +288,31 @@ async def test_update_profile_remove_telefone() -> None:
     await service.update_profile(ProfileUpdateRequest(nome="Novo"), _user("a1", "aluno"))
 
     assert "telefone" not in users.store["a1"]
+
+
+async def test_update_profile_salva_preferencias_notificacao() -> None:
+    service, users, _ = _profile_service()
+    users.store["a1"] = {"uid": "a1", "nome": "Aluno", "role": "aluno"}
+    preferences = NotificationPreferences(work_plan=False, transfers=False)
+
+    resp = await service.update_profile(
+        ProfileUpdateRequest(notification_preferences=preferences),
+        _user("a1", "aluno"),
+    )
+
+    assert resp.nome == "Aluno"
+    assert resp.notification_preferences.work_plan is False
+    assert resp.notification_preferences.transfers is False
+    assert users.store["a1"]["notification_preferences"] == preferences.model_dump()
+
+
+async def test_update_profile_usuario_legado_recebe_preferencias_default() -> None:
+    service, users, _ = _profile_service()
+    users.store["a1"] = {"uid": "a1", "nome": "Aluno", "role": "aluno"}
+
+    resp = await service.update_profile(ProfileUpdateRequest(nome="Aluno Novo"), _user("a1", "aluno"))
+
+    assert resp.notification_preferences == NotificationPreferences()
 
 
 async def test_update_profile_perfil_inexistente_404() -> None:

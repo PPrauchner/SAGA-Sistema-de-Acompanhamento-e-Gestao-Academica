@@ -35,24 +35,29 @@ pnpm build
 ```
 
 ### Backend
-```bash
-# Criar e ativar ambiente virtual
-python -m venv .venv
-source .venv/bin/activate   # Linux/Mac
-.venv\Scripts\activate      # Windows
 
-# Instalar dependências (após definir pyproject.toml)
-pip install -e ".[dev]"
+Gerenciado com **uv** (ver `uv.lock`); requer **Python ≥ 3.12**.
+
+```bash
+# Instalar dependências (cria .venv automaticamente)
+uv sync
 
 # Rodar o servidor FastAPI
-uvicorn backend.app.main:app --reload --port 8000
+uv run uvicorn backend.app.main:app --reload --port 8000
 
 # Rodar testes do motor de inferência
-pytest backend/inference_engine/tests/ -v
+uv run pytest backend/inference_engine/tests/ -v
+
+# Lint e format (ruff — configurado em [tool.ruff.lint] no pyproject.toml)
+uv run ruff check .
+uv run ruff format .
 
 # Seed do Firestore (executar uma vez)
-python backend/scripts/seed_firestore.py
+uv run python backend/scripts/seed_firestore.py
 ```
+
+> Alternativa sem uv: `python -m venv .venv` + ativar (`source .venv/bin/activate`
+> no Linux/Mac, `.venv\Scripts\activate` no Windows) + `pip install -e ".[dev]"`.
 
 ### Variáveis de ambiente
 Criar `.env` na raiz com:
@@ -168,3 +173,10 @@ Documentação detalhada de cada módulo em `docs/specs/`:
 | `08_checklist_prorrogacoes.json`| Checklist + prorrogações              |
 | `09_relatorios_dashboard.json`  | Dashboards e relatórios               |
 | `10_integracao_frontend.json`   | Substituição dos dados hardcoded      |
+
+---
+
+## Repositório
+
+- GitHub: `https://github.com/PPrauchner/SAGA-Sistema-de-Acompanhamento-e-Gestao-Academica`
+- Branch de trabalho atual: `Pietro`.

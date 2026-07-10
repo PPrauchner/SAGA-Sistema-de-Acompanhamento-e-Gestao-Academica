@@ -2,11 +2,13 @@ import { useEffect, useState, useRef, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAlunoDashboard } from "@/hooks/useDashboard";
 import { useNotifications, type Notification as ApiNotification } from "@/hooks/useNotifications";
-import type { AlunoDashboardData } from "@/api/dashboardApi";
+import { useAuth } from "@/hooks/useAuth";
+import { getChecklist, type ChecklistResponse, type RequisitoStatus } from "@/api/checklistApi";
+import { getWorkPlan, type WorkPlan, type StageStatus } from "@/api/workPlanApi";
+import { ApiError } from "@/api/http";
 import {
   CheckCircle2, X, Calendar, ChevronRight, AlertTriangle,
-  Bell, Clock, FileText, BookOpen, GraduationCap, Shield,
-  ChevronLeft,
+  Bell, Clock,
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -15,8 +17,8 @@ import {
 
 // ─── TYPES ────────────────────────────────────────────────────────────────────
 type AcademicStatus = "regular" | "em-risco" | "qualificado" | "em-prorrogacao" | "fase-defesa";
-interface ChecklistItem { id: string; label: string; icon: string; required: number; completed: number; unit: string; details: string; }
-interface WorkPhase { id: number; label: string; start: number; duration: number; color: string; progress: number; }
+interface ChecklistItem { id: string; label: string; icon: string; required: number; completed: number; unit: string; details: string; status: RequisitoStatus; }
+interface WorkPhase { id: number; label: string; start: number; duration: number; color: string; progress: number; status: StageStatus; }
 interface PendingTask { id: number; title: string; deadline: string; priority: "alta" | "media" | "baixa"; type: string; done: boolean; detail: string; }
 interface Deadline { id: number; label: string; date: string; days: number; type: "urgente" | "importante" | "normal" | "critico"; icon: string; }
 interface Notif { id: string; title: string; body: string; type: "alerta" | "orientacao" | "sucesso" | "info" | "lembrete"; time: string; read: boolean; }
@@ -28,14 +30,6 @@ type ModalData =
   | null;
 
 // ─── CONSTANTS ───────────────────────────────────────────────────────────────
-// Valores default (usados quando a API ainda não retornou dados)
-const DEFAULT_TOTAL_MONTHS = 24;
-const DEFAULT_COURSE_TOTAL = 48;
-
-// Cronograma (Gantt/fases) ainda usa dados mock — ver PHASES abaixo
-const TOTAL_MONTHS = DEFAULT_TOTAL_MONTHS;
-const CURRENT_MONTH = 18;
-
 const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: string; border: string; desc: string; emoji: string }> = {
   regular: { label: "Regular", color: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)", border: "var(--tint-teal-border)", desc: "Todos os requisitos em dia. Continue assim!", emoji: "✓" },
   "em-risco": { label: "Em Risco", color: "var(--tint-gold-text)", bg: "var(--tint-gold-bg)", border: "var(--tint-gold-border)", desc: "Atenção: produções científicas abaixo do esperado para este período.", emoji: "⚠" },
@@ -46,33 +40,99 @@ const STATUS_CFG: Record<AcademicStatus, { label: string; color: string; bg: str
 // CURRENT_STATUS agora vem dos dados da API (props.dashData.situacao_inferida)
 
 // ─── DATA ────────────────────────────────────────────────────────────────────
-const CHECKLIST: ChecklistItem[] = [
-  { id: "creditos", label: "Créditos", icon: "📚", required: 60, completed: 42, unit: "créditos", details: "42 de 60 créditos integralizados. Faltam 18 créditos para a conclusão. Ritmo atual é adequado para finalizar até Dez/2026 cursando 2 disciplinas por semestre." },
-  { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: 1, unit: "exame", details: "Proficiência em Língua Inglesa aprovada em Março/2023. Resultado TOEFL: 87 pontos (mínimo exigido pelo programa: 60 pontos). Válida para toda a duração do doutorado." },
-  { id: "qualificacao", label: "Qualificação", icon: "🎤", required: 1, completed: 1, unit: "exame", details: "Exame de Qualificação aprovado em Agosto/2024. Banca: Profa. Dra. Carla Mendes (presidente), Prof. Dr. João Silva, Prof. Dr. Pedro Costa. Resultado: Aprovado com Louvor." },
-  { id: "producoes", label: "Produções", icon: "📄", required: 3, completed: 2, unit: "artigos Qualis", details: "2 de 3 artigos obrigatórios publicados. Falta 1 artigo em periódico Qualis A1 ou A2. Este é o principal fator de risco da situação atual — prazo crítico para submissão." },
-  { id: "defesa", label: "Defesa", icon: "🏛", required: 1, completed: 0, unit: "defesa", details: "Defesa da tese ainda não agendada. Pré-requisitos: integralizar todos os créditos e publicar os 3 artigos exigidos. Previsão de marcação: Julho/2026." },
-  { id: "versao-final", label: "Versão Final", icon: "📖", required: 1, completed: 0, unit: "entrega", details: "A versão final da tese deve ser entregue à biblioteca até 90 dias após a aprovação em banca. Formato: PDF/A via sistema SAGA, com ficha catalográfica." },
-];
 
-const PHASES: WorkPhase[] = [
-  { id: 1, label: "Revisão Bibliográfica", start: 1, duration: 8, color: "#123C7A", progress: 100 },
-  { id: 2, label: "Definição do Problema", start: 4, duration: 5, color: "#1F8A70", progress: 100 },
-  { id: 6, label: "Qualificação", start: 13, duration: 3, color: "#dc2626", progress: 100 },
-  { id: 3, label: "Desenvolvimento", start: 8, duration: 12, color: "#8b5cf6", progress: 75 },
-  { id: 4, label: "Experimentos", start: 12, duration: 8, color: "#D4A017", progress: 45 },
-  { id: 5, label: "Escrita da Tese", start: 16, duration: 8, color: "#f97316", progress: 20 },
-  { id: 7, label: "Defesa", start: 23, duration: 2, color: "#0ea5e9", progress: 0 },
-];
+// Converte a resposta real de GET /checklist/{student_id} nos itens consumidos pela
+// ChecklistSection e pelo Modal. Um item "cumprido" quando completed >= required
+// vale como concluído; a cor final, porém, é dirigida pelo status real (ver
+// ChecklistSection) — incluindo "em_risco", que reaproveita o estado de atenção.
+function buildChecklistItems(data: ChecklistResponse): ChecklistItem[] {
+  const r = data.requisitos;
+  const bool = (status: RequisitoStatus): number => (status === "cumprido" ? 1 : 0);
+  return [
+    { id: "creditos_minimos", label: "Créditos mínimos", icon: "📚", required: r.creditos_minimos.minimo, completed: r.creditos_minimos.obtidos, unit: "créditos", status: r.creditos_minimos.status, details: `${r.creditos_minimos.descricao}. Obtidos ${r.creditos_minimos.obtidos} de ${r.creditos_minimos.minimo} créditos.` },
+    { id: "creditos_grupo_basico", label: "Créditos básicos", icon: "📗", required: r.creditos_grupo_basico.minimo, completed: r.creditos_grupo_basico.obtidos, unit: "créditos", status: r.creditos_grupo_basico.status, details: `${r.creditos_grupo_basico.descricao}. Obtidos ${r.creditos_grupo_basico.obtidos} de ${r.creditos_grupo_basico.minimo} créditos.` },
+    { id: "creditos_grupo_especifico", label: "Créditos específicos", icon: "📘", required: r.creditos_grupo_especifico.minimo, completed: r.creditos_grupo_especifico.obtidos, unit: "créditos", status: r.creditos_grupo_especifico.status, details: `${r.creditos_grupo_especifico.descricao}. Obtidos ${r.creditos_grupo_especifico.obtidos} de ${r.creditos_grupo_especifico.minimo} créditos.` },
+    { id: "creditos_grupo_tecnologico", label: "Créditos tecnológicos", icon: "🔧", required: r.creditos_grupo_tecnologico.maximo, completed: r.creditos_grupo_tecnologico.obtidos, unit: "créditos (máx)", status: r.creditos_grupo_tecnologico.status, details: `${r.creditos_grupo_tecnologico.descricao}. Obtidos ${r.creditos_grupo_tecnologico.obtidos} de no máximo ${r.creditos_grupo_tecnologico.maximo} créditos.` },
+    { id: "proficiencia", label: "Proficiência", icon: "🌐", required: 1, completed: bool(r.proficiencia.status), unit: "exame", status: r.proficiencia.status, details: r.proficiencia.data_comprovacao ? `Proficiência comprovada em ${r.proficiencia.data_comprovacao}.` : "Proficiência em língua estrangeira ainda não comprovada." },
+    { id: "qualificacao", label: "Qualificação", icon: "🎓", required: 1, completed: bool(r.qualificacao.status), unit: "exame", status: r.qualificacao.status, details: r.qualificacao.data_aprovacao ? `Qualificação aprovada em ${r.qualificacao.data_aprovacao}.` : "Exame de qualificação ainda não aprovado." },
+    { id: "producao_validada", label: "Produção validada", icon: "📄", required: 1, completed: r.producao_validada.quantidade_aprovadas, unit: "produção", status: r.producao_validada.status, details: `${r.producao_validada.quantidade_aprovadas} produção(ões) bibliográfica(s) validada(s). Ao menos 1 é exigida para a defesa.` },
+    { id: "plano_concluido", label: "Plano de trabalho", icon: "📋", required: r.plano_concluido.tasks_total_nao_defesa, completed: r.plano_concluido.tasks_concluidas, unit: "etapas", status: r.plano_concluido.status, details: `${r.plano_concluido.tasks_concluidas} de ${r.plano_concluido.tasks_total_nao_defesa} etapas (não-defesa) concluídas.` },
+  ];
+}
 
-const TASKS: PendingTask[] = [
-  { id: 1, title: "Entregar relatório anual de progresso", deadline: "15/06/2026", priority: "alta", type: "relatorio", done: false, detail: "O relatório anual deve incluir: atividades realizadas, publicações, participação em eventos e planejamento do próximo semestre. Enviar via SAGA e protocolar cópia na secretaria do programa." },
-  { id: 2, title: "Submeter artigo para SBES 2026", deadline: "30/06/2026", priority: "alta", type: "producao", done: false, detail: "Prazo de submissão: 30/06/2026. Formato SBC (LaTeX). Limite: 12 páginas. Trilha técnica principal. Este artigo pode ser Qualis B1 e completar o requisito de produções para a defesa." },
-  { id: 3, title: "Revisar capítulo 3 com a orientadora", deadline: "20/06/2026", priority: "alta", type: "orientacao", done: false, detail: "Reunião de orientação agendada para 20/06/2026 às 14h. Enviar o capítulo revisado para a Profa. Carla até 17/06/2026. Local: Sala 302, Bloco C, Instituto de Computação." },
-  { id: 4, title: "Atualizar plano de trabalho (2º sem/2026)", deadline: "01/07/2026", priority: "media", type: "plano", done: false, detail: "Revisar e atualizar o cronograma de atividades previstas para o 2º semestre de 2026. A atualização requer aprovação da orientadora. Prazo: até 01/07/2026 via SAGA." },
-  { id: 5, title: "Inscrição em disciplina eletiva (2026/2)", deadline: "05/07/2026", priority: "media", type: "creditos", done: false, detail: "Disciplina recomendada: Tópicos Especiais em Inteligência Artificial (4 créditos). Professor: Dr. André Lima. Período: 2026/2. Inscrição pelo portal do aluno da UFX." },
-  { id: 6, title: "Participar do Seminário Departamental", deadline: "08/06/2026", priority: "baixa", type: "atividade", done: true, detail: "Realizado em 08/06/2026. Palestra: Aprendizado por Reforço em Sistemas Distribuídos. Crédito de 0.5 validado e registrado no sistema SAGA." },
-];
+// Rótulo e cor de cada etapa canônica (stages.nome); etapas fora do enum caem no fallback.
+const STAGE_META: Record<string, { label: string; color: string }> = {
+  revisao_bibliografica: { label: "Revisão Bibliográfica", color: "#123C7A" },
+  definicao_problema: { label: "Definição do Problema", color: "#1F8A70" },
+  desenvolvimento: { label: "Desenvolvimento", color: "#8b5cf6" },
+  experimentos: { label: "Experimentos", color: "#D4A017" },
+  escrita: { label: "Escrita da Tese", color: "#f97316" },
+  qualificacao: { label: "Qualificação", color: "#dc2626" },
+  defesa: { label: "Defesa", color: "#0ea5e9" },
+};
+const STAGE_FALLBACK_COLOR = "#64748b";
+
+// Rótulo e cor do indicador de status de uma etapa, refletindo o status real
+// (inclui "atrasado", que o percentual sozinho não expressa).
+function phaseStatusDisplay(status: StageStatus, progress: number): { label: string; color: string } {
+  switch (status) {
+    case "concluido": return { label: "✓ Concluído", color: "#1F8A70" };
+    case "atrasado": return { label: "Atrasado", color: "#dc2626" };
+    case "em_andamento": return { label: `${progress}%`, color: "#D4A017" };
+    default: return { label: "Pendente", color: "var(--muted-foreground)" };
+  }
+}
+
+// Meses inteiros de calendário entre duas datas (to - from). Negativo se to < from.
+function monthSpan(from: Date, to: Date): number {
+  return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+}
+
+// Total de meses do plano (início → fim previsto), base do eixo do Gantt. Mínimo 1.
+function planTotalMonths(plan: WorkPlan): number {
+  return Math.max(1, monthSpan(new Date(plan.data_inicio), new Date(plan.data_fim_prevista)) + 1);
+}
+
+// Mês atual (1-indexado) relativo ao início do plano — marcador "posição atual".
+function planCurrentMonth(plan: WorkPlan): number {
+  return Math.max(1, monthSpan(new Date(plan.data_inicio), new Date()) + 1);
+}
+
+// Deriva as barras do Gantt das etapas reais: posição/duração em meses a partir das
+// datas ISO de cada etapa, relativas ao início do plano; cor e rótulo por nome canônico.
+function phasesFromPlan(plan: WorkPlan): WorkPhase[] {
+  const start = new Date(plan.data_inicio);
+  return [...plan.stages]
+    .sort((a, b) => a.ordem - b.ordem)
+    .map((stage, index) => {
+      const meta = STAGE_META[stage.nome];
+      return {
+        id: index,
+        label: meta?.label ?? stage.nome,
+        start: Math.max(1, monthSpan(start, new Date(stage.data_inicio)) + 1),
+        duration: Math.max(1, monthSpan(new Date(stage.data_inicio), new Date(stage.data_fim)) + 1),
+        color: meta?.color ?? STAGE_FALLBACK_COLOR,
+        progress: Math.round(stage.progresso_percentual),
+        status: stage.status,
+      };
+    });
+}
+
+// Achata as tasks de todas as etapas em cartões da lista de pendências, ordenados por prazo.
+function tasksFromPlan(plan: WorkPlan): PendingTask[] {
+  return plan.stages
+    .flatMap((stage) => stage.tasks.map((task) => ({ task, stageNome: stage.nome })))
+    .sort((a, b) => new Date(a.task.prazo).getTime() - new Date(b.task.prazo).getTime())
+    .map(({ task, stageNome }, index) => ({
+      id: index + 1,
+      title: task.titulo,
+      deadline: new Date(task.prazo).toLocaleDateString("pt-BR"),
+      priority: task.prioridade,
+      type: stageNome,
+      done: task.status === "concluido",
+      detail: task.descricao || "Sem descrição.",
+    }));
+}
 
 const DEADLINES: Deadline[] = [
   { id: 1, label: "Relatório Anual", date: "15/06/2026", days: 13, type: "urgente", icon: "📋" },
@@ -80,7 +140,7 @@ const DEADLINES: Deadline[] = [
   { id: 3, label: "Submissão SBES 2026", date: "30/06/2026", days: 28, type: "urgente", icon: "📄" },
   { id: 4, label: "Plano de Trabalho 2026/2", date: "01/07/2026", days: 29, type: "normal", icon: "📅" },
   { id: 5, label: "Inscrição Disciplina 2026/2", date: "05/07/2026", days: 33, type: "normal", icon: "📚" },
-  { id: 6, label: "Prazo Máximo do Doutorado", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
+  { id: 6, label: "Prazo Máximo do Curso", date: "31/07/2026", days: 59, type: "critico", icon: "⏰" },
 ];
 
 const GRAPH_DATA = [
@@ -121,19 +181,6 @@ function SecHead({ title, sub, right }: { title: string; sub?: string; right?: R
       {right}
     </div>
   );
-}
-
-function tasksFromDashboard(data: AlunoDashboardData | null | undefined): PendingTask[] {
-  if (!data?.tasks_proximas?.length) return TASKS;
-  return data.tasks_proximas.map((task, index) => ({
-    id: index + 1,
-    title: task.titulo,
-    deadline: task.prazo,
-    priority: "media",
-    type: "plano",
-    done: false,
-    detail: `Status: ${task.status}`,
-  }));
 }
 
 function PBadge({ p }: { p: "alta" | "media" | "baixa" }) {
@@ -246,10 +293,9 @@ function Modal({ data, onClose }: { data: ModalData; onClose: () => void }) {
   const renderBody = () => {
     if (data.type === "checklist") {
       const { item } = data;
-      const done = item.completed >= item.required;
-      const pct = Math.min(Math.round((item.completed / item.required) * 100), 100);
-      const cfg = done ? { color: "#1F8A70", bg: "#dcfce7", label: "Concluído" }
-        : item.completed > 0 ? { color: "#D4A017", bg: "#fef9c3", label: "Em Andamento" }
+      const pct = item.required > 0 ? Math.min(Math.round((item.completed / item.required) * 100), 100) : 0;
+      const cfg = item.status === "cumprido" ? { color: "#1F8A70", bg: "#dcfce7", label: "Concluído" }
+        : item.status === "em_risco" ? { color: "#D4A017", bg: "#fef9c3", label: "Em risco" }
         : { color: "#94a3b8", bg: "#f1f5f9", label: "Pendente" };
       return (
         <>
@@ -641,8 +687,27 @@ function AcademicStatusCard({ situacao, conflito }: { situacao: AcademicStatus; 
 
 // ─── CHECKLIST SECTION ────────────────────────────────────────────────────────
 
-function ChecklistSection({ onOpen }: { onOpen: (item: ChecklistItem) => void }) {
-  const done = CHECKLIST.filter(i => i.completed >= i.required).length;
+function ChecklistSection({ items, loading, error, onOpen }: { items: ChecklistItem[]; loading: boolean; error: string | null; onOpen: (item: ChecklistItem) => void }) {
+  const done = items.filter(i => i.status === "cumprido").length;
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <SecHead title="Checklist de Conclusão" sub="Requisitos para obtenção do título" />
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando checklist…</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <SecHead title="Checklist de Conclusão" sub="Requisitos para obtenção do título" />
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>{error}</p>
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
@@ -650,15 +715,15 @@ function ChecklistSection({ onOpen }: { onOpen: (item: ChecklistItem) => void })
         sub="Requisitos para obtenção do título"
         right={
           <span className="rounded-full px-2 py-0.5" style={{ fontSize: "11px", fontWeight: 700, color: "var(--tint-blue-text)", background: "var(--tint-blue-bg)" }}>
-            {done}/{CHECKLIST.length}
+            {done}/{items.length}
           </span>
         }
       />
       <div className="space-y-2">
-        {CHECKLIST.map((item) => {
-          const isDone = item.completed >= item.required;
-          const isPartial = !isDone && item.completed > 0;
-          const pct = Math.min(Math.round((item.completed / item.required) * 100), 100);
+        {items.map((item) => {
+          const isDone = item.status === "cumprido";
+          const isPartial = item.status === "em_risco";
+          const pct = item.required > 0 ? Math.min(Math.round((item.completed / item.required) * 100), 100) : 0;
           const statusColor = isDone ? "var(--tint-teal-text)" : isPartial ? "var(--tint-gold-text)" : "var(--muted-foreground)";
           const statusBg = isDone ? "var(--tint-teal-bg)" : isPartial ? "var(--tint-gold-bg)" : "var(--muted)";
           const statusBorder = isDone ? "var(--tint-teal-border)" : isPartial ? "var(--tint-gold-border)" : "transparent";
@@ -703,10 +768,10 @@ function ChecklistSection({ onOpen }: { onOpen: (item: ChecklistItem) => void })
       <div className="mt-4 rounded-xl p-3" style={{ background: "#eef3fc", border: "1px solid #c7d9f5" }}>
         <div className="flex justify-between mb-1.5">
           <span style={{ fontSize: "12px", fontWeight: 600, color: "#123C7A" }}>Progresso Geral</span>
-          <span style={{ fontSize: "12px", fontWeight: 800, color: "#123C7A" }}>{done}/{CHECKLIST.length}</span>
+          <span style={{ fontSize: "12px", fontWeight: 800, color: "#123C7A" }}>{done}/{items.length}</span>
         </div>
         <div className="rounded-full overflow-hidden" style={{ height: 6, background: "#c7d9f5" }}>
-          <div style={{ height: "100%", width: `${(done / CHECKLIST.length) * 100}%`, background: "#123C7A", borderRadius: 999 }} />
+          <div style={{ height: "100%", width: `${items.length > 0 ? (done / items.length) * 100 : 0}%`, background: "#123C7A", borderRadius: 999 }} />
         </div>
       </div>
     </div>
@@ -776,11 +841,22 @@ function ProgressGraph() {
 
 // ─── TASKS SECTION ────────────────────────────────────────────────────────────
 
-function TasksSection({ tasks, onOpen, onDone }: { tasks: PendingTask[]; onOpen: (t: PendingTask) => void; onDone: (id: number) => void }) {
+function TasksSection({ tasks, loading, error, onOpen, onDone }: { tasks: PendingTask[]; loading: boolean; error: string | null; onOpen: (t: PendingTask) => void; onDone: (id: number) => void }) {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? tasks : tasks.slice(0, 4);
   const openCount = tasks.filter(t => !t.done).length;
   const urgentCount = tasks.filter(t => !t.done && t.priority === "alta").length;
+
+  if (loading || error || tasks.length === 0) {
+    return (
+      <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <SecHead title="Tarefas Pendentes" sub="Tarefas do plano de trabalho" />
+        <p style={{ fontSize: "12px", color: error ? "var(--tint-danger-text)" : "var(--muted-foreground)" }}>
+          {loading ? "Carregando tarefas…" : error ?? "Nenhuma tarefa no plano de trabalho."}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
@@ -976,13 +1052,23 @@ function NotificationsSection({ onOpen }: { onOpen: (n: Notif) => void }) {
 
 // ─── GANTT (desktop only) ─────────────────────────────────────────────────────
 
-function GanttTimeline() {
-  const months = Array.from({ length: TOTAL_MONTHS }, (_, i) => i + 1);
+function GanttTimeline({ phases, totalMonths, currentMonth, loading, error }: { phases: WorkPhase[]; totalMonths: number; currentMonth: number; loading: boolean; error: string | null }) {
+  if (loading || error || phases.length === 0) {
+    return (
+      <div className="hidden md:block rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <SecHead title="Cronograma do Plano de Trabalho" sub="Etapas do plano de trabalho" />
+        <p style={{ fontSize: "12px", color: error ? "var(--tint-danger-text)" : "var(--muted-foreground)" }}>
+          {loading ? "Carregando cronograma…" : error ?? "Nenhuma etapa cadastrada no plano de trabalho."}
+        </p>
+      </div>
+    );
+  }
+  const months = Array.from({ length: totalMonths }, (_, i) => i + 1);
   return (
     <div className="hidden md:block rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <SecHead
         title="Cronograma do Plano de Trabalho"
-        sub={`Plano de pesquisa de ${TOTAL_MONTHS} meses · Posição atual: Mês ${CURRENT_MONTH}`}
+        sub={`Plano de pesquisa de ${totalMonths} meses · Posição atual: Mês ${currentMonth}`}
       />
       <div className="overflow-x-auto">
         <div style={{ minWidth: 560 }}>
@@ -990,14 +1076,14 @@ function GanttTimeline() {
             {months.map((m) => (
               <div key={m} className="flex-1 text-center" style={{ minWidth: 0 }}>
                 {(m === 1 || m % 4 === 0) && (
-                  <span style={{ fontSize: "9px", fontWeight: m === CURRENT_MONTH ? 800 : 400, color: m === CURRENT_MONTH ? "#123C7A" : "var(--muted-foreground)" }}>
+                  <span style={{ fontSize: "9px", fontWeight: m === currentMonth ? 800 : 400, color: m === currentMonth ? "#123C7A" : "var(--muted-foreground)" }}>
                     M{m}
                   </span>
                 )}
               </div>
             ))}
           </div>
-          {PHASES.map((phase) => (
+          {phases.map((phase) => (
             <div key={phase.id} className="flex items-center mb-2.5">
               <div style={{ width: 150, flexShrink: 0, paddingRight: 10 }}>
                 <div className="flex items-center gap-1.5">
@@ -1008,18 +1094,19 @@ function GanttTimeline() {
                 </div>
                 <div className="flex items-center gap-1 mt-0.5" style={{ paddingLeft: 14 }}>
                   <span style={{ fontSize: "9px", color: "var(--muted-foreground)" }}>M{phase.start}–M{phase.start + phase.duration - 1}</span>
-                  {phase.progress === 100 && <span style={{ fontSize: "8px", color: "#1F8A70", fontWeight: 700 }}>✓</span>}
-                  {phase.progress > 0 && phase.progress < 100 && <span style={{ fontSize: "8px", color: "#D4A017", fontWeight: 700 }}>{phase.progress}%</span>}
+                  <span style={{ fontSize: "8px", color: phaseStatusDisplay(phase.status, phase.progress).color, fontWeight: 700 }}>
+                    {phaseStatusDisplay(phase.status, phase.progress).label}
+                  </span>
                 </div>
               </div>
               <div className="flex-1 relative" style={{ height: 22 }}>
                 <div className="absolute inset-0 flex pointer-events-none">
                   {months.map((m) => (
-                    <div key={m} className="flex-1 h-full" style={{ borderRight: `1px solid ${m === CURRENT_MONTH ? "#123C7A30" : "var(--border)"}` }} />
+                    <div key={m} className="flex-1 h-full" style={{ borderRight: `1px solid ${m === currentMonth ? "#123C7A30" : "var(--border)"}` }} />
                   ))}
                 </div>
                 <div className="absolute rounded-md overflow-hidden"
-                  style={{ left: `${((phase.start - 1) / TOTAL_MONTHS) * 100}%`, width: `${(phase.duration / TOTAL_MONTHS) * 100}%`, top: 3, height: 16, background: `${phase.color}20`, border: `1.5px solid ${phase.color}55` }}>
+                  style={{ left: `${((phase.start - 1) / totalMonths) * 100}%`, width: `${(phase.duration / totalMonths) * 100}%`, top: 3, height: 16, background: `${phase.color}20`, border: `1.5px solid ${phase.color}55` }}>
                   <div style={{ height: "100%", width: `${phase.progress}%`, background: phase.color, opacity: 0.85 }} />
                 </div>
               </div>
@@ -1033,20 +1120,30 @@ function GanttTimeline() {
 
 // ─── MOBILE PHASES CARD ───────────────────────────────────────────────────────
 
-function MobilePhasesCard() {
+function MobilePhasesCard({ phases, totalMonths, currentMonth, loading, error }: { phases: WorkPhase[]; totalMonths: number; currentMonth: number; loading: boolean; error: string | null }) {
+  if (loading || error || phases.length === 0) {
+    return (
+      <div className="md:hidden rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+        <SecHead title="Plano de Trabalho" sub="Etapas do plano de trabalho" />
+        <p style={{ fontSize: "12px", color: error ? "var(--tint-danger-text)" : "var(--muted-foreground)" }}>
+          {loading ? "Carregando plano…" : error ?? "Nenhuma etapa cadastrada no plano de trabalho."}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="md:hidden rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SecHead title="Plano de Trabalho" sub={`Mês ${CURRENT_MONTH} de ${TOTAL_MONTHS}`} />
+      <SecHead title="Plano de Trabalho" sub={`Mês ${currentMonth} de ${totalMonths}`} />
       <div className="space-y-2.5">
-        {PHASES.map((phase) => (
+        {phases.map((phase) => (
           <div key={phase.id}>
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5">
                 <div className="rounded-sm flex-shrink-0" style={{ width: 8, height: 8, background: phase.color }} />
                 <span style={{ fontSize: "12px", color: "var(--foreground)", fontWeight: 500 }}>{phase.label}</span>
               </div>
-              <span style={{ fontSize: "11px", fontWeight: 700, color: phase.progress === 100 ? "#1F8A70" : phase.progress > 0 ? "#D4A017" : "var(--muted-foreground)" }}>
-                {phase.progress === 100 ? "✓ Concluído" : phase.progress > 0 ? `${phase.progress}%` : "Pendente"}
+              <span style={{ fontSize: "11px", fontWeight: 700, color: phaseStatusDisplay(phase.status, phase.progress).color }}>
+                {phaseStatusDisplay(phase.status, phase.progress).label}
               </span>
             </div>
             <div className="rounded-full overflow-hidden" style={{ height: 6, background: "#e2e8f0" }}>
@@ -1063,9 +1160,16 @@ function MobilePhasesCard() {
 
 export function AlunoDashboard() {
   const { currentUser } = useApp();
+  const { studentId, token } = useAuth();
   const { data: dashData, loading, error } = useAlunoDashboard();
   const [modal, setModal] = useState<ModalData>(null);
   const [tasks, setTasks] = useState<PendingTask[]>([]);
+  const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
+  const [checklistLoading, setChecklistLoading] = useState(true);
+  const [checklistError, setChecklistError] = useState<string | null>(null);
+  const [plan, setPlan] = useState<WorkPlan | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   const openChecklist = (item: ChecklistItem) => setModal({ type: "checklist", item });
   const openTask = (task: PendingTask) => setModal({ type: "task", task });
@@ -1074,8 +1178,43 @@ export function AlunoDashboard() {
   const handleDone = (id: number) => setTasks(prev => prev.map(t => t.id === id ? { ...t, done: true } : t));
 
   useEffect(() => {
-    setTasks(tasksFromDashboard(dashData));
-  }, [dashData]);
+    setTasks(plan ? tasksFromPlan(plan) : []);
+  }, [plan]);
+
+  useEffect(() => {
+    if (!studentId || !token) return;
+    let active = true;
+    setChecklistLoading(true);
+    setChecklistError(null);
+    getChecklist(studentId, token)
+      .then((res) => { if (active) setChecklistItems(buildChecklistItems(res)); })
+      .catch(() => { if (active) setChecklistError("Não foi possível carregar o checklist."); })
+      .finally(() => { if (active) setChecklistLoading(false); });
+    return () => { active = false; };
+  }, [studentId, token]);
+
+  useEffect(() => {
+    if (!studentId || !token) return;
+    let active = true;
+    setPlanLoading(true);
+    setPlanError(null);
+    getWorkPlan(studentId, token)
+      .then((res) => { if (active) setPlan(res); })
+      .catch((err: unknown) => {
+        if (!active) return;
+        setPlan(null);
+        // 404 = aluno ainda sem plano cadastrado: estado vazio neutro, não erro.
+        if (!(err instanceof ApiError && err.status === 404)) {
+          setPlanError("Não foi possível carregar o plano de trabalho.");
+        }
+      })
+      .finally(() => { if (active) setPlanLoading(false); });
+    return () => { active = false; };
+  }, [studentId, token]);
+
+  const phases = plan ? phasesFromPlan(plan) : [];
+  const totalMonths = plan ? planTotalMonths(plan) : 1;
+  const currentMonth = plan ? planCurrentMonth(plan) : 1;
 
   if (loading) {
     return (
@@ -1158,14 +1297,14 @@ export function AlunoDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
         <AcademicStatusCard situacao={situacaoInferida} conflito={dashData?.conflito_situacao ?? false} />
         <div className="lg:col-span-2 space-y-4 md:space-y-5">
-          <GanttTimeline />
-          <MobilePhasesCard />
+          <GanttTimeline phases={phases} totalMonths={totalMonths} currentMonth={currentMonth} loading={planLoading} error={planError} />
+          <MobilePhasesCard phases={phases} totalMonths={totalMonths} currentMonth={currentMonth} loading={planLoading} error={planError} />
         </div>
       </div>
 
       {/* ── Checklist + Progress Graph ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-5">
-        <ChecklistSection onOpen={openChecklist} />
+        <ChecklistSection items={checklistItems} loading={checklistLoading} error={checklistError} onOpen={openChecklist} />
         <div className="lg:col-span-2">
           <ProgressGraph />
         </div>
@@ -1173,7 +1312,7 @@ export function AlunoDashboard() {
 
       {/* ── Tasks + Deadlines ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-5">
-        <TasksSection tasks={tasks} onOpen={openTask} onDone={handleDone} />
+        <TasksSection tasks={tasks} loading={planLoading} error={planError} onOpen={openTask} onDone={handleDone} />
         <DeadlinesSection onOpen={openDeadline} />
       </div>
 

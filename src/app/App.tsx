@@ -75,12 +75,12 @@ function StudentDetailPage() {
         </div>
       </div>
       {isTransferModalOpen && (
-        <TransferModal 
-          onClose={() => setIsTransferModalOpen(false)} 
+        <TransferModal
+          onClose={() => setIsTransferModalOpen(false)}
           onSuccess={() => {
             setIsTransferModalOpen(false);
             alert("Transferência realizada/solicitada com sucesso!");
-          }} 
+          }}
           initialStudentId={selectedStudentId || undefined}
         />
       )}

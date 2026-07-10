@@ -15,6 +15,18 @@ from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.transfer_repository import TransferRepository
 
+# Origem de cada subtipo de Solicitação (CONTEXT.md → Solicitação): "formulario"
+# nasce do formulário "Nova Solicitação"; "agregado" nasce de outro fluxo e é só
+# consolidado nesta lista.
+ORIGEM_POR_TIPO: dict[str, str] = {
+    "atividade": "agregado",
+    "producao": "agregado",
+    "prorrogacao": "formulario",
+    "trancamento": "formulario",
+    "transferencia": "formulario",
+    "transferencia_coordenacao": "agregado",
+}
+
 
 class RequestService:
     def __init__(self) -> None:
@@ -38,7 +50,9 @@ class RequestService:
         """
         requests: list[RequestItem] = []
 
-        if user.role == "orientador":
+        if user.role == "aluno":
+            requests.extend(await self._get_student_requests(user))
+        elif user.role == "orientador":
             requests.extend(await self._get_advisor_requests(user))
         elif user.role == "coordenacao":
             requests.extend(await self._get_coordinator_requests(user))
@@ -47,6 +61,50 @@ class RequestService:
 
         # Ordenar por data_solicitacao DESCENDENTE
         requests.sort(key=lambda req: req.data_solicitacao, reverse=True)
+        return requests
+
+    async def _get_student_requests(self, user: CurrentUser) -> list[RequestItem]:
+        requests: list[RequestItem] = []
+        students = await self._students.list_all()
+        student = next((s for s in students if s.get("uid") == user.uid), None)
+        if student is None:
+            return requests
+
+        student_id = student["id"]
+        student_name = student.get("nome", "Desconhecido")
+
+        activities = await self._activities.list_by_student(student_id)
+        for activity in activities:
+            if activity.get("status") == "enviado":
+                requests.append(
+                    self._build_request(
+                        id=activity.get("id", ""),
+                        tipo=self._activity_request_type(activity),
+                        solicitante=student_name,
+                        data=activity.get("criado_em")
+                        or activity.get("data_realizacao")
+                        or datetime.now(timezone.utc),
+                        status=self._activity_status_for_student(activity),
+                        payload=activity,
+                    )
+                )
+
+        extensions = await self._extensions.list_by_student_ids({student_id})
+        for ext in extensions:
+            if ext.get("status") == "pendente":
+                requests.append(
+                    self._build_request(
+                        id=ext.get("id", ""),
+                        tipo=self._extension_request_type(ext),
+                        solicitante=student_name,
+                        data=ext.get("created_at")
+                        or ext.get("solicitacao")
+                        or datetime.now(timezone.utc),
+                        status=ext.get("status", "pendente"),
+                        payload=ext,
+                    )
+                )
+
         return requests
 
     async def _get_advisor_requests(self, user: CurrentUser) -> list[RequestItem]:
@@ -73,7 +131,7 @@ class RequestService:
                     requests.append(
                         self._build_request(
                             id=activity.get("id", ""),
-                            tipo="atividade",
+                            tipo=self._activity_request_type(activity),
                             solicitante=student_names.get(sid, "Desconhecido"),
                             data=activity.get("criado_em")
                             or datetime.now(timezone.utc),
@@ -94,7 +152,7 @@ class RequestService:
                     requests.append(
                         self._build_request(
                             id=ext.get("id", ""),
-                            tipo="prorrogacao",
+                            tipo=self._extension_request_type(ext),
                             solicitante=student_names.get(
                                 sid, ext.get("aluno_nome", "Desconhecido")
                             ),
@@ -106,9 +164,14 @@ class RequestService:
                         )
                     )
 
-        coord_transfers = await self._coord_transfers.list_pending_for_successor(
-            user.uid
+        coord_transfers_as_successor = await self._coord_transfers.query(
+            filters=[("successor_uid", "==", user.uid)]
         )
+        coord_transfers_as_initiator = await self._coord_transfers.query(
+            filters=[("initiator_uid", "==", user.uid)]
+        )
+        coord_transfers_map = {ct["id"]: ct for ct in coord_transfers_as_successor + coord_transfers_as_initiator}
+        coord_transfers = [ct for ct in coord_transfers_map.values() if ct.get("status") in ["pendente", "concluido"]]
         for ct in coord_transfers:
             initiator_name = await self._get_user_name(ct.get("initiator_uid"))
             requests.append(
@@ -157,7 +220,7 @@ class RequestService:
                     requests.append(
                         self._build_request(
                             id=activity.get("id", ""),
-                            tipo="atividade",
+                            tipo=self._activity_request_type(activity),
                             solicitante=student_names.get(sid, "Desconhecido"),
                             data=activity.get("criado_em")
                             or datetime.now(timezone.utc),
@@ -177,7 +240,7 @@ class RequestService:
                 requests.append(
                     self._build_request(
                         id=ext.get("id", ""),
-                        tipo="prorrogacao",
+                        tipo=self._extension_request_type(ext),
                         solicitante=student_names.get(
                             sid, ext.get("aluno_nome", "Desconhecido")
                         ),
@@ -211,7 +274,7 @@ class RequestService:
 
         coord_transfers = await self._coord_transfers.list_by_program(program_id)
         for ct in coord_transfers:
-            if ct.get("initiator_uid") == user.uid and ct.get("status") == "pendente":
+            if (ct.get("initiator_uid") == user.uid or ct.get("successor_uid") == user.uid) and ct.get("status") in ["pendente", "concluido"]:
                 successor_name = await self._get_user_name(ct.get("successor_uid"))
                 requests.append(
                     self._build_request(
@@ -219,7 +282,7 @@ class RequestService:
                         tipo="transferencia_coordenacao",
                         solicitante=f"Para: {successor_name}",
                         data=ct.get("created_at") or datetime.now(timezone.utc),
-                        status="pendente_aceite",
+                        status=ct.get("status", "pendente"),
                         payload=ct,
                     )
                 )
@@ -227,18 +290,17 @@ class RequestService:
         return requests
 
     async def _get_adm_requests(self) -> list[RequestItem]:
-        """
-        Retorna as requisições de transferência de coordenação.
+        """Retorna as transferências de coordenação pendentes de todos os programas.
+
+        O papel `adm` é global (ADR-0001): gere coordenadores cross-programa e, por
+        isso, enxerga as transferências de coordenação de qualquer programa — não
+        apenas de um `programa_id`, que para o `adm` é `null`.
 
         Returns:
-            List[RequestItem]: Lista de requisições de transferência de coordenação.
+            Lista de RequestItem de `transferencia_coordenacao` com status pendente.
         """
         requests: list[RequestItem] = []
-        all_coord_transfers = (
-            await self._coord_transfers.list_all()
-            if hasattr(self._coord_transfers, "list_all")
-            else []
-        )
+        all_coord_transfers = await self._coord_transfers.list_all()
         for ct in all_coord_transfers:
             if ct.get("status") == "pendente":
                 initiator_name = await self._get_user_name(ct.get("initiator_uid"))
@@ -261,6 +323,31 @@ class RequestService:
             return []
         all_students = await self._students.list_all()
         return [s for s in all_students if s.get("orientador_id") == advisor["id"]]
+
+    @staticmethod
+    def _activity_request_type(activity: dict[str, Any]) -> str:
+        return "producao" if activity.get("producao_id") else "atividade"
+
+    @staticmethod
+    def _extension_request_type(extension: dict[str, Any]) -> str:
+        """
+        Deriva o subtipo de Solicitação de um documento de `extensions/`.
+
+        Args:
+            extension: Documento de `extensions/` (campo `tipo`: `prazo_defesa`,
+                `prazo_qualificacao`, `trancamento` ou `mudanca_nivel`).
+
+        Returns:
+            "trancamento" quando `extension.tipo == "trancamento"`, senão
+            "prorrogacao" (demais subtipos de prazo).
+        """
+        return "trancamento" if extension.get("tipo") == "trancamento" else "prorrogacao"
+
+    @staticmethod
+    def _activity_status_for_student(activity: dict[str, Any]) -> str:
+        if activity.get("parecer_orientador"):
+            return "pendente_validacao"
+        return "pendente_parecer"
 
     async def _get_user_name(self, uid: str | None) -> str:
         """
@@ -325,6 +412,7 @@ class RequestService:
         return RequestItem(
             id=id,
             tipo=tipo,
+            origem=ORIGEM_POR_TIPO[tipo],
             solicitante_nome=solicitante,
             data_solicitacao=data,
             status=status,
