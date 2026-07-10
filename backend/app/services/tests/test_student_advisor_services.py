@@ -102,12 +102,6 @@ class _FakeProgramRepository(_FakeRepo):
         return await self.get(programa_id)
 
 
-class _FakeUserRepository(_FakeRepo):
-    store: dict[str, dict[str, Any]] = {}
-    prefix = "user"
-    counter = 0
-
-
 class _FakeAuthService:
     async def create_invite(
         self,
@@ -138,15 +132,12 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeAdvisorRepository.counter = 0
     _FakeProgramRepository.store = {}
     _FakeProgramRepository.counter = 0
-    _FakeUserRepository.store = {}
-    _FakeUserRepository.counter = 0
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
     monkeypatch.setattr(student_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(student_module, "AdvisorRepository", _FakeAdvisorRepository)
     monkeypatch.setattr(student_module, "ProgramRepository", _FakeProgramRepository)
     monkeypatch.setattr(advisor_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(advisor_module, "AdvisorRepository", _FakeAdvisorRepository)
-    monkeypatch.setattr(advisor_module, "FirebaseRepository", _FakeUserRepository)
 
 
 async def test_create_student_usa_auto_id_e_retorna_invite_token() -> None:
@@ -473,47 +464,43 @@ async def test_update_advisor_rejeita_limite_menor_que_orientandos_ativos() -> N
     assert _FakeAdvisorRepository.store["advisor1"]["limite_orientandos"] == 5
 
 
-async def test_list_advisors_provisiona_coordenacao_do_programa_para_orientador() -> None:
+async def test_coordenacao_provisionada_aparece_no_dropdown_do_orientador() -> None:
     """Issue #309: orientador vendo o dropdown já enxerga o coordenador-orientador."""
-    _FakeUserRepository.store = {
-        "coord1": {
-            "uid": "coord1",
-            "nome": "Coord",
-            "email": "coord@x.com",
-            "role": "coordenacao",
-            "programa_id": "prog",
-        },
-    }
-
     service = AdvisorService(auth_service=_FakeAuthService())
+    await service.ensure_advisor_for_coordenacao(
+        {"uid": "coord1", "nome": "Coord", "email": "coord@x.com", "programa_id": "prog"}
+    )
 
     result = await service.list_advisors(_advisor_user())
 
     assert [advisor["id"] for advisor in result] == ["coord1"]
     assert _FakeAdvisorRepository.store["coord1"]["uid"] == "coord1"
-    assert _FakeUserRepository.store["coord1"]["advisor_id"] == "coord1"
 
 
-async def test_list_advisors_e_idempotente_para_coordenacao_ja_provisionada() -> None:
-    _FakeUserRepository.store = {
-        "coord1": {
-            "uid": "coord1",
-            "nome": "Coord",
-            "email": "coord@x.com",
-            "role": "coordenacao",
-            "programa_id": "prog",
-            "advisor_id": "coord1",
-        },
+async def test_ensure_advisor_for_coordenacao_e_idempotente() -> None:
+    service = AdvisorService(auth_service=_FakeAuthService())
+    coordinator = {
+        "uid": "coord1",
+        "nome": "Coord",
+        "email": "coord@x.com",
+        "programa_id": "prog",
     }
-    _FakeAdvisorRepository.store = {
-        "coord1": {"uid": "coord1", "nome": "Coord", "programa_id": "prog"},
-    }
+
+    first = await service.ensure_advisor_for_coordenacao(coordinator)
+    second = await service.ensure_advisor_for_coordenacao(coordinator)
+
+    assert first == second == "coord1"
+    assert list(_FakeAdvisorRepository.store.keys()) == ["coord1"]
+
+
+async def test_list_advisors_nao_escreve_no_firestore() -> None:
+    """M5: GET /advisors é leitura pura — não provisiona nem faz backfill."""
     service = AdvisorService(auth_service=_FakeAuthService())
 
-    await service.list_advisors(_coord())
-    await service.list_advisors(_coord())
+    result = await service.list_advisors(_coord())
 
-    assert list(_FakeAdvisorRepository.store.keys()) == ["coord1"]
+    assert result == []
+    assert _FakeAdvisorRepository.store == {}
 
 
 async def test_update_advisor_bloqueia_auto_gestao_da_coordenacao() -> None:
@@ -548,16 +535,10 @@ async def test_delete_advisor_bloqueia_auto_gestao_da_coordenacao() -> None:
 
 async def test_vincula_aluno_a_coordenador_orientador_como_qualquer_orientador() -> None:
     """Issue #309: um coordenador-orientador é um orientador válido para orientador_id."""
-    _FakeUserRepository.store = {
-        "coord1": {
-            "uid": "coord1",
-            "nome": "Coord",
-            "email": "coord@x.com",
-            "role": "coordenacao",
-            "programa_id": "prog",
-        },
-    }
     advisor_service = AdvisorService(auth_service=_FakeAuthService())
+    await advisor_service.ensure_advisor_for_coordenacao(
+        {"uid": "coord1", "nome": "Coord", "email": "coord@x.com", "programa_id": "prog"}
+    )
     advisors = await advisor_service.list_advisors(_advisor_user())
     coord_advisor_id = advisors[0]["id"]
 
