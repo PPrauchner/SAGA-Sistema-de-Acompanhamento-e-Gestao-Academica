@@ -5,6 +5,9 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from datetime import date
+
+from backend.app.api.v1.extensions import _build_notificacao_aprovacao
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.main import app
@@ -21,6 +24,7 @@ class _FakeExtensionService:
             "status": "aprovada",
             "student_id": "student1",
             "aluno_id": "student1",
+            "aluno_uid": "uid-aluno",
             "aluno_nome": "Aluno Um",
             "aluno": "Aluno Um",
             "created_at": "2026-01-01T00:00:00+00:00",
@@ -63,6 +67,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     _FakeExtensionService.calls = []
     monkeypatch.setattr("backend.app.api.v1.extensions.service", fake_service)
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
+    monkeypatch.setattr(aspect_config, "ALERTS_ENABLED", False)
     yield TestClient(app)
     app.dependency_overrides.clear()
 
@@ -104,3 +109,28 @@ def test_papeis_nao_coordenacao_nao_decidem_extension(
     assert approved.status_code == 403
     assert rejected.status_code == 403
     assert _FakeExtensionService.calls == []
+
+
+def test_build_notificacao_aprovacao_notifica_aluno_com_novo_prazo() -> None:
+    result = {
+        "id": "ext1",
+        "tipo": "prazo_defesa",
+        "status": "aprovada",
+        "aluno_uid": "uid-aluno",
+        "nova_data": date(2027, 3, 10),
+        "programa_id": "prog",
+    }
+
+    spec = _build_notificacao_aprovacao(result, (), {})
+
+    assert spec is not None
+    assert spec["tipo"] == "prorrogacao_aprovada"
+    assert spec["destinatario_id"] == "uid-aluno"
+    assert spec["entidade_tipo"] == "extensions"
+    assert spec["entidade_id"] == "ext1"
+    assert "10/03/2027" in spec["mensagem"]
+
+
+def test_build_notificacao_aprovacao_sem_aluno_nao_emite() -> None:
+    assert _build_notificacao_aprovacao({"status": "aprovada"}, (), {}) is None
+    assert _build_notificacao_aprovacao(None, (), {}) is None
