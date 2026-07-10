@@ -341,7 +341,36 @@ async def test_process_decision_rejeitar_nao_toca_no_prazo_final() -> None:
 
     assert result.status == ExtensionStatus.REJEITADA
     assert students.updates == []
-    assert repo.updates == [("ext1", {"status": "rejeitada"})]
+    assert repo.updates == [("ext1", {"status": "rejeitada", "observacao_coordenacao": None})]
+
+
+@pytest.mark.asyncio
+async def test_process_decision_aprovar_persiste_observacao_da_coordenacao() -> None:
+    repo = _FakeExtensionRepository()
+
+    result = await _service(repo).process_decision(
+        extension_id="ext1",
+        payload=DecisionRequest(acao="aprovar", observacao="Deferido: plano revisado é viável."),
+        coordinator=_user("coordenacao", "uid-coord"),
+    )
+
+    assert result.observacao_coordenacao == "Deferido: plano revisado é viável."
+    assert repo.updates[0][1]["observacao_coordenacao"] == "Deferido: plano revisado é viável."
+
+
+@pytest.mark.asyncio
+async def test_process_decision_rejeitar_persiste_observacao_da_coordenacao() -> None:
+    """No indeferimento a observação é o único registro do porquê da decisão."""
+    repo = _FakeExtensionRepository()
+
+    result = await _service(repo).process_decision(
+        extension_id="ext1",
+        payload=DecisionRequest(acao="rejeitar", observacao="Indeferido: justificativa insuficiente."),
+        coordinator=_user("coordenacao", "uid-coord"),
+    )
+
+    assert result.observacao_coordenacao == "Indeferido: justificativa insuficiente."
+    assert repo.updates[0][1]["observacao_coordenacao"] == "Indeferido: justificativa insuficiente."
 
 
 @pytest.mark.asyncio
