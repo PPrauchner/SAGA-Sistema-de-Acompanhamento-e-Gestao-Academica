@@ -92,8 +92,10 @@
         "situacao_inferida": "string (mesmo enum — atualizado pelo InferenceService)",
         "proficiencia_comprovada": "boolean (default: false)",
         "proficiencia_data": "Timestamp | null",
+        "proficiencia_comprovante_url": "string | null (URL opcional registrada pela coordenacao)",
         "qualificacao_aprovada": "boolean (default: false)",
         "qualificacao_data": "Timestamp | null",
+        "qualificacao_comprovante_url": "string | null (URL opcional registrada pela coordenacao)",
         "criado_em": "Timestamp",
         "atualizado_em": "Timestamp",
         "atualizado_por": "string (uid)"

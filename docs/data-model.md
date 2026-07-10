@@ -199,8 +199,10 @@ erDiagram
 | `situacao_inferida` | string | `calc` | cache do último `inferred_status`; escrito **só pelo motor** |
 | `proficiencia_comprovada` | bool | | default false; dispara transição de situação |
 | `proficiencia_data` | timestamp\|null | | |
+| `proficiencia_comprovante_url` | string\|null | | URL opcional registrada pela coordenacao |
 | `qualificacao_aprovada` | bool | | default false; dispara transição de situação |
 | `qualificacao_data` | timestamp\|null | | |
+| `qualificacao_comprovante_url` | string\|null | | URL opcional registrada pela coordenacao |
 | `criado_em` / `atualizado_em` / `atualizado_por` | timestamp / uid | | |
 
 ¹ `regular`\|`em_prorrogacao`\|`em_risco`\|`qualificado`\|`em_fase_de_defesa`\|`concluido`\|`desligado`.
