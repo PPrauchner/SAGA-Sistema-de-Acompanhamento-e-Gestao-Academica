@@ -4,8 +4,10 @@ import { ArrowRightLeft, UserCheck, Send, X } from "lucide-react";
 import { createTransferRequest, directTransfer } from "@/api/transfersApi";
 import { getStudents, Student } from "@/api/studentsApi";
 import { getAdvisors, Advisor } from "@/api/advisorsApi";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
 export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClose: () => void, onSuccess: () => void, initialStudentId?: string }) {
+  useEscapeClose(true, onClose);
   const { token, currentUser, activeView } = useApp();
   const [students, setStudents] = useState<Student[]>([]);
   const [advisors, setAdvisors] = useState<Advisor[]>([]);

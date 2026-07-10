@@ -7,6 +7,7 @@ import { getStudents, type Student } from "@/api/studentsApi";
 import { createTransferRequest } from "@/api/transfersApi";
 import { validateReasonableDate } from "@/lib/dateValidation";
 import { useApp } from "../../context/AppContext";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
 const STATUS_MAP = {
   aprovado: { label: "Aprovado", color: "#1F8A70", bg: "#dcfce7", icon: <CheckCircle size={14} /> },
@@ -83,6 +84,9 @@ export function SolicitacoesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // ESC fecha o formulario de nova solicitacao (closeRequestForm ja ignora submitting).
+  useEscapeClose(showForm, closeRequestForm);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [formData, setFormData] = useState(DEFAULT_FORM);

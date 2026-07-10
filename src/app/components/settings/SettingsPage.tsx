@@ -9,6 +9,7 @@ import { getVehicles, type Vehicle } from "../../../api/productionsApi";
 import { usersApi } from "../../../api/usersApi";
 import { toast } from "sonner";
 import { QualisWeightsSection } from "./QualisWeightsSection";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
 export interface ProgramConfig {
   id?: string;
@@ -153,6 +154,10 @@ export function SettingsPage() {
   const [currentActivity, setCurrentActivity] = useState<ActivityType | null>(null);
 
   const [isVehicleModalOpen, setIsVehicleModalOpen] = useState(false);
+
+  // ESC fecha os modais de tipo de atividade e de nivel de veiculo (issue #316).
+  useEscapeClose(isActivityModalOpen, () => setIsActivityModalOpen(false));
+  useEscapeClose(isVehicleModalOpen, () => setIsVehicleModalOpen(false));
   const [currentVehicle, setCurrentVehicle] = useState<VehicleLevel | null>(null);
 
   useEffect(() => {

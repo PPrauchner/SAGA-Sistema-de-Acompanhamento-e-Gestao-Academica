@@ -11,6 +11,7 @@ import {
 import { programsApi, type Program } from "@/api/programsApi";
 import { coordinationTransfersApi } from "@/api/coordinationTransfersApi";
 import { useAuth } from "@/hooks/useAuth";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
 const emptyForm: AdvisorCreatePayload = {
   uid: null,
@@ -42,6 +43,10 @@ export function AdvisorsPage() {
   const [error, setError] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
   const [confirmTransferAdvisor, setConfirmTransferAdvisor] = useState<Advisor | null>(null);
+
+  // ESC fecha os modais de cadastro/edicao e de confirmacao (issue #316).
+  useEscapeClose(showForm, () => { setShowForm(false); setEditingAdvisor(null); setError(null); });
+  useEscapeClose(Boolean(confirmTransferAdvisor), () => setConfirmTransferAdvisor(null));
 
   async function loadData(authToken: string): Promise<void> {
     setLoading(true);

@@ -11,6 +11,7 @@ import {
 } from "recharts";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 import {
   getStudentsAtRisk, getStudentsByStatus, getStudentsByAdvisor,
   getCompletionTime, getProductionsReport,
@@ -711,6 +712,7 @@ function renderReport(id: string, data: ReportsData) {
 }
 
 function ReportModal({ reportId, stat, data, onClose }: { reportId: string; stat: string; data: ReportsData; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   const cfg = REPORTS.find(r => r.id === reportId)!;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>

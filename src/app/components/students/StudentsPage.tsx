@@ -20,6 +20,7 @@ import {
   updateStudent,
 } from "@/api/studentsApi";
 import { useApp } from "../../context/AppContext";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
 const STATUS_MAP: Record<
   StudentStatus,
@@ -82,6 +83,9 @@ export function StudentsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
+
+  // ESC fecha o modal de cadastro/edicao (issue #316).
+  useEscapeClose(showForm, () => { setShowForm(false); setEditingStudent(null); });
 
   async function loadData(authToken: string): Promise<void> {
     setLoading(true);

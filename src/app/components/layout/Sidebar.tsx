@@ -1,6 +1,7 @@
 import React from "react";
 import { useApp, UserRole, PageId } from "../../context/AppContext";
 import { usePendingRequests } from "@/hooks/usePendingRequests";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 import {
   LayoutDashboard, Users, UserCheck, FileText, BookOpen,
   FlaskConical, CheckSquare, Clock, BarChart3, Brain,
@@ -278,6 +279,9 @@ function SidebarSkeletonContent({ collapsed }: { collapsed: boolean }) {
 
 export function Sidebar() {
   const { currentUser, sidebarCollapsed, setSidebarCollapsed, mobileMenuOpen, setMobileMenuOpen, profileLoading } = useApp();
+
+  // ESC fecha o drawer mobile (issue #316).
+  useEscapeClose(mobileMenuOpen, () => setMobileMenuOpen(false));
 
   if (!currentUser && !profileLoading) return null;
 
