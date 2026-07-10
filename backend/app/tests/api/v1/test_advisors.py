@@ -35,24 +35,6 @@ class _FakeAdvisorRepository:
         self.store.setdefault(advisor_id, {}).update(data)
 
 
-class _FakeUserRepository:
-    """Sem coordenadores por padrão: list_advisors não precisa provisionar nada."""
-
-    def __init__(self, store: dict[str, dict[str, Any]] | None = None) -> None:
-        self.store = store or {}
-
-    async def query(self, filters: list[tuple] | None = None, **_: Any) -> list[dict[str, Any]]:
-        results = [{"id": key, **value} for key, value in self.store.items()]
-        for field, op, value in filters or []:
-            if op == "==":
-                results = [item for item in results if item.get(field) == value]
-        return results
-
-    async def update(self, doc_id: str, data: dict[str, Any]) -> bool:
-        self.store.setdefault(doc_id, {}).update(data)
-        return True
-
-
 def _coord() -> CurrentUser:
     return CurrentUser(uid="coord1", role="coordenacao", programa_id="prog", email="coord@saga.edu")
 
@@ -73,13 +55,10 @@ def _legacy_advisor() -> dict[str, Any]:
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     original_advisors = advisors_router.service._advisors
-    original_users = advisors_router.service._users
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
     app.dependency_overrides[get_current_user] = _coord
-    advisors_router.service._users = _FakeUserRepository()
     yield TestClient(app)
     advisors_router.service._advisors = original_advisors
-    advisors_router.service._users = original_users
     app.dependency_overrides.clear()
 
 
