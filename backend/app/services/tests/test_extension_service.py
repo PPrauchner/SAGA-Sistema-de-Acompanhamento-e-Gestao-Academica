@@ -114,6 +114,12 @@ class _FakeStudentRepository:
             if student.get("programa_id") == programa_id
         ]
 
+    async def get(self, student_id: str) -> dict[str, Any] | None:
+        return next(
+            (dict(student) for student in await self.list_all() if student["id"] == student_id),
+            None,
+        )
+
     async def update(self, student_id: str, data: dict[str, Any]) -> bool:
         self.updates[student_id] = {**self.updates.get(student_id, {}), **data}
         return True
@@ -326,6 +332,34 @@ async def test_approve_extension_recalcula_prazo_do_aluno() -> None:
     assert result["status"] == "aprovada"
     assert student_repo.updates["student1"]["prazo_final"] == date(2028, 7, 1)
     assert repo.extensions[0]["aprovado_por"] == "uid-coord"
+
+
+@pytest.mark.asyncio
+async def test_approve_prorrogacao_move_situacao_para_em_prorrogacao() -> None:
+    repo = _FakeExtensionRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.approve_extension("ext1", _user("coordenacao", "uid-coord"))
+
+    # Prorrogação aprovada move o aluno para "Em Prorrogação" (CONTEXT.md → Prorrogação).
+    assert student_repo.updates["student1"]["situacao_registrada"] == "em_prorrogacao"
+    assert result["situacao_registrada"] == "em_prorrogacao"
+
+
+@pytest.mark.asyncio
+async def test_approve_trancamento_nao_muda_situacao() -> None:
+    repo = _TrancamentoSemDataRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.approve_extension(
+        "ext_tranc", _user("coordenacao", "uid-coord")
+    )
+
+    # Trancamento não dispara a transição de "Em Prorrogação".
+    assert "student1" not in student_repo.updates
+    assert result["situacao_registrada"] is None
 
 
 @pytest.mark.asyncio
