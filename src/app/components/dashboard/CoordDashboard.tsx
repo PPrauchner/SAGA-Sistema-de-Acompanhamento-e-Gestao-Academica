@@ -8,7 +8,7 @@ import {
 } from "@/api/reportsApi";
 import { usePendingExtensions } from "@/hooks/usePendingExtensions";
 import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
-import type { Solicitacao } from "@/api/solicitacoesApi";
+import type { Extension } from "@/api/extensions";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
   BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
@@ -653,7 +653,7 @@ function ValidationQueue({ items, loading, error }: { items: ValidationQueueItem
   );
 }
 
-function ExtensionRequestsSection({ extensions, loading, error }: { extensions: Solicitacao[]; loading: boolean; error: string | null }) {
+function ExtensionRequestsSection({ extensions, loading, error }: { extensions: Extension[]; loading: boolean; error: string | null }) {
   const total = extensions.length;
 
   return (
@@ -677,7 +677,7 @@ function ExtensionRequestsSection({ extensions, loading, error }: { extensions: 
           {extensions.map((ext) => {
             const status = String(ext.status);
             const sc = EXT_STATUS_CFG[status] ?? { label: status, color: "var(--muted-foreground)", bg: "var(--muted)" };
-            const nome = ext.aluno_nome || ext.aluno || "—";
+            const nome = ext.student_nome || "—";
                         const podeDecidir = status === "pendente" || status === "em_analise";
             return (
               <div key={ext.id} className="rounded-xl p-4" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
@@ -691,13 +691,13 @@ function ExtensionRequestsSection({ extensions, loading, error }: { extensions: 
                       <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>Matrícula: {ext.matricula}</p>
                     )}
                   </div>
-                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Protocolo: {formatDataBR(ext.created_at || ext.solicitacao)}</span>
+                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Protocolo: {formatDataBR(ext.created_at)}</span>
                 </div>
-                <p style={{ fontSize: "12px", color: "var(--foreground)", marginBottom: "8px" }}><span style={{ color: "var(--muted-foreground)" }}>Motivo: </span>{ext.motivo || ext.justificativa || "—"}</p>
+                <p style={{ fontSize: "12px", color: "var(--foreground)", marginBottom: "8px" }}><span style={{ color: "var(--muted-foreground)" }}>Motivo: </span>{ext.motivo || "—"}</p>
                 <div className="flex items-center gap-4" style={{ fontSize: "11px" }}>
-                  <span><span style={{ color: "var(--muted-foreground)" }}>Prazo atual: </span><span style={{ fontWeight: 700, color: "var(--tint-danger-text)" }}>{formatDataBR(ext.prazo_atual || ext.data_atual)}</span></span>
+                  <span><span style={{ color: "var(--muted-foreground)" }}>Prazo atual: </span><span style={{ fontWeight: 700, color: "var(--tint-danger-text)" }}>{formatDataBR(ext.data_atual)}</span></span>
                   <ChevronRight size={12} style={{ color: "var(--muted-foreground)" }} />
-                  <span><span style={{ color: "var(--muted-foreground)" }}>Novo prazo: </span><span style={{ fontWeight: 700, color: "var(--tint-teal-text)" }}>{formatDataBR(ext.nova_data || ext.prazo_novo)}</span></span>
+                  <span><span style={{ color: "var(--muted-foreground)" }}>Novo prazo: </span><span style={{ fontWeight: 700, color: "var(--tint-teal-text)" }}>{formatDataBR(ext.nova_data)}</span></span>
                 </div>
                 {podeDecidir && (
                   <div className="flex gap-2 mt-3">
