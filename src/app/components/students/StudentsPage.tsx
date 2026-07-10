@@ -267,13 +267,18 @@ export function StudentsPage() {
                 return (
                   <tr key={student.id} style={{ borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none" }}>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }}
+                        className="flex items-center gap-3 text-left"
+                        title="Ver detalhes do aluno"
+                      >
                         <div className="rounded-full flex items-center justify-center" style={{ width: 34, height: 34, background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 700, flexShrink: 0 }}>{student.nome.charAt(0)}</div>
                         <div>
                           <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>{student.nome}</p>
                           <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Mat. {student.matricula}</p>
                         </div>
-                      </div>
+                      </button>
                     </td>
                     <td className="px-4 py-3"><p style={{ fontSize: "12px", color: "var(--foreground)" }}>{advisor?.nome ?? student.orientador_id}</p><p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{student.programa_id}</p></td>
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="rounded-full overflow-hidden" style={{ width: 60, height: 6, background: "var(--muted)" }}><div className="h-full rounded-full" style={{ width: `${progress}%`, background: progress > 70 ? "#1F8A70" : progress > 40 ? "#D4A017" : "#dc2626" }} /></div><span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>{progress}%</span></div></td>
