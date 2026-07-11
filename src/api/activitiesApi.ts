@@ -13,7 +13,8 @@
  * - validarAtividade(token, activityId, payload): PATCH /api/v1/activities/{id}/validate —
  *   coordenação aprova/rejeita a atividade, contabiliza créditos e dispara a re-inferência.
  * - deleteActivity(token, activityId): DELETE /api/v1/activities/{id} — exclui atividade em
- *   rascunho/enviado/rejeitado. Aluno só a própria; coordenação, qualquer uma.
+ *   rascunho/enviado (aluno ou coordenação) ou rejeitado/aprovado (só coordenação). Excluir
+ *   uma aprovada reverte os créditos e dispara a re-inferência (issue #306).
  * - getActivityTypes(token): GET /api/v1/activity-types — lista tipos para o formulário de
  *   nova atividade.
  * - Todas as funções incluem Authorization: Bearer <token>.

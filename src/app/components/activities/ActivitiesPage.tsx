@@ -332,7 +332,7 @@ export function ActivitiesPage() {
   function canDelete(activity: Activity): boolean {
     if (activity.producao_id) return false;
     if (role === "coordenacao") {
-      return ["rascunho", "enviado", "rejeitado"].includes(activity.status);
+      return ["rascunho", "enviado", "rejeitado", "aprovado"].includes(activity.status);
     }
     if (role === "aluno") {
       return ["rascunho", "enviado"].includes(activity.status);
@@ -765,7 +765,9 @@ export function ActivitiesPage() {
                   deleteTarget?.id === activity.id ? (
                     <div className="flex items-center justify-between gap-2 mt-3">
                       <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
-                        Excluir esta atividade?
+                        {activity.status === "aprovado"
+                          ? "Excluir? Os créditos serão revertidos."
+                          : "Excluir esta atividade?"}
                       </span>
                       <div className="flex gap-2">
                         <button
