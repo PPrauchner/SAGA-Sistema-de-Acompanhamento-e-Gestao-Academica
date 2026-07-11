@@ -87,6 +87,18 @@ class _FakeProgramRepository(_FakeRepo):
         return await self.get(programa_id)
 
 
+class _FakeDepartmentRepository:
+    """Fake de DepartmentRepository: nome fixo por teste (ou None por padrão)."""
+
+    nome: str | None = None
+
+    def __init__(self) -> None:
+        pass
+
+    async def get_nome_by_programa(self, programa_id: str | None) -> str | None:
+        return type(self).nome if programa_id is not None else None
+
+
 class _FakeWorkPlanRepository:
     """Fake do plano de trabalho: tasks por aluno definidas pelo teste."""
 
@@ -137,6 +149,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeProgramRepository.store = {}
     _FakeProgramRepository.counter = 0
     _FakeWorkPlanRepository.tasks_by_student = {}
+    _FakeDepartmentRepository.nome = None
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
     monkeypatch.setattr(student_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(student_module, "AdvisorRepository", _FakeAdvisorRepository)
@@ -144,6 +157,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(student_module, "WorkPlanRepository", _FakeWorkPlanRepository)
     monkeypatch.setattr(advisor_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(advisor_module, "AdvisorRepository", _FakeAdvisorRepository)
+    monkeypatch.setattr(advisor_module, "DepartmentRepository", _FakeDepartmentRepository)
 
 
 async def test_create_student_usa_auto_id_e_retorna_invite_token() -> None:
@@ -332,7 +346,6 @@ async def test_create_advisor_usa_auto_id_e_retorna_invite_token() -> None:
         AdvisorCreateRequest(
             nome="Orientador X",
             email="orientador@x.com",
-            departamento="Computação",
             programa_id="prog",
         ),
         _coord(),
@@ -477,3 +490,28 @@ async def test_list_students_calcula_progresso_do_plano() -> None:
     by_id = {student["id"]: student for student in result}
     assert by_id["student1"]["progresso_plano"] == 75.0
     assert by_id["student2"]["progresso_plano"] == 0.0
+
+
+async def test_list_advisors_deriva_departamento_do_programa() -> None:
+    """departamento vem do resolver programa_id -> departments, nao mais armazenado (issue #249)."""
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador", "programa_id": "prog"},
+    }
+    _FakeDepartmentRepository.nome = "Ciência da Computação"
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.list_advisors(_coord())
+
+    assert result[0]["departamento"] == "Ciência da Computação"
+
+
+async def test_get_advisor_deriva_departamento_do_programa() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador", "programa_id": "prog"},
+    }
+    _FakeDepartmentRepository.nome = "Engenharia"
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.get_advisor("advisor1")
+
+    assert result["departamento"] == "Engenharia"

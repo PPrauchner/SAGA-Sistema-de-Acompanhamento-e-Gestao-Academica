@@ -46,7 +46,6 @@ _SITUACAO = {"situacao_registrada": "regular"}
 _ADVISOR_CREATE = {
     "nome": "Orientador",
     "email": "o@x.com",
-    "departamento": "DC",
     "programa_id": "prog",
 }
 _ACTIVITY_CREATE = {
