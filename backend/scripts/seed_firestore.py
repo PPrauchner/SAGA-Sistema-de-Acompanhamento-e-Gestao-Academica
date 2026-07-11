@@ -3,10 +3,11 @@ Script de seed para popular o Firestore com dados de configuração iniciais do 
 
 Responsabilidades:
 - Inicializar o Firebase Admin SDK com as credenciais do ambiente.
+- Criar o documento departments/dept_default (ADR-0004) — pai estrutural do programa.
 - Criar o documento programs/prog_default com as configurações do PPGCC: duracao_meses=24,
   creditos_grupo_basico_min=12, creditos_grupo_especifico_min=8,
   creditos_grupo_tecnologico_max=4, creditos_total_min=24, max_prorrogacoes=1,
-  duracao_prorrogacao_meses=6, meses_ate_qualificacao=12.
+  duracao_prorrogacao_meses=6, meses_ate_qualificacao=12, departamento_id=dept_default.
 - Popular programs/prog_default/qualis_weights/ com os níveis de relevância default
   (escala Qualis Único monotônica A1–A8 + fallback): A1 (1.0), A2 (0.9), A3 (0.8),
   A4 (0.7), A5 (0.6), A6 (0.5), A7 (0.4), A8 (0.3), SC (0.2).
@@ -44,8 +45,14 @@ from backend.app.repositories.work_plan_repository import (
 )  # noqa: E402
 
 PROGRAM_ID = "prog_default"
+DEPARTMENT_ID = "dept_default"
 SEED_USER_ID = "seed_firestore"
 SEED_STUDENT_ID = "seed_aluno_exemplo"
+
+DEPARTMENT_DEFAULT: dict[str, Any] = {
+    "nome": "Departamento Padrão",
+    "instituicao": "UNIPAMPA",
+}
 
 # Versão inicial dos pesos Qualis. O id é fixo para idempotência; vigente_desde usa uma
 # data-base bem anterior para que qualquer produção (mesmo histórica) resolva esta versão.
@@ -55,6 +62,7 @@ QUALIS_WEIGHTS_BASELINE_DATE = datetime(2000, 1, 1, tzinfo=timezone.utc)
 PROGRAM_DEFAULT: dict[str, Any] = {
     "nome": "PPGCC — Programa de Pós-Graduação em Ciência da Computação",
     "instituicao": "UNIPAMPA",
+    "departamento_id": DEPARTMENT_ID,
     "duracao_meses": 24,
     "creditos_grupo_basico_min": 12,
     "creditos_grupo_especifico_min": 8,
@@ -216,18 +224,27 @@ async def _create_if_missing(
 
 async def seed_firestore() -> dict[str, int]:
     now = datetime.now(timezone.utc)
+    departments = FirebaseRepository("departments")
     programs = FirebaseRepository("programs")
     vehicle_levels = FirebaseRepository(f"programs/{PROGRAM_ID}/vehicle_levels")
     qualis_weights = FirebaseRepository(f"programs/{PROGRAM_ID}/qualis_weights")
     activity_types = FirebaseRepository("activity_types")
 
     created = {
+        "departments": 0,
         "programs": 0,
         "vehicle_levels": 0,
         "qualis_weights": 0,
         "activity_types": 0,
         "work_plans": 0,
     }
+
+    if await _create_if_missing(
+        departments,
+        DEPARTMENT_ID,
+        {**DEPARTMENT_DEFAULT, "criado_em": now, "atualizado_em": now},
+    ):
+        created["departments"] += 1
 
     if await _create_if_missing(
         programs, PROGRAM_ID, {**PROGRAM_DEFAULT, "criado_em": now, "atualizado_em": now}
@@ -277,6 +294,7 @@ def main() -> None:
         shutdown_firebase()
 
     print("Seed Firestore concluído.")
+    print(f"departments criados: {created['departments']}")
     print(f"programs criados: {created['programs']}")
     print(f"vehicle_levels criados: {created['vehicle_levels']}")
     print(f"qualis_weights criados: {created['qualis_weights']}")
