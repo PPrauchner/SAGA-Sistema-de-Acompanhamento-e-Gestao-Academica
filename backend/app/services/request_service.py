@@ -349,7 +349,19 @@ class RequestService:
 
     @staticmethod
     def _extension_request_type(extension: dict[str, Any]) -> str:
-        return "trancamento" if extension.get("tipo") == "trancamento" else "prorrogacao"
+        """Mapeia extensions.tipo para o tipo exibido na Caixa de Entrada unificada.
+
+        Preserva os subtipos de prorrogação (prazo_defesa/prazo_qualificacao)
+        distintos da prorrogação genérica — antes todos colapsavam em
+        "prorrogacao" (issue #298). "mudanca_nivel" (escopo futuro, fora do MVP)
+        cai no fallback "prorrogacao".
+        """
+        tipo = extension.get("tipo")
+        if tipo == "trancamento":
+            return "trancamento"
+        if tipo in ("prazo_defesa", "prazo_qualificacao"):
+            return tipo
+        return "prorrogacao"
 
     @staticmethod
     def _activity_status_for_student(activity: dict[str, Any]) -> str:

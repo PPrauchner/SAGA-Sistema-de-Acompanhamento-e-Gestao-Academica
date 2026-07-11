@@ -12,6 +12,8 @@ TipoSolicitacao = Literal[
     "atividade",
     "producao",
     "prorrogacao",
+    "prazo_defesa",
+    "prazo_qualificacao",
     "trancamento",
     "transferencia",
     "transferencia_coordenacao",
