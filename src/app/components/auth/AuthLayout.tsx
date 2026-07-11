@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { AuthIllustration } from "./AuthIllustration";
-import { GraduationCap, Shield, Lock, Users, BookOpen } from "lucide-react";
+import { GraduationCap, Shield, Lock, Users, BookOpen, Sun, Moon } from "lucide-react";
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -19,8 +19,30 @@ const SECURITY_BADGES = [
 ];
 
 export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutProps) {
+  const { darkMode, toggleDarkMode } = useApp();
+
   return (
-    <div className="min-h-screen w-full flex" style={{ background: "var(--muted)" }}>
+    <div className="min-h-screen w-full flex relative" style={{ background: "var(--muted)" }}>
+
+      {/* Theme toggle — disponível em todas as telas de auth, inclusive mobile */}
+      <button
+        type="button"
+        onClick={toggleDarkMode}
+        className="absolute z-20 flex items-center justify-center rounded-lg transition-colors"
+        style={{
+          top: 16,
+          right: 16,
+          width: 38,
+          height: 38,
+          color: "var(--muted-foreground)",
+          background: "var(--card)",
+          border: "1px solid var(--border)",
+        }}
+        aria-label={darkMode ? "Ativar modo claro" : "Ativar modo escuro"}
+        title={darkMode ? "Modo Claro" : "Modo Escuro"}
+      >
+        {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+      </button>
 
       {/* ── LEFT PANEL ─────────────────────────────────────────────── */}
       <div
