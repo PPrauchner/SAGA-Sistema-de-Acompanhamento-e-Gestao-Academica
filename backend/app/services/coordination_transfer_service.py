@@ -300,7 +300,6 @@ class CoordinationTransferService:
                 "uid": initiator["uid"],
                 "nome": initiator.get("nome", initiator.get("email", initiator["uid"])),
                 "email": initiator.get("email", ""),
-                "departamento": initiator.get("departamento", ""),
                 "programa_id": initiator["programa_id"],
                 "lattes": initiator.get("lattes"),
                 "limite_orientandos": 5,
