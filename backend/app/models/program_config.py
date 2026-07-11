@@ -10,7 +10,7 @@ Responsabilidades:
 import math
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 CREDIT_FIELDS = {
@@ -39,6 +39,8 @@ class ProgramConfigBase(BaseModel):
     """Schema base para configurações de programas.
 
     Attributes:
+        departamento_id: Departamento ao qual o programa pertence (ADR-0004) —
+            obrigatório na criação; entidade-pai estrutural do programa.
         creditos_grupo_basico_min: Créditos mínimos exigidos para o grupo básico.
         creditos_grupo_especifico_min: Créditos mínimos exigidos para o grupo específico.
         creditos_grupo_tecnologico_max: Máximo de créditos permitidos para o grupo tecnológico.
@@ -48,6 +50,7 @@ class ProgramConfigBase(BaseModel):
         duracao_prorrogacao_meses: Duração de cada prorrogação em meses.
         meses_ate_qualificacao: Número padrão de meses até a qualificação.
     """
+    departamento_id: str = Field(..., min_length=1)
     creditos_grupo_basico_min: int
     creditos_grupo_especifico_min: int
     creditos_grupo_tecnologico_max: int
