@@ -129,6 +129,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     ("activities.create", "POST", "/api/v1/activities", _ACTIVITY_CREATE, ("aluno",)),
     ("activities.parecer", "PATCH", "/api/v1/activities/x/parecer", _PARECER, ("orientador",)),
     ("activities.validate", "PATCH", "/api/v1/activities/x/validate", _VALIDATE, ("coordenacao",)),
+    ("activities.delete", "DELETE", "/api/v1/activities/x", None, ("aluno", "coordenacao")),
     # productions
     ("productions.list", "GET", "/api/v1/productions", None, ("aluno", "orientador", "coordenacao")),
     ("productions.create", "POST", "/api/v1/productions", _PRODUCTION_CREATE, ("aluno",)),
