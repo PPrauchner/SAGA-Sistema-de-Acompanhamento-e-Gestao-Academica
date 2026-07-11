@@ -59,14 +59,17 @@ async def test_seed_cria_todos_os_documentos() -> None:
     created = await seed_module.seed_firestore()
 
     assert created == {
+        "departments": 1,
         "programs": 1,
         "vehicle_levels": 9,
         "qualis_weights": 1,
         "activity_types": 6,
         "work_plans": 1,
     }
-    # programs com id explícito (não auto-id)
+    # departments e programs com id explícito (não auto-id) — ADR-0004
+    assert ("departments", "dept_default") in _FakeRepository.store
     assert ("programs", "prog_default") in _FakeRepository.store
+    assert _FakeRepository.store[("programs", "prog_default")]["departamento_id"] == "dept_default"
     # vehicle_levels gravados como subcoleção via path
     assert ("programs/prog_default/vehicle_levels", "v_placeholder_a1") in _FakeRepository.store
     # versão inicial (bootstrap) de pesos Qualis na subcoleção versionada
@@ -80,6 +83,7 @@ async def test_seed_e_idempotente() -> None:
     again = await seed_module.seed_firestore()
 
     assert again == {
+        "departments": 0,
         "programs": 0,
         "vehicle_levels": 0,
         "qualis_weights": 0,
