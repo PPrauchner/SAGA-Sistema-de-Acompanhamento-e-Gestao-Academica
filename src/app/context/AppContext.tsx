@@ -3,7 +3,7 @@ import React, { createContext, useContext, useEffect, useLayoutEffect, useState,
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 
-export type UserRole = "aluno" | "orientador" | "coordenacao";
+export type UserRole = "aluno" | "orientador" | "coordenacao" | "adm";
 export type ActiveView = "aluno" | "orientador" | "coordenador";
 export type FontSizePreference = "small" | "normal" | "large";
 export interface NotificationPreferences {
@@ -64,7 +64,8 @@ export type PageId =
   | "inferencia"
   | "auditoria"
   | "notificacoes"
-  | "configuracoes";
+  | "configuracoes"
+  | "departamentos";
 
 export interface User {
   id: string;
