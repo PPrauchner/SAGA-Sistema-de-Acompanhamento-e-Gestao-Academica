@@ -106,7 +106,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     # students
     ("students.list", "GET", "/api/v1/students", None, ("coordenacao", "orientador")),
     ("students.get", "GET", "/api/v1/students/x", None, ("aluno", "orientador", "coordenacao")),
-    ("students.create", "POST", "/api/v1/students", _STUDENT_CREATE, ("coordenacao",)),
+    ("students.create", "POST", "/api/v1/students", _STUDENT_CREATE, ("coordenacao", "orientador")),
     ("students.update", "PUT", "/api/v1/students/x", {"nome": "A"}, ("coordenacao",)),
     ("students.delete", "DELETE", "/api/v1/students/x", None, ("coordenacao",)),
     ("students.qualificacao", "PATCH", "/api/v1/students/x/qualificacao", _QUALIFICACAO, ("coordenacao",)),
@@ -168,7 +168,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     ("reports.by_status", "GET", "/api/v1/reports/students-by-status", None, ("coordenacao",)),
     ("reports.by_advisor", "GET", "/api/v1/reports/students-by-advisor", None, ("coordenacao",)),
     ("reports.completion", "GET", "/api/v1/reports/completion-time", None, ("coordenacao",)),
-    ("reports.productions", "GET", "/api/v1/reports/productions", None, ("coordenacao",)),
+    ("reports.productions", "GET", "/api/v1/reports/productions", None, ("aluno", "orientador", "coordenacao")),
     # checklist / inference (rotas corrigidas nesta issue)
     ("checklist.get", "GET", "/api/v1/checklist/x", None, ("aluno", "orientador", "coordenacao")),
     ("inference.get", "GET", "/api/v1/inference/x", None, ("aluno", "orientador", "coordenacao")),
