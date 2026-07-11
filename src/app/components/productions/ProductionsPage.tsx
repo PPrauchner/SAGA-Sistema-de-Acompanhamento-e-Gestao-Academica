@@ -331,7 +331,7 @@ export function ProductionsPage() {
             </div>
             <div className="flex items-center justify-between p-4 md:p-6 pb-4" style={{ borderBottom: "1px solid var(--border)" }}>
               <div className="flex items-center gap-3">
-                <div className="rounded-xl p-2" style={{ background: "#eef3fc" }}><Plus size={16} style={{ color: "#123C7A" }} /></div>
+                <div className="rounded-xl p-2" style={{ background: "var(--tint-blue-bg)" }}><Plus size={16} style={{ color: "var(--tint-blue-text)" }} /></div>
                 <h2 style={{ fontSize: 16, fontWeight: 700, color: "var(--foreground)" }}>Registrar Produção</h2>
               </div>
               <button onClick={() => setShowForm(false)} className="rounded-xl p-2" style={{ background: "var(--muted)", color: "var(--muted-foreground)" }}><X size={16} /></button>
@@ -454,8 +454,8 @@ export function ProductionsPage() {
                 disabled={submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao}
                 className="flex-1 flex items-center justify-center gap-2 rounded-xl py-2.5"
                 style={{
-                  background: submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao ? "#e5e7eb" : "#123C7A",
-                  color: submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao ? "#9ca3af" : "#fff",
+                  background: submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao ? "var(--muted)" : "#123C7A",
+                  color: submitting || !form.veiculo_id || !form.titulo || !form.data_realizacao ? "var(--muted-foreground)" : "#fff",
                   fontWeight: 700,
                   fontSize: 13,
                 }}
