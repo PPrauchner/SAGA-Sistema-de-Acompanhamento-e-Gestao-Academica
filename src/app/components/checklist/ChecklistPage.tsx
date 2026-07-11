@@ -21,6 +21,21 @@ const STATUS_CFG: Record<RequisitoStatus, { label: string; color: string; bg: st
   em_risco: { label: "Em risco", color: "#dc2626", bg: "#fee2e2" },
 };
 
+// Ciclo de vida do discente (issue #255). Mesmo enum de situacao_registrada/situacao_inferida.
+const SITUACAO_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  regular: { label: "Regular", color: "#123C7A", bg: "#eef3fc" },
+  em_prorrogacao: { label: "Em Prorrogação", color: "#D4A017", bg: "#fef9c3" },
+  em_risco: { label: "Em Risco", color: "#dc2626", bg: "#fee2e2" },
+  qualificado: { label: "Qualificado", color: "#1F8A70", bg: "#dcfce7" },
+  em_fase_de_defesa: { label: "Fase de Defesa", color: "#7c3aed", bg: "#ede9fe" },
+  concluido: { label: "Concluído", color: "#0891b2", bg: "#e0f2fe" },
+  desligado: { label: "Desligado", color: "#64748b", bg: "#f1f5f9" },
+};
+
+function situacaoMeta(situacao: string) {
+  return SITUACAO_CFG[situacao] ?? { label: situacao || "—", color: "#64748b", bg: "var(--muted)" };
+}
+
 interface RequisitoView {
   key: string;
   label: string;
@@ -99,7 +114,18 @@ export function ChecklistPage() {
       {/* Header */}
       <div className="mb-4 md:mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Checklist de Integralização</h1>
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <h1 style={{ color: "var(--foreground)" }}>Checklist de Integralização</h1>
+            {data && !loading && (
+              <span
+                className="rounded-lg px-2.5 py-1"
+                title="Situação inferida pelo motor a partir dos requisitos"
+                style={{ background: situacaoMeta(data.situacao_inferida).bg, color: situacaoMeta(data.situacao_inferida).color, fontSize: "12px", fontWeight: 700 }}
+              >
+                {situacaoMeta(data.situacao_inferida).label}
+              </span>
+            )}
+          </div>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
             Acompanhe todos os requisitos para a conclusão do curso
           </p>
@@ -243,11 +269,27 @@ export function ChecklistPage() {
             </div>
           </div>
 
-          {/* Conflito de situação */}
+          {/* Conflito de situação: registrada (manual/coordenação) x inferida (motor) lado a lado */}
           {data.conflito_situacao && (
-            <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", border: "1px solid #fca5a5" }}>
-              <AlertTriangle size={16} style={{ color: "#dc2626", flexShrink: 0 }} />
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626" }}>Conflito de situação detectado</span>
+            <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", border: "1px solid #fca5a5" }}>
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={16} style={{ color: "#dc2626", flexShrink: 0 }} />
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626" }}>Conflito de situação detectado</span>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span style={{ fontSize: "11px", color: "#991b1b" }}>Registrada:</span>
+                  <span className="rounded-lg px-2 py-0.5" style={{ background: situacaoMeta(data.situacao_registrada).bg, color: situacaoMeta(data.situacao_registrada).color, fontSize: "11px", fontWeight: 700 }}>
+                    {situacaoMeta(data.situacao_registrada).label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span style={{ fontSize: "11px", color: "#991b1b" }}>Inferida:</span>
+                  <span className="rounded-lg px-2 py-0.5" style={{ background: situacaoMeta(data.situacao_inferida).bg, color: situacaoMeta(data.situacao_inferida).color, fontSize: "11px", fontWeight: 700 }}>
+                    {situacaoMeta(data.situacao_inferida).label}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
