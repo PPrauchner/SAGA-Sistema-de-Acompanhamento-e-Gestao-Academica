@@ -122,7 +122,6 @@ erDiagram
     advisors {
         string id PK
         string uid FK
-        string departamento
         int limite_orientandos
     }
     programs {
@@ -214,12 +213,12 @@ a **divergência entre as duas é sinal de atenção**.
 |-------|------|-----|-------|
 | `uid` | string | →`users.uid` | |
 | `nome` / `email` | string | | |
-| `departamento` | string | | |
 | `lattes` | string\|null | | |
 | `programa_id` | string | →`programs` (soft) | |
 | `limite_orientandos` | int | | default 5 |
 | `criado_em` / `atualizado_em` | timestamp | | |
 | `orientandos_ativos` | int | `calc` | computado em leitura (contagem de `students` por `orientador_id`) |
+| `departamento` | string\|null | `calc` | **não persistido** — derivado em leitura de `programa_id` → `programs.departamento_id` → `departments.nome` ([ADR-0004](./adr/0004-departamento-como-pai-estrutural-do-programa.md), issue #249). `users` (perfil do orientador em `GET /auth/me`) expõe o mesmo campo, derivado da mesma forma. |
 
 ### `transfer_requests` - colecao raiz - chave: `auto-id`
 
