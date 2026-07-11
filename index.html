@@ -9,7 +9,20 @@
       <meta name="description" content="Streamline graduate program management with a user-friendly platform for students, advisors, and coordinators to track progress, manage tasks, and access reports." />
       <meta name="robots" content="noindex, nofollow" />
       <style>html, body { height: 100%; margin: 0; } #root { height: 100%; }</style>
-      
+      <script>
+        // Aplica o tema antes da primeira renderizacao para evitar flash.
+        // Fonte da verdade compartilhada com AppContext (chave "saga:darkMode").
+        (function () {
+          try {
+            var stored = window.localStorage.getItem("saga:darkMode");
+            var dark = stored === "true" ? true
+              : stored === "false" ? false
+              : window.matchMedia("(prefers-color-scheme: dark)").matches;
+            if (dark) document.documentElement.classList.add("dark");
+          } catch (e) {}
+        })();
+      </script>
+
     </head>
 
     <body>
