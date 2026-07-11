@@ -12,6 +12,8 @@
  *   orientador registra o parecer textual sobre a atividade do orientando.
  * - validarAtividade(token, activityId, payload): PATCH /api/v1/activities/{id}/validate —
  *   coordenação aprova/rejeita a atividade, contabiliza créditos e dispara a re-inferência.
+ * - deleteActivity(token, activityId): DELETE /api/v1/activities/{id} — exclui atividade em
+ *   rascunho/enviado/rejeitado. Aluno só a própria; coordenação, qualquer uma.
  * - getActivityTypes(token): GET /api/v1/activity-types — lista tipos para o formulário de
  *   nova atividade.
  * - Todas as funções incluem Authorization: Bearer <token>.
@@ -196,6 +198,18 @@ export function createActivityForOrientando(
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/** Exclui (hard delete) atividade em rascunho, enviado ou rejeitado. */
+export async function deleteActivity(token: string, activityId: string): Promise<void> {
+  const response = await fetch(`${API_URL}/api/v1/activities/${activityId}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(extractErrorMessage(data.detail, `Falha ao excluir atividade (HTTP ${response.status})`));
+  }
 }
 
 /**

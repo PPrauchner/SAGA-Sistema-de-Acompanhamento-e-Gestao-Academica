@@ -12,6 +12,7 @@ import {
   Award,
   MessageSquare,
   Send,
+  Trash2,
 } from "lucide-react";
 
 import { useApp } from "../../context/AppContext";
@@ -21,6 +22,7 @@ import { validateReasonableDate } from "@/lib/dateValidation";
 import {
   createActivity,
   createActivityForOrientando,
+  deleteActivity,
   emitirParecer,
   getActivities,
   getActivityTypes,
@@ -113,6 +115,9 @@ export function ActivitiesPage() {
   const [validateObs, setValidateObs] = useState("");
   const [validateCreditos, setValidateCreditos] = useState("");
   const [validateSaving, setValidateSaving] = useState(false);
+
+  const [deleteTarget, setDeleteTarget] = useState<Activity | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
 
   const canRegister = role === "aluno";
   const canCreateForOrientando = role === "orientador";
@@ -321,6 +326,35 @@ export function ActivitiesPage() {
       setError(err instanceof Error ? err.message : "Falha ao validar atividade");
     } finally {
       setValidateSaving(false);
+    }
+  }
+
+  function canDelete(activity: Activity): boolean {
+    if (activity.producao_id) return false;
+    if (role === "coordenacao") {
+      return ["rascunho", "enviado", "rejeitado"].includes(activity.status);
+    }
+    if (role === "aluno") {
+      return ["rascunho", "enviado"].includes(activity.status);
+    }
+    return false;
+  }
+
+  async function handleDelete(activity: Activity): Promise<void> {
+    if (!token) return;
+
+    setDeleteSaving(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      await deleteActivity(token, activity.id);
+      setFeedback("Atividade excluída.");
+      setDeleteTarget(null);
+      setActivities((prev) => prev.filter((item) => item.id !== activity.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao excluir atividade");
+    } finally {
+      setDeleteSaving(false);
     }
   }
 
@@ -723,6 +757,46 @@ export function ActivitiesPage() {
                     >
                       <CheckCircle2 size={13} />
                       Validar atividade
+                    </button>
+                  )
+                )}
+
+                {canDelete(activity) && (
+                  deleteTarget?.id === activity.id ? (
+                    <div className="flex items-center justify-between gap-2 mt-3">
+                      <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                        Excluir esta atividade?
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(null)}
+                          className="rounded-lg px-3 py-1.5"
+                          style={{ border: "1px solid var(--border)", color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600 }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(activity)}
+                          disabled={deleteSaving}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+                          style={{ background: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600, opacity: deleteSaving ? 0.6 : 1 }}
+                        >
+                          <Trash2 size={12} />
+                          {deleteSaving ? "Excluindo…" : "Confirmar"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(activity)}
+                      className="flex items-center gap-1.5 mt-3"
+                      style={{ fontSize: "12px", color: "#dc2626", fontWeight: 600 }}
+                    >
+                      <Trash2 size={13} />
+                      Excluir
                     </button>
                   )
                 )}
