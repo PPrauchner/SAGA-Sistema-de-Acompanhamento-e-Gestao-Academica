@@ -100,6 +100,22 @@ class ActivityRepository(FirebaseRepository):
 
         return await asyncio.to_thread(_update)
 
+    async def delete_by_id(self, activity_id: str) -> None:
+        """Exclui (hard delete) a atividade localizada por collection_group scan.
+
+        Usado pelo DELETE /activities/{activity_id} (issue #305), que só tem o
+        activity_id na URL — igual padrão de get_by_id/update_by_id.
+        """
+
+        def _delete() -> None:
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                if snapshot.id == activity_id:
+                    snapshot.reference.delete()
+                    return
+            raise ValueError(f"Atividade {activity_id} não encontrada.")
+
+        await asyncio.to_thread(_delete)
+
     async def get_activity_type(self, tipo_id: str) -> dict[str, Any] | None:
         def _read() -> dict[str, Any] | None:
             doc = get_firestore_client().collection("activity_types").document(tipo_id).get()
