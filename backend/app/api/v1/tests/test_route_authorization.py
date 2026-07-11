@@ -81,6 +81,18 @@ _ACTIVITY_TYPE_CREATE = {"nome": "N", "categoria": "basico", "pontuacao_base": 1
 _ACTIVITY_TYPE_TOGGLE = {"ativo": False}
 _VEHICLE_CREATE = {"nome": "V", "tipo": "revista", "nivel": "A1"}
 _VEHICLE_LEVEL_UPDATE = {"nivel": "A2"}
+_DEPARTMENT_CREATE = {"nome": "Departamento de Computação"}
+_DEPARTMENT_UPDATE = {"nome": "Novo Nome"}
+_PROGRAM_CREATE = {
+    "departamento_id": "dept1",
+    "creditos_grupo_basico_min": 8,
+    "creditos_grupo_especifico_min": 4,
+    "creditos_grupo_tecnologico_max": 4,
+    "creditos_total_min": 12,
+    "max_prorrogacoes": 1,
+    "duracao_prorrogacao_meses": 6,
+    "meses_ate_qualificacao": 24,
+}
 _TRANSFER_CROSS_CREATE = {
     "student_id": "s1",
     "orientador_destino_id": "adv2",
@@ -107,6 +119,12 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     ("advisors.create", "POST", "/api/v1/advisors", _ADVISOR_CREATE, ("coordenacao",)),
     ("advisors.update", "PUT", "/api/v1/advisors/x", {"nome": "O"}, ("coordenacao",)),
     ("advisors.delete", "DELETE", "/api/v1/advisors/x", None, ("coordenacao",)),
+    # departments (ADR-0004) — entidade global à instituição, restrita a adm
+    ("departments.list", "GET", "/api/v1/departments", None, ("adm",)),
+    ("departments.get", "GET", "/api/v1/departments/x", None, ("adm",)),
+    ("departments.create", "POST", "/api/v1/departments", _DEPARTMENT_CREATE, ("adm",)),
+    ("departments.update", "PUT", "/api/v1/departments/x", _DEPARTMENT_UPDATE, ("adm",)),
+    ("departments.delete", "DELETE", "/api/v1/departments/x", None, ("adm",)),
     # activities
     ("activities.list", "GET", "/api/v1/activities", None, ("aluno", "orientador", "coordenacao")),
     ("activities.create", "POST", "/api/v1/activities", _ACTIVITY_CREATE, ("aluno",)),
@@ -135,6 +153,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     # programs
     ("programs.get_config", "GET", "/api/v1/programs/config", None, ("aluno", "orientador", "coordenacao")),
     ("programs.update_config", "PUT", "/api/v1/programs/config", {}, ("coordenacao",)),
+    ("programs.create", "POST", "/api/v1/programs", _PROGRAM_CREATE, ("adm",)),
     # vehicles
     ("vehicles.list", "GET", "/api/v1/vehicles", None, ("aluno", "orientador", "coordenacao")),
     ("vehicles.create", "POST", "/api/v1/vehicles", _VEHICLE_CREATE, ("coordenacao",)),
