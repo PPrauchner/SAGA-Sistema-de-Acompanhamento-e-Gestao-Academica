@@ -43,13 +43,16 @@ async def test_get_requests_aluno_agrega_itens_do_proprio_aluno(request_service)
     request_service._extensions.list_by_student_ids = AsyncMock(return_value=[
         {"id": "ext_1", "status": "pendente", "student_id": "stu_1", "tipo": "trancamento"},
         {"id": "ext_2", "status": "aprovada", "student_id": "stu_1", "tipo": "prorrogacao"},
+        {"id": "ext_3", "status": "pendente", "student_id": "stu_1", "tipo": "prazo_defesa"},
+        {"id": "ext_4", "status": "pendente", "student_id": "stu_1", "tipo": "prazo_qualificacao"},
     ])
 
     requests = await request_service.get_requests(user)
 
-    assert len(requests) == 3
+    # issue #298: prazo_defesa/prazo_qualificacao não colapsam mais em "prorrogacao".
+    assert len(requests) == 5
     tipos = {r.tipo for r in requests}
-    assert {"atividade", "producao", "trancamento"} <= tipos
+    assert {"atividade", "producao", "trancamento", "prazo_defesa", "prazo_qualificacao"} <= tipos
     request_service._students.query.assert_called_once_with(
         filters=[("uid", "==", "uid_aluno")]
     )
@@ -178,3 +181,19 @@ async def test_get_requests_adm(request_service):
 
     assert len(requests) == 1
     assert requests[0].tipo == "transferencia_coordenacao"
+
+
+@pytest.mark.parametrize(
+    "extension_tipo, expected",
+    [
+        ({"tipo": "trancamento"}, "trancamento"),
+        ({"tipo": "prazo_defesa"}, "prazo_defesa"),
+        ({"tipo": "prazo_qualificacao"}, "prazo_qualificacao"),
+        ({"tipo": "prorrogacao"}, "prorrogacao"),
+        ({"tipo": "mudanca_nivel"}, "prorrogacao"),
+        ({}, "prorrogacao"),
+    ],
+)
+def test_extension_request_type_preserva_subtipos(extension_tipo, expected):
+    """issue #298: prazo_defesa/prazo_qualificacao não colapsam mais em 'prorrogacao'."""
+    assert RequestService._extension_request_type(extension_tipo) == expected
