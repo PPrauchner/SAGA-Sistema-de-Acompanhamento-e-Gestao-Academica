@@ -10,6 +10,8 @@ import { TransferModal } from "../transfers/TransferModal";
 const TYPE_LABELS: Record<string, string> = {
   atividade: "Validação de atividade",
   prorrogacao: "Prorrogação",
+  prazo_defesa: "Prorrogação de Prazo de Defesa",
+  prazo_qualificacao: "Prorrogação de Qualificação",
   trancamento: "Trancamento de matrícula",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",

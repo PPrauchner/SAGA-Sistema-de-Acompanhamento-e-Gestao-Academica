@@ -2,7 +2,15 @@ import { API_ROOT } from "./http";
 
 export interface RequestItem {
   id: string;
-  tipo: "atividade" | "producao" | "prorrogacao" | "trancamento" | "transferencia" | "transferencia_coordenacao";
+  tipo:
+    | "atividade"
+    | "producao"
+    | "prorrogacao"
+    | "prazo_defesa"
+    | "prazo_qualificacao"
+    | "trancamento"
+    | "transferencia"
+    | "transferencia_coordenacao";
   solicitante_nome: string;
   data_solicitacao: string;
   status: string;
