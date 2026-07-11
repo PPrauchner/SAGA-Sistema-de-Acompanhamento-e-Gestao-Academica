@@ -457,6 +457,54 @@ async def emitir_parecer_orientador(
     return ActivityResponse(**updated)
 
 
+async def delete_activity(activity_id: str, current_user: CurrentUser) -> None:
+    """Exclui (hard delete) uma atividade nos estados rascunho/enviado/rejeitado.
+
+    Propriedade (aluno dono ou coordenação) já é garantida pelo A01 no router.
+    Aqui só as regras de negócio que dependem do estado da atividade:
+    - `rejeitado` só pode ser excluída pela coordenação (não pelo aluno dono).
+    - Atividade lastreada em produção (`producao_id`) é bloqueada — a remoção se
+      dá excluindo a produção, não a atividade.
+
+    Args:
+        activity_id: ID da atividade a excluir.
+        current_user: Usuário autenticado (aluno dono ou coordenação).
+
+    Raises:
+        HTTPException: 404 se a atividade não existir; 409 se o status não permitir
+            exclusão ou a atividade for lastreada em produção; 403 se um aluno tentar
+            excluir atividade rejeitada.
+    """
+    activity = await _repo.get_by_id(activity_id)
+    if not activity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atividade não encontrada.")
+
+    if activity.get("producao_id"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Atividade lastreada em produção não pode ser excluída por esta rota.",
+        )
+
+    activity_status = activity.get("status")
+    if activity_status not in (
+        ActivityStatus.rascunho,
+        ActivityStatus.enviado,
+        ActivityStatus.rejeitado,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Atividade com status '{activity_status}' não pode ser excluída.",
+        )
+
+    if activity_status == ActivityStatus.rejeitado and current_user.role != "coordenacao":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Apenas a coordenação pode excluir atividade rejeitada.",
+        )
+
+    await _repo.delete_by_id(activity_id)
+
+
 async def validate_activity(
     activity_id: str,
     payload: ValidateActivityRequest,
