@@ -2,6 +2,9 @@
 Testes da exclusão de atividade creditável (issue #305) — hard delete em
 rascunho/enviado/rejeitado, bloqueio de atividade lastreada em produção e a
 regra de que só a coordenação exclui atividade rejeitada.
+
+A exclusão de atividade `aprovado` (issue #306, com reversão de créditos e
+re-execução do motor) tem cobertura própria em test_activity_delete_aprovado.py.
 """
 
 from __future__ import annotations
@@ -88,15 +91,15 @@ async def test_bloqueia_exclusao_de_atividade_lastreada_em_producao(
     fake_repo.delete_by_id.assert_not_called()
 
 
-async def test_bloqueia_exclusao_de_atividade_aprovada(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_aluno_nao_exclui_atividade_aprovada(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_repo = AsyncMock()
     fake_repo.get_by_id.return_value = _activity(status=ActivityStatus.aprovado)
     monkeypatch.setattr(svc, "_repo", fake_repo)
 
     with pytest.raises(HTTPException) as exc:
-        await svc.delete_activity("act1", _coord())
+        await svc.delete_activity("act1", _aluno())
 
-    assert exc.value.status_code == status.HTTP_409_CONFLICT
+    assert exc.value.status_code == status.HTTP_403_FORBIDDEN
     fake_repo.delete_by_id.assert_not_called()
 
 
