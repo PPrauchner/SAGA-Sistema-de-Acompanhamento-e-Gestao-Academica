@@ -30,14 +30,14 @@ export function ProfileUnavailablePage() {
     <AuthLayout>
       <div className="flex flex-col items-center text-center">
         <div className="flex items-center justify-center rounded-2xl mb-6"
-          style={{ width: 64, height: 64, background: "#fef9c3" }}>
-          <CloudOff size={30} style={{ color: "#D4A017" }} />
+          style={{ width: 64, height: 64, background: "var(--tint-gold-bg)" }}>
+          <CloudOff size={30} style={{ color: "var(--brand-gold)" }} />
         </div>
 
-        <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", lineHeight: 1.2, marginBottom: "8px" }}>
+        <h2 style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1.2, marginBottom: "8px" }}>
           Perfil indisponível no momento
         </h2>
-        <p style={{ fontSize: "14px", color: "#64748b", lineHeight: 1.6, maxWidth: 360, marginBottom: "28px" }}>
+        <p style={{ fontSize: "14px", color: "var(--muted-foreground)", lineHeight: 1.6, maxWidth: 360, marginBottom: "28px" }}>
           Sua sessão continua ativa, mas não foi possível carregar seu perfil — o servidor
           pode estar reiniciando ou temporariamente indisponível. Tente novamente em instantes.
         </p>
@@ -73,7 +73,7 @@ export function ProfileUnavailablePage() {
           type="button"
           onClick={() => logout()}
           disabled={retrying}
-          style={{ fontSize: "13px", color: "#64748b", fontWeight: 600, background: "none", border: "none", marginTop: "16px" }}
+          style={{ fontSize: "13px", color: "var(--muted-foreground)", fontWeight: 600, background: "none", border: "none", marginTop: "16px" }}
           className="hover:underline"
         >
           Sair e voltar ao login

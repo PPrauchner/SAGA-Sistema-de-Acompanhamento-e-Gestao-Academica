@@ -20,7 +20,7 @@ const SECURITY_BADGES = [
 
 export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutProps) {
   return (
-    <div className="min-h-screen w-full flex" style={{ background: "#f0f4fa" }}>
+    <div className="min-h-screen w-full flex" style={{ background: "var(--muted)" }}>
 
       {/* ── LEFT PANEL ─────────────────────────────────────────────── */}
       <div
@@ -129,12 +129,12 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
         {/* Mobile-only logo */}
         <div className="flex lg:hidden items-center gap-3 mb-8">
           <div className="flex items-center justify-center rounded-xl flex-shrink-0"
-            style={{ width: 40, height: 40, background: "#123C7A" }}>
+            style={{ width: 40, height: 40, background: "var(--brand-blue)" }}>
             <GraduationCap size={22} color="#fff" />
           </div>
           <div>
-            <p style={{ fontWeight: 800, color: "#123C7A", fontSize: "15px" }}>SAGA</p>
-            <p style={{ fontSize: "10px", color: "#64748b" }}>Gestão Acadêmica</p>
+            <p style={{ fontWeight: 800, color: "var(--brand-blue)", fontSize: "15px" }}>SAGA</p>
+            <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Gestão Acadêmica</p>
           </div>
         </div>
 
@@ -146,10 +146,10 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
                 style={{
                   width: i + 1 === step ? 24 : 8,
                   height: 8,
-                  background: i + 1 <= step ? "#123C7A" : "#cbd5e1",
+                  background: i + 1 <= step ? "var(--brand-blue)" : "var(--switch-background)",
                 }} />
             ))}
-            <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "4px" }}>
+            <span style={{ fontSize: "11px", color: "var(--muted-foreground)", marginLeft: "4px" }}>
               {step} de {totalSteps}
             </span>
           </div>
@@ -161,8 +161,8 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
 
         {/* Mobile security notice */}
         <div className="flex lg:hidden items-center gap-2 mt-6">
-          <Shield size={12} style={{ color: "#94a3b8" }} />
-          <p style={{ fontSize: "11px", color: "#94a3b8" }}>Conexão segura — dados criptografados</p>
+          <Shield size={12} style={{ color: "var(--muted-foreground)" }} />
+          <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Conexão segura — dados criptografados</p>
         </div>
       </div>
     </div>
