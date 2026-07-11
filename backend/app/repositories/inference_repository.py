@@ -2,13 +2,13 @@
 Implementação de InferenceDataSource com dados reais do Firestore.
 
 Responsabilidades:
-- Costurar as coleções students/ e programs/ para fornecer os dados que o InferenceService
-  consome, mapeando nomes de campos do Firestore ao contrato InferenceDataSource.
+- Costurar as coleções students/, programs/ e students/{id}/activities/ para fornecer os
+  dados que o InferenceService consome, mapeando nomes de campos do Firestore ao contrato
+  InferenceDataSource.
 - Converter Timestamps Firestore para strings ISO 'YYYY-MM-DD'.
-- Retornar [] para atividades, tasks e produções enquanto ActivityRepository e
-  WorkPlanRepository não estiverem implementados — o motor opera com créditos zerados
-  e exibe checklist "pendente". Quando esses repositórios forem implementados, basta
-  delegar para eles nos métodos correspondentes.
+- Retornar [] para tasks enquanto WorkPlanRepository não estiver implementado — o motor
+  opera normalmente, só o fato de plano concluído fica sempre falso. Quando esse
+  repositório for implementado, basta delegar para ele em get_plan_tasks.
 
 Restrição: sem lógica de negócio — apenas leitura e mapeamento de campos.
 """
@@ -19,6 +19,7 @@ from datetime import date, datetime
 from typing import Any
 
 from backend.app.repositories.activity_repository import ActivityRepository
+from backend.app.repositories.activity_type_repository import ActivityTypeRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.qualis_weights_repository import QualisWeightsRepository
@@ -40,12 +41,9 @@ def _to_date_str(value: Any) -> str | None:
 class InferenceRepository:
     """Fonte de dados real do Firestore que implementa o contrato InferenceDataSource.
 
-    Métodos que dependem de repositórios ainda não implementados (ActivityRepository,
-    WorkPlanRepository) retornam listas vazias. O motor de inferência opera normalmente:
-    créditos e produções ficam zerados, o checklist exibe status reais do aluno com
-    requisitos de crédito como 'pendente'. Quando os repositórios correspondentes forem
-    implementados, basta delegar para eles nos métodos get_approved_activities,
-    get_plan_tasks e get_approved_productions.
+    get_plan_tasks depende do WorkPlanRepository, ainda não implementado, e retorna [] —
+    o motor opera normalmente, só o fato de plano concluído fica sempre falso. Quando esse
+    repositório for implementado, basta delegar para ele.
     """
 
     def __init__(self) -> None:
@@ -53,6 +51,7 @@ class InferenceRepository:
         self._programs = FirebaseRepository("programs")
         self._productions = ProductionRepository()
         self._activities = ActivityRepository()
+        self._activity_types = ActivityTypeRepository()
         self._vehicles = VehicleRepository()
         self._qualis_weights = QualisWeightsRepository()
 
@@ -128,8 +127,41 @@ class InferenceRepository:
         return await self._qualis_weights.list_versions(programa_id)
 
     async def get_approved_activities(self, student_id: str) -> list[dict[str, Any]]:
-        """Retorna [] até ActivityRepository.list_activities estar implementado."""
-        return []
+        """Retorna as atividades aprovadas do aluno, normalizadas ao contrato do motor (RL02).
+
+        `grupo` (categoria: basico/especifico/tecnologico) e `tipo_ativo` vêm de
+        activity_types/{tipo_id}, não da própria atividade. `creditos` segue a mesma
+        precedência do override da coordenação usada no resto do backend:
+        `creditos_concedidos` quando definido, senão `creditos_gerados`.
+
+        Args:
+            student_id: ID do documento em students/.
+
+        Returns:
+            Lista de dicts com id, grupo, creditos, comprovante, tipo_ativo e data.
+        """
+        activities = await self._activities.list_by_student(student_id)
+        types = {tipo["id"]: tipo for tipo in await self._activity_types.list_all()}
+
+        result: list[dict[str, Any]] = []
+        for activity in activities:
+            if activity.get("status") != "aprovado":
+                continue
+            tipo = types.get(activity.get("tipo_id"), {})
+            creditos = activity.get("creditos_concedidos")
+            if creditos is None:
+                creditos = activity.get("creditos_gerados", 0)
+            result.append(
+                {
+                    "id": activity["id"],
+                    "grupo": tipo.get("categoria"),
+                    "creditos": creditos,
+                    "comprovante": activity.get("comprovante_url") or "",
+                    "tipo_ativo": bool(tipo.get("ativo", False)),
+                    "data": _to_date_str(activity.get("data_realizacao")),
+                }
+            )
+        return result
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna [] até WorkPlanRepository.get_all_tasks_for_student estar implementado."""
