@@ -23,9 +23,11 @@ Responsabilidades:
   @trigger_alerts (notifica o aluno do resultado). Motor verifica elegibilidade (RL04) e gera
   fato producao_bibliografica_validada quando aplicável.
 - DELETE /api/v1/activities/{activity_id}: exclui (hard delete) atividade em
-  rascunho/enviado/rejeitado. Aplica @requires_role('aluno', 'coordenacao'),
+  rascunho/enviado/rejeitado/aprovado. Aplica @requires_role('aluno', 'coordenacao'),
   @requires_ownership (A01 por propriedade — aluno só a própria; coordenação sempre passa) e
-  @audit_operation. Bloqueia atividade lastreada em produção; rejeitado só pela coordenação.
+  @audit_operation. Bloqueia atividade lastreada em produção; rejeitado/aprovado só pela
+  coordenação. Excluir uma aprovada reverte os créditos (efeito da exclusão) e re-executa o
+  motor de inferência (issue #306).
 """
 from typing import Any
 
@@ -356,10 +358,12 @@ async def delete_activity(
     user: CurrentUser = Depends(get_current_user),
 ) -> None:
     """
-    Exclui (hard delete) atividade em rascunho, enviado ou rejeitado.
-    - Aluno só exclui a própria; coordenação exclui qualquer uma (A01 por propriedade)
+    Exclui (hard delete) atividade em rascunho, enviado, rejeitado ou aprovado.
+    - Aluno só exclui a própria (rascunho/enviado); coordenação exclui qualquer uma
+      (A01 por propriedade)
     - Atividade lastreada em produção é bloqueada — remoção se dá excluindo a produção
-    - Rejeitado só pela coordenação (regra de negócio no service)
+    - Rejeitado e aprovado só pela coordenação (regra de negócio no service)
+    - Excluir uma aprovada reverte os créditos e re-executa o motor de inferência (#306)
     - Operação auditada (A02)
     """
     await activity_service.delete_activity(activity_id=activity_id, current_user=user)

@@ -458,11 +458,15 @@ async def emitir_parecer_orientador(
 
 
 async def delete_activity(activity_id: str, current_user: CurrentUser) -> None:
-    """Exclui (hard delete) uma atividade nos estados rascunho/enviado/rejeitado.
+    """Exclui (hard delete) uma atividade em rascunho/enviado/rejeitado/aprovado.
 
     Propriedade (aluno dono ou coordenação) já é garantida pelo A01 no router.
     Aqui só as regras de negócio que dependem do estado da atividade:
     - `rejeitado` só pode ser excluída pela coordenação (não pelo aluno dono).
+    - `aprovado` só pode ser excluída pela coordenação (issue #306); ao excluir, os
+      créditos concedidos são revertidos e o motor de inferência re-executa para o
+      aluno — a exclusão do documento já retira a atividade da agregação de créditos
+      (RL02), então a "reversão" é o efeito natural de excluir + re-inferir.
     - Atividade lastreada em produção (`producao_id`) é bloqueada — a remoção se
       dá excluindo a produção, não a atividade.
 
@@ -473,7 +477,7 @@ async def delete_activity(activity_id: str, current_user: CurrentUser) -> None:
     Raises:
         HTTPException: 404 se a atividade não existir; 409 se o status não permitir
             exclusão ou a atividade for lastreada em produção; 403 se um aluno tentar
-            excluir atividade rejeitada.
+            excluir atividade rejeitada/aprovada.
     """
     activity = await _repo.get_by_id(activity_id)
     if not activity:
@@ -490,19 +494,37 @@ async def delete_activity(activity_id: str, current_user: CurrentUser) -> None:
         ActivityStatus.rascunho,
         ActivityStatus.enviado,
         ActivityStatus.rejeitado,
+        ActivityStatus.aprovado,
     ):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Atividade com status '{activity_status}' não pode ser excluída.",
         )
 
-    if activity_status == ActivityStatus.rejeitado and current_user.role != "coordenacao":
+    if (
+        activity_status in (ActivityStatus.rejeitado, ActivityStatus.aprovado)
+        and current_user.role != "coordenacao"
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Apenas a coordenação pode excluir atividade rejeitada.",
+            detail=f"Apenas a coordenação pode excluir atividade {activity_status}.",
         )
 
+    student_id = activity.get("student_id")
     await _repo.delete_by_id(activity_id)
+
+    if activity_status == ActivityStatus.aprovado and student_id:
+        try:
+            student = await _student_repo.get(student_id)
+            programa_id = student.get("programa_id", "") if student else ""
+            inference_svc = InferenceService(InferenceRepository())
+            await inference_svc.run_inference(student_id, programa_id)
+            logger.info(
+                "[#306] Motor reexecutado para aluno %s após exclusão da atividade aprovada %s",
+                student_id, activity_id,
+            )
+        except Exception as exc:
+            logger.error("[#306] Falha ao reexecutar motor após exclusão de atividade aprovada: %s", exc)
 
 
 async def validate_activity(
