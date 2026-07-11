@@ -22,6 +22,10 @@ Responsabilidades:
   Operação mais crítica do fluxo — aplica @requires_role('coordenacao'), @audit_operation e
   @trigger_alerts (notifica o aluno do resultado). Motor verifica elegibilidade (RL04) e gera
   fato producao_bibliografica_validada quando aplicável.
+- DELETE /api/v1/activities/{activity_id}: exclui (hard delete) atividade em
+  rascunho/enviado/rejeitado. Aplica @requires_role('aluno', 'coordenacao'),
+  @requires_ownership (A01 por propriedade — aluno só a própria; coordenação sempre passa) e
+  @audit_operation. Bloqueia atividade lastreada em produção; rejeitado só pela coordenação.
 """
 from typing import Any
 
@@ -325,3 +329,37 @@ async def validate_activity(
         payload=payload,
         current_user=user,
     )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /activities/{activity_id}  (issue #305)
+# ---------------------------------------------------------------------------
+
+def _owner_uid_da_atividade_para_exclusao(kwargs: dict[str, Any]):
+    """Resolver do A01 por propriedade: uid do aluno dono da atividade (para exclusão).
+
+    Coordenação já é liberada pelo próprio @requires_ownership antes de chamar este
+    resolver; aqui só se resolve o dono para o caso do aluno.
+    """
+    return activity_service.resolve_student_uid_for_activity(kwargs.get("activity_id"))
+
+
+@router.delete(
+    "/activities/{activity_id}",
+    status_code=204,
+)
+@requires_role("aluno", "coordenacao")
+@requires_ownership(_owner_uid_da_atividade_para_exclusao)
+@audit_operation
+async def delete_activity(
+    activity_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> None:
+    """
+    Exclui (hard delete) atividade em rascunho, enviado ou rejeitado.
+    - Aluno só exclui a própria; coordenação exclui qualquer uma (A01 por propriedade)
+    - Atividade lastreada em produção é bloqueada — remoção se dá excluindo a produção
+    - Rejeitado só pela coordenação (regra de negócio no service)
+    - Operação auditada (A02)
+    """
+    await activity_service.delete_activity(activity_id=activity_id, current_user=user)
