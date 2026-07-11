@@ -30,6 +30,7 @@ const InferencePage = lazy(() => import("./components/inference/InferencePage").
 const AuditPage = lazy(() => import("./components/audit/AuditPage").then((m) => ({ default: m.AuditPage })));
 const NotificationsPage = lazy(() => import("./components/notifications/NotificationsPage").then((m) => ({ default: m.NotificationsPage })));
 const SettingsPage = lazy(() => import("./components/settings/SettingsPage").then((m) => ({ default: m.SettingsPage })));
+const DepartmentsPage = lazy(() => import("./components/departments/DepartmentsPage").then((m) => ({ default: m.DepartmentsPage })));
 
 function PageRouter() {
   const { currentPage } = useApp();
@@ -50,6 +51,7 @@ function PageRouter() {
     case "auditoria": return <AuditPage />;
     case "notificacoes": return <NotificationsPage />;
     case "configuracoes": return <SettingsPage />;
+    case "departamentos": return <DepartmentsPage />;
     default: return <Dashboard />;
   }
 }

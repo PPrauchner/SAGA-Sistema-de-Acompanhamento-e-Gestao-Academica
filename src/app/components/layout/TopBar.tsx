@@ -25,6 +25,7 @@ const PAGE_LABELS: Record<PageId, string> = {
   auditoria: "Auditoria",
   notificacoes: "Notificações",
   configuracoes: "Configurações",
+  departamentos: "Departamentos",
 };
 
 export function TopBar() {

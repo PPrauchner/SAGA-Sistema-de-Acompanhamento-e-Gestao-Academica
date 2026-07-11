@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, UserCheck, FileText, BookOpen,
   FlaskConical, CheckSquare, Clock, BarChart3, Brain,
   ShieldCheck, Settings, Bell, ChevronLeft, ChevronRight,
-  GraduationCap, LogOut, X, ArrowRightLeft
+  GraduationCap, LogOut, X, ArrowRightLeft, Building2
 } from "lucide-react";
 
 interface NavItem {
@@ -31,18 +31,21 @@ const NAV_ITEMS: NavItem[] = [
   { id: "registration-requests", label: "Cadastros Pendentes", icon: <UserCheck size={18} />, roles: ["coordenacao"] },
   { id: "auditoria", label: "Auditoria", icon: <ShieldCheck size={18} />, roles: ["coordenacao"] },
   { id: "configuracoes", label: "Configurações", icon: <Settings size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
+  { id: "departamentos", label: "Departamentos", icon: <Building2 size={18} />, roles: ["adm"] },
 ];
 
 const ROLE_LABELS: Record<UserRole, string> = {
   aluno: "Aluno(a)",
   orientador: "Orientador(a)",
   coordenacao: "Coordenação",
+  adm: "Administrador(a)",
 };
 
 const ROLE_COLORS: Record<UserRole, string> = {
   aluno: "#1F8A70",
   orientador: "#D4A017",
   coordenacao: "#e74c3c",
+  adm: "#123C7A",
 };
 
 function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
