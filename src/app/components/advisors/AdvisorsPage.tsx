@@ -17,7 +17,6 @@ const emptyForm: AdvisorCreatePayload = {
   uid: null,
   nome: "",
   email: "",
-  departamento: "",
   lattes: "",
   programa_id: "",
   limite_orientandos: 5,
@@ -73,7 +72,7 @@ export function AdvisorsPage() {
     const term = search.toLowerCase();
     return (
       advisor.nome.toLowerCase().includes(term) ||
-      advisor.departamento.toLowerCase().includes(term) ||
+      (advisor.departamento ?? "").toLowerCase().includes(term) ||
       advisor.email.toLowerCase().includes(term)
     );
   });
@@ -92,7 +91,6 @@ export function AdvisorsPage() {
       uid: advisor.uid ?? null,
       nome: advisor.nome,
       email: advisor.email,
-      departamento: advisor.departamento,
       lattes: advisor.lattes ?? "",
       programa_id: advisor.programa_id,
       limite_orientandos: advisor.limite_orientandos,
@@ -250,7 +248,7 @@ export function AdvisorsPage() {
             <div className="grid grid-cols-2 gap-4">
               <Field label="Nome Completo" className="col-span-2"><input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="E-mail"><input required disabled={Boolean(editingAdvisor)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
-              {!editingAdvisor && <Field label="Departamento"><input required value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>}
+              {/* Departamento não é mais informado aqui — é derivado do programa (ADR-0004 / issue #249). */}
               <Field label="Programa"><select required disabled={Boolean(editingAdvisor)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione um programa</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.nome ?? program.id}</option>)}</select></Field>
               <Field label="Limite"><input required type="number" min={0} value={form.limite_orientandos} onChange={(e) => setForm({ ...form, limite_orientandos: Number(e.target.value) })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
               <Field label="Lattes URL" className="col-span-2"><input value={form.lattes ?? ""} onChange={(e) => setForm({ ...form, lattes: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>

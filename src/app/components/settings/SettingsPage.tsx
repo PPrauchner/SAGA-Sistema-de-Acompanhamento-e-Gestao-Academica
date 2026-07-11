@@ -135,7 +135,6 @@ export function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(false);
   const [profileName, setProfileName] = useState("");
-  const [profileDepartment, setProfileDepartment] = useState("");
   const [profileError, setProfileError] = useState<string | null>(null);
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(DEFAULT_NOTIFICATION_PREFERENCES);
 
@@ -162,9 +161,8 @@ export function SettingsPage() {
 
   useEffect(() => {
     setProfileName(currentUser?.name ?? "");
-    setProfileDepartment(currentUser?.departamento ?? "");
     setProfileError(null);
-  }, [currentUser?.name, currentUser?.departamento]);
+  }, [currentUser?.name]);
 
   useEffect(() => {
     setNotificationPreferences({
@@ -390,11 +388,7 @@ export function SettingsPage() {
     setSaved(false);
     setProfileError(null);
     try {
-      const payload = currentUser.role === "orientador"
-        ? { nome: profileName, departamento: profileDepartment }
-        : { nome: profileName };
-
-      await usersApi.updateProfile(token, payload);
+      await usersApi.updateProfile(token, { nome: profileName });
       await retryProfile();
       setSaved(true);
       toast.success("Perfil atualizado");
@@ -540,20 +534,13 @@ export function SettingsPage() {
                     />
                   </ProfileField>
 
+                  {/* Somente leitura: departamento é derivado do programa (ADR-0004 / issue #249). */}
                   <ProfileField label="Departamento" icon={<Building size={14} />}>
                     <input
-                      readOnly={currentUser?.role !== "orientador"}
-                      value={profileDepartment}
-                      onChange={(e) => setProfileDepartment(e.target.value)}
+                      readOnly
+                      value={currentUser?.departamento ?? ""}
                       className="w-full rounded-xl pl-9 pr-4 py-2.5 outline-none"
-                      style={{
-                        border: "1px solid var(--border)",
-                        background: currentUser?.role === "orientador" ? "var(--input-background)" : "var(--muted)",
-                        fontSize: "13px",
-                        color: currentUser?.role === "orientador" ? "var(--foreground)" : "var(--muted-foreground)",
-                      }}
-                      onFocus={(e) => { if (currentUser?.role === "orientador") e.currentTarget.style.borderColor = "#123C7A"; }}
-                      onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }}
+                      style={{ border: "1px solid var(--border)", background: "var(--muted)", fontSize: "13px", color: "var(--muted-foreground)" }}
                     />
                   </ProfileField>
 
