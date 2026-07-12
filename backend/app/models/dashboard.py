@@ -14,7 +14,9 @@ Responsabilidades:
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from enum import Enum
+
+from pydantic import BaseModel, Field
 
 
 class CreditosResumo(BaseModel):
@@ -135,3 +137,36 @@ class CoordDashboardResponse(BaseModel):
     total_concluidos: int = 0
     tempo_medio_integralizacao_meses: float | None = None
     auditoria_recente: list[AuditoriaRecenteItem] = []
+
+
+class IndiceModalidade(str, Enum):
+    """Modalidade de cálculo do índice de produção do orientador."""
+
+    soma_total = "soma_total"
+    media_por_orientando = "media_por_orientando"
+
+
+class IndiceOrientadorResponse(BaseModel):
+    """Índice de produção do orientador autenticado."""
+
+    advisor_id: str = Field(..., description="ID do orientador dono deste índice")
+    modalidade: IndiceModalidade
+    indice: float = Field(..., ge=0.0)
+    total_orientandos: int = Field(..., ge=0)
+    total_pontuacao: float = Field(..., ge=0.0)
+
+
+class PosicaoRelativaResponse(BaseModel):
+    """Posição relativa anônima do orientador no programa."""
+
+    modalidade: IndiceModalidade
+    media_programa: float = Field(..., ge=0.0)
+    percentil: float = Field(..., ge=0.0, le=100.0)
+    total_orientadores: int = Field(..., ge=1)
+
+
+class DashboardIndiceOrientadorResponse(BaseModel):
+    """Resposta do índice de produção do orientador com posição relativa anônima."""
+
+    indice: IndiceOrientadorResponse
+    posicao_relativa: PosicaoRelativaResponse

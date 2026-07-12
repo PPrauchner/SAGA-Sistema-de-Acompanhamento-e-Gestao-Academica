@@ -7,6 +7,7 @@ import { getStudents, type Student } from "@/api/studentsApi";
 import { createTransferRequest } from "@/api/transfersApi";
 import { validateReasonableDate } from "@/lib/dateValidation";
 import { useApp } from "../../context/AppContext";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
 const STATUS_MAP = {
   aprovado: { label: "Aprovado", color: "#1F8A70", bg: "#dcfce7", icon: <CheckCircle size={14} /> },
@@ -83,6 +84,9 @@ export function SolicitacoesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // ESC fecha o formulario de nova solicitacao (closeRequestForm ja ignora submitting).
+  useEscapeClose(showForm, closeRequestForm);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState("");
   const [formData, setFormData] = useState(DEFAULT_FORM);
@@ -96,6 +100,11 @@ export function SolicitacoesPage() {
   const canCreateRequest = currentUser?.role === "aluno" || currentUser?.role === "orientador";
   const isStudentRequest = currentUser?.role === "aluno";
   const isAdvisorRequest = currentUser?.role === "orientador";
+  // Aluno não pode solicitar transferência de orientando — a opção só aparece
+  // para orientador, evitando um envio garantidamente rejeitado (issue #253).
+  const typeOptions = isAdvisorRequest
+    ? REQUEST_TYPE_OPTIONS
+    : REQUEST_TYPE_OPTIONS.filter((option) => option.value !== "transferencia_orientando");
 
   const loadSolicitacoes = useCallback(async () => {
     if (!token) {
@@ -403,7 +412,7 @@ export function SolicitacoesPage() {
               <div>
                 <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>Tipo de Solicitação</label>
                 <select value={formData.tipo} onChange={(e) => { setFormData((current) => ({ ...current, tipo: e.target.value as RequestSubtype, nova_data: e.target.value === "prorrogacao" ? current.nova_data : "", orientador_destino_id: e.target.value === "transferencia_orientando" ? current.orientador_destino_id : "" })); setSubmitError(null); setDateError(null); }} className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}>
-                  {REQUEST_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  {typeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                 </select>
               </div>
               {formData.tipo === "prorrogacao" && (

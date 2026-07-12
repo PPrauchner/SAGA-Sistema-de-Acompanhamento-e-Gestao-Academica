@@ -81,6 +81,10 @@ class UserResponse(UserBase):
 
     student_id: str | None = None
     advisor_id: str | None = None
+    # Derivado de programa_id -> programs.departamento_id -> departments.nome
+    # (ADR-0004 / issue #249) — nunca armazenado em users/{uid}. None para `adm`
+    # (programa_id nulo) ou se a cadeia estiver quebrada.
+    departamento: str | None = None
 
 
 class FirstAccessRequest(BaseModel):
@@ -169,16 +173,15 @@ class CreateCoordinatorResponse(BaseModel):
 class ProfileUpdateRequest(BaseModel):
     """Corpo de PUT /api/v1/users/profile: edição do próprio perfil.
 
-    Campos editáveis por papel: `nome` para todos; `departamento` apenas para
-    orientador (o service rejeita `departamento` para os demais papéis). Campos
-    não editáveis (`email`, `programa_id`, `matricula`, `telefone`) são proibidos
-    no corpo via `extra="forbid"`, que faz qualquer chave desconhecida retornar 422.
+    Campo editável: `nome`, para todos os papéis. `departamento` não é mais
+    editável — é derivado de `programa_id` (ADR-0004 / issue #249). Campos não
+    editáveis (`email`, `programa_id`, `matricula`, `telefone`) são proibidos no
+    corpo via `extra="forbid"`, que faz qualquer chave desconhecida retornar 422.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     nome: str | None = Field(default=None, min_length=1)
-    departamento: str | None = None
     notification_preferences: NotificationPreferences | None = None
 
 
@@ -187,5 +190,4 @@ class ProfileUpdateResponse(BaseModel):
 
     uid: str
     nome: str
-    departamento: str | None = None
     notification_preferences: NotificationPreferences

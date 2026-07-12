@@ -44,6 +44,7 @@ class ProficienciaRequisito(BaseModel):
 
     status: RequisitoStatus
     data_comprovacao: str | None = None
+    comprovante_url: str | None = None
 
 
 class QualificacaoRequisito(BaseModel):
@@ -51,6 +52,7 @@ class QualificacaoRequisito(BaseModel):
 
     status: RequisitoStatus
     data_aprovacao: str | None = None
+    comprovante_url: str | None = None
 
 
 class ProducaoRequisito(BaseModel):

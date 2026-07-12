@@ -22,6 +22,12 @@ Responsabilidades:
   Operação mais crítica do fluxo — aplica @requires_role('coordenacao'), @audit_operation e
   @trigger_alerts (notifica o aluno do resultado). Motor verifica elegibilidade (RL04) e gera
   fato producao_bibliografica_validada quando aplicável.
+- DELETE /api/v1/activities/{activity_id}: exclui (hard delete) atividade em
+  rascunho/enviado/rejeitado/aprovado. Aplica @requires_role('aluno', 'coordenacao'),
+  @requires_ownership (A01 por propriedade — aluno só a própria; coordenação sempre passa) e
+  @audit_operation. Bloqueia atividade lastreada em produção; rejeitado/aprovado só pela
+  coordenação. Excluir uma aprovada reverte os créditos (efeito da exclusão) e re-executa o
+  motor de inferência (issue #306).
 """
 from typing import Any
 
@@ -130,6 +136,8 @@ async def submit_activity(
         id=result["id"],
         elegibilidade_preliminar=result["elegibilidade_preliminar"],
         notificacao_enviada=result["notificacao_enviada"],
+        created_activity_ids=result.get("created_activity_ids", [result["id"]]),
+        activity_group_id=result.get("activity_group_id"),
     )
 
 
@@ -214,17 +222,18 @@ async def submit_activity_by_advisor(
 @audit_operation
 async def upload_comprovante(
     activity_id: str,
-    file: UploadFile = File(...),
+    arquivo: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
 ) -> ComprovanteUploadResponse:
     """
     Faz upload do comprovante (PDF/JPEG/PNG) para o Firebase Storage.
     Persiste a URL tokenizada de download na atividade correspondente.
     Restrito ao aluno dono da atividade.
+    O campo multipart chama-se `arquivo` — contrato do spec 07 usado pelo frontend.
     """
     result = await _comprovante_service.upload(
         activity_id=activity_id,
-        arquivo=file,
+        arquivo=arquivo,
         user=user,
     )
     return ComprovanteUploadResponse(
@@ -324,3 +333,39 @@ async def validate_activity(
         payload=payload,
         current_user=user,
     )
+
+
+# ---------------------------------------------------------------------------
+# DELETE /activities/{activity_id}  (issue #305)
+# ---------------------------------------------------------------------------
+
+def _owner_uid_da_atividade_para_exclusao(kwargs: dict[str, Any]):
+    """Resolver do A01 por propriedade: uid do aluno dono da atividade (para exclusão).
+
+    Coordenação já é liberada pelo próprio @requires_ownership antes de chamar este
+    resolver; aqui só se resolve o dono para o caso do aluno.
+    """
+    return activity_service.resolve_student_uid_for_activity(kwargs.get("activity_id"))
+
+
+@router.delete(
+    "/activities/{activity_id}",
+    status_code=204,
+)
+@requires_role("aluno", "coordenacao")
+@requires_ownership(_owner_uid_da_atividade_para_exclusao)
+@audit_operation
+async def delete_activity(
+    activity_id: str,
+    user: CurrentUser = Depends(get_current_user),
+) -> None:
+    """
+    Exclui (hard delete) atividade em rascunho, enviado, rejeitado ou aprovado.
+    - Aluno só exclui a própria (rascunho/enviado); coordenação exclui qualquer uma
+      (A01 por propriedade)
+    - Atividade lastreada em produção é bloqueada — remoção se dá excluindo a produção
+    - Rejeitado e aprovado só pela coordenação (regra de negócio no service)
+    - Excluir uma aprovada reverte os créditos e re-executa o motor de inferência (#306)
+    - Operação auditada (A02)
+    """
+    await activity_service.delete_activity(activity_id=activity_id, current_user=user)

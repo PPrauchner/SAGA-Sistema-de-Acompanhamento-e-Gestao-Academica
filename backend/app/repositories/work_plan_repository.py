@@ -34,6 +34,7 @@ from backend.app.models.work_plan import (
     STAGE_KIND_DEFESA,
     STATUS_ATRASADO,
     STATUS_CONCLUIDO,
+    normalize_status,
 )
 
 _SEP = "~"
@@ -143,6 +144,33 @@ class WorkPlanRepository:
             return _assemble_plan(student_id, snapshot) if snapshot.exists else None
 
         return await asyncio.to_thread(_read)
+
+    async def list_all_tasks_grouped(self) -> list[dict[str, Any]]:
+        """Tasks de todos os alunos em uma única consulta (collection_group).
+
+        Um único stream de collection_group("tasks") substitui a leitura aninhada
+        plano→etapas→tasks por aluno (padrão N+1 — issues #319/#317). O student_id
+        é o primeiro segmento do path do documento
+        (students/{sid}/work_plan/{p}/stages/{s}/tasks/{t}).
+
+        Returns:
+            Lista de dicts com student_id e status (canônico) por task.
+        """
+
+        def _list() -> list[dict[str, Any]]:
+            result: list[dict[str, Any]] = []
+            for snapshot in get_firestore_client().collection_group(_TASKS).stream():
+                item = snapshot.to_dict() or {}
+                segments = snapshot.reference.path.split("/")
+                result.append(
+                    {
+                        "student_id": segments[1] if len(segments) > 1 else "",
+                        "status": normalize_status(item.get("status")),
+                    }
+                )
+            return result
+
+        return await asyncio.to_thread(_list)
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
         """Projecao booleana das tasks para a inferencia (id, is_defesa, concluida)."""

@@ -1,8 +1,9 @@
 """
-Testes dos aspectos AOP — sem Firebase, sem credenciais, tudo mockado.
+Testes dos aspectos AOP — sem Firebase real, sem credenciais reais.
 
 """
 
+import os
 import sys
 import pytest
 from unittest.mock import MagicMock, patch
@@ -11,31 +12,39 @@ from unittest.mock import MagicMock, patch
 # Mocks globais ANTES de qualquer import do projeto
 # ---------------------------------------------------------------------------
 
+_previous_firebase_module = sys.modules.get("backend.app.core.firebase")
+
 _firebase_mock = MagicMock()
 sys.modules.setdefault("firebase_admin", _firebase_mock)
 sys.modules.setdefault("firebase_admin.credentials", MagicMock())
 sys.modules.setdefault("firebase_admin.auth", MagicMock())
 sys.modules.setdefault("firebase_admin.firestore", MagicMock())
 
-_pydantic_settings = MagicMock()
-_pydantic_settings.BaseSettings = object
-_pydantic_settings.SettingsConfigDict = dict
-sys.modules.setdefault("pydantic_settings", _pydantic_settings)
-
-_settings_mock = MagicMock()
-_settings_mock.deadline_alert_days = 30
-_settings_mock.max_extensions = 2
-_config_mock = MagicMock()
-_config_mock.settings = _settings_mock
+# Variáveis dummy (mesmo padrão de backend/app/api/v1/tests/conftest.py) para que
+# backend.app.core.config/firebase importem de verdade sem exigir um .env — nenhum
+# teste aqui chama get_firestore_client() sem antes monkeypatchá-lo, então a
+# credencial nunca é de fato usada. Faz-se via os.environ (setdefault, process-wide
+# e idempotente) em vez de substituir sys.modules: substituir o módulo inteiro sem
+# reverter deixava o mock vazar para qualquer teste que importasse `settings` pela
+# primeira vez depois deste arquivo no mesmo processo pytest (regressão observada
+# em test_email.py / test_auth_service.py só no full-suite).
+os.environ.setdefault("FIREBASE_PROJECT_ID", "test-project")
+os.environ.setdefault("FIREBASE_PRIVATE_KEY", "test-key")
+os.environ.setdefault("FIREBASE_CLIENT_EMAIL", "test@test-project.iam.gserviceaccount.com")
 
 for mod in ["backend", "backend.app", "backend.app.core"]:
     sys.modules.setdefault(mod, MagicMock())
-sys.modules["backend.app.core.config"] = _config_mock
-sys.modules["backend.app.core.firebase"] = MagicMock()
 
 from fastapi import HTTPException
 
 from backend.app.core.auth import CurrentUser
+
+
+def teardown_module() -> None:
+    if _previous_firebase_module is None:
+        sys.modules.pop("backend.app.core.firebase", None)
+    else:
+        sys.modules["backend.app.core.firebase"] = _previous_firebase_module
 
 # ---------------------------------------------------------------------------
 # Fixtures

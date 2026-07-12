@@ -8,6 +8,9 @@ Responsabilidades:
 - update_advisor(): atualiza dados editaveis do orientador (nome, lattes, limite).
 - get_advisors_with_count(): lista orientadores enriquecendo cada registro com contagem
   de orientandos_ativos calculada por query na coleção students/.
+- departamento é derivado de programa_id -> departments (ADR-0004 / issue #249), nunca
+  armazenado em advisors/; list_advisors resolve uma vez por programa_id distinto para
+  evitar N+1.
 - Verificar limite_orientandos antes de permitir associação de novo orientando ao orientador.
 - ensure_advisor_for_coordenacao(): garante doc em advisors/ (chave = uid) para um usuário
   coordenacao, de modo que todo coordenador-orientador apareça no dropdown de orientador
@@ -21,6 +24,7 @@ Responsabilidades:
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -34,6 +38,7 @@ from backend.app.models.user import InviteRequest
 from backend.app.repositories.advisor_repository import (
     AdvisorRepository,
 )
+from backend.app.repositories.department_repository import DepartmentRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.services.auth_service import AuthService
 
@@ -49,6 +54,7 @@ class AdvisorService:
         advisor_repo: AdvisorRepository | None = None,
     ) -> None:
         self._advisors = advisor_repo or AdvisorRepository()
+        self._departments = DepartmentRepository()
         self._auth = auth_service
 
     @staticmethod
@@ -64,6 +70,17 @@ class AdvisorService:
             normalized["orientandos_ativos"] = DEFAULT_ORIENTANDOS_ATIVOS
         return normalized
 
+    async def _attach_departamentos(self, advisors: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Resolve `departamento` por programa_id distinto (1 leitura por programa, não por orientador)."""
+        programa_ids = list({advisor["programa_id"] for advisor in advisors if advisor.get("programa_id")})
+        nomes = await asyncio.gather(
+            *(self._departments.get_nome_by_programa(pid) for pid in programa_ids)
+        )
+        nome_por_programa = dict(zip(programa_ids, nomes))
+        for advisor in advisors:
+            advisor["departamento"] = nome_por_programa.get(advisor.get("programa_id"))
+        return advisors
+
     async def list_advisors(self, user: CurrentUser | None = None) -> list[dict]:
         # Leitura pura: o provisionamento do advisor de coordenação ocorre no momento
         # da atribuição do papel (UserService.create_coordinator e
@@ -76,7 +93,7 @@ class AdvisorService:
         ]
 
         if user and user.role == "coordenacao":
-            return normalized_advisors
+            return await self._attach_departamentos(normalized_advisors)
 
         active_advisors = [
             advisor
@@ -85,13 +102,13 @@ class AdvisorService:
         ]
 
         if user and user.role == "orientador" and user.programa_id:
-            return [
+            active_advisors = [
                 advisor
                 for advisor in active_advisors
                 if advisor.get("programa_id") == user.programa_id
             ]
 
-        return active_advisors
+        return await self._attach_departamentos(active_advisors)
 
     async def get_advisor(
         self,
@@ -110,6 +127,9 @@ class AdvisorService:
         advisor["id"] = advisor_id
         advisor["orientandos_ativos"] = await self._advisors.count_active_students(
             advisor_id,
+        )
+        advisor["departamento"] = await self._departments.get_nome_by_programa(
+            advisor.get("programa_id")
         )
 
         return self._normalize_advisor_response(advisor)
@@ -225,13 +245,14 @@ class AdvisorService:
             return advisors[0]["id"]
 
         advisor_id = existing_id or user["uid"]
+        # departamento não é gravado aqui: é derivado em leitura de programa_id ->
+        # departments (ADR-0004 / issue #249), nunca armazenado em advisors/.
         await self._advisors.set(
             advisor_id,
             {
                 "uid": user["uid"],
                 "nome": user.get("nome", user.get("email", user["uid"])),
                 "email": user.get("email", ""),
-                "departamento": user.get("departamento", ""),
                 "programa_id": user["programa_id"],
                 "lattes": user.get("lattes"),
                 "limite_orientandos": 5,

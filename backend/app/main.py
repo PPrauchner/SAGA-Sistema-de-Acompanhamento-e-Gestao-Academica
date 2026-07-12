@@ -5,9 +5,9 @@ Responsabilidades:
 - Instanciar a aplicação FastAPI com título, versão e descrição do projeto.
 - Configurar o lifespan (startup/shutdown) para inicializar e encerrar o Firebase Admin SDK
   via backend/app/core/firebase.py.
-- Registrar os routers de cada domínio (auth, students, advisors, work_plan, activities,
-  activity_types, productions, vehicles, extensions, checklist, inference, reports,
-  dashboard, audit_logs, notifications) sob o prefixo /api/v1.
+- Registrar os routers de cada domínio (auth, students, advisors, departments, work_plan,
+  activities, activity_types, productions, vehicles, extensions, checklist, inference,
+  reports, dashboard, audit_logs, notifications) sob o prefixo /api/v1.
 - Configurar middlewares globais: CORS, tratamento de exceções HTTP e logging de requests.
 - Expor endpoint público GET /api/v1/health para health check da API e conectividade Firebase.
 """
@@ -27,6 +27,7 @@ from backend.app.api.v1 import (
     checklist,
     coordination_transfers,
     dashboard,
+    departments,
     extensions,
     inference,
     notifications,
@@ -81,6 +82,7 @@ _PREFIX = "/api/v1"
 app.include_router(auth.router, prefix=_PREFIX, tags=["auth"])
 app.include_router(students.router, prefix=_PREFIX, tags=["students"])
 app.include_router(advisors.router, prefix=_PREFIX, tags=["advisors"])
+app.include_router(departments.router, prefix=_PREFIX, tags=["departments"])
 app.include_router(work_plan.router, prefix=_PREFIX, tags=["work-plan"])
 app.include_router(activities.router, prefix=_PREFIX, tags=["activities"])
 app.include_router(activity_types.router, prefix=_PREFIX, tags=["activity-types"])

@@ -12,6 +12,7 @@ import {
   Award,
   MessageSquare,
   Send,
+  Trash2,
 } from "lucide-react";
 
 import { useApp } from "../../context/AppContext";
@@ -21,6 +22,7 @@ import { validateReasonableDate } from "@/lib/dateValidation";
 import {
   createActivity,
   createActivityForOrientando,
+  deleteActivity,
   emitirParecer,
   getActivities,
   getActivityTypes,
@@ -31,6 +33,9 @@ import {
   type ActivityType,
   type ValidateAction,
 } from "@/api/activitiesApi";
+import { getCoauthorCandidates, type CoauthorCandidate } from "@/api/studentsApi";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
+import type { ExportColumn } from "@/utils/exportData";
 
 // ─── Config de apresentação ─────────────────────────────────────────────────
 
@@ -74,6 +79,8 @@ interface FormState {
   data_realizacao: string;
   status: ActivityCreateStatus;
   file: File | null;
+  coautores: string[];
+  autoresExternos: string;
   // Usados apenas quando o orientador cria para um orientando (issue #263).
   aluno_id: string;
   parecer: string;
@@ -85,6 +92,8 @@ const EMPTY_FORM: FormState = {
   data_realizacao: "",
   status: "enviado",
   file: null,
+  coautores: [],
+  autoresExternos: "",
   aluno_id: "",
   parecer: "",
 };
@@ -97,6 +106,7 @@ export function ActivitiesPage() {
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [types, setTypes] = useState<ActivityType[]>([]);
+  const [coauthorCandidates, setCoauthorCandidates] = useState<CoauthorCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +124,9 @@ export function ActivitiesPage() {
   const [validateCreditos, setValidateCreditos] = useState("");
   const [validateSaving, setValidateSaving] = useState(false);
 
+  const [deleteTarget, setDeleteTarget] = useState<Activity | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
   const canRegister = role === "aluno";
   const canCreateForOrientando = role === "orientador";
   const canCreate = canRegister || canCreateForOrientando;
@@ -124,16 +137,20 @@ export function ActivitiesPage() {
   // checklist/plano de trabalho). Para o aluno, o hook retorna students=null.
   const { students } = useChecklistStudent();
 
-  async function loadData(authToken: string): Promise<void> {
-    setLoading(true);
+  // background=true refaz o fetch sem acionar o estado de loading — evita desmontar a
+  // lista ("Carregando…") ao validar uma atividade (issue #325).
+  async function loadData(authToken: string, background = false): Promise<void> {
+    if (!background) setLoading(true);
     setError(null);
     try {
-      const [activityList, typeList] = await Promise.all([
+      const [activityList, typeList, coauthors] = await Promise.all([
         getActivities(authToken),
         getActivityTypes(authToken),
+        canRegister ? getCoauthorCandidates(authToken) : Promise.resolve([]),
       ]);
       setActivities(activityList);
       setTypes(typeList.filter((type) => type.ativo));
+      setCoauthorCandidates(coauthors);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar atividades");
     } finally {
@@ -149,12 +166,53 @@ export function ActivitiesPage() {
     () => types.find((type) => type.id === form.tipo_id) ?? null,
     [types, form.tipo_id],
   );
+  const nameByUid = useMemo(
+    () => new Map(coauthorCandidates.map((candidate) => [candidate.uid, candidate.nome])),
+    [coauthorCandidates],
+  );
+  const pickableCoauthors = useMemo(
+    () => coauthorCandidates.filter((candidate) => candidate.uid !== currentUser?.id),
+    [coauthorCandidates, currentUser],
+  );
+  const activityExportColumns = useMemo<ExportColumn<Activity>[]>(
+    () => [
+      { key: "tipo_nome", label: "Tipo", value: (activity) => activity.tipo_nome ?? "Atividade" },
+      { key: "categoria", label: "Categoria", value: (activity) => activity.categoria ? CATEGORIA_LABEL[activity.categoria] ?? activity.categoria : "" },
+      { key: "status", label: "Status", value: (activity) => statusCfg(activity.status).label },
+      { key: "descricao", label: "Descricao" },
+      {
+        key: "coauthor_student_uids",
+        label: "Coautoria",
+        value: (activity) =>
+          [
+            ...(activity.coauthor_student_uids ?? []).map((uid) => nameByUid.get(uid) ?? uid),
+            ...(activity.external_authors ?? []),
+          ].join(", "),
+      },
+      { key: "data_realizacao", label: "Data", value: (activity) => formatDate(activity.data_realizacao) },
+      { key: "creditos_gerados", label: "Creditos" },
+      { key: "elegivel", label: "Elegivel RL04", value: (activity) => typeof activity.elegivel === "boolean" ? (activity.elegivel ? "Sim" : "Nao") : "" },
+      { key: "comprovante_url", label: "Comprovante" },
+      { key: "parecer_orientador", label: "Parecer do orientador" },
+      { key: "observacao_coordenacao", label: "Observacao da coordenacao" },
+    ],
+    [nameByUid],
+  );
 
   function openForm(): void {
     setForm(EMPTY_FORM);
     setFeedback(null);
     setDataError(null);
     setShowForm(true);
+  }
+
+  function toggleCoautor(uid: string): void {
+    setForm((current) => ({
+      ...current,
+      coautores: current.coautores.includes(uid)
+        ? current.coautores.filter((item) => item !== uid)
+        : [...current.coautores, uid],
+    }));
   }
 
   async function handleSubmit(event: FormEvent): Promise<void> {
@@ -217,6 +275,11 @@ export function ActivitiesPage() {
         data_realizacao: `${form.data_realizacao}T00:00:00Z`,
         comprovante_url: null,
         status: form.status,
+        coauthor_student_uids: form.coautores,
+        external_authors: form.autoresExternos
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean),
       });
 
       if (form.file) {
@@ -289,9 +352,10 @@ export function ActivitiesPage() {
     try {
       const creditos =
         acao === "aprovar" && validateCreditos.trim() !== "" ? Number(validateCreditos) : null;
+      const observacao = validateObs.trim() || null;
       const result = await validarAtividade(token, activity.id, {
         acao,
-        observacao: validateObs.trim() || null,
+        observacao,
         creditos_concedidos: creditos,
       });
       const label = acao === "aprovar" ? "aprovada" : "rejeitada";
@@ -300,14 +364,53 @@ export function ActivitiesPage() {
           ? `Atividade ${label}. O motor reavaliou a situação do aluno.`
           : `Atividade ${label}.`,
       );
+      // Reflete o resultado imediatamente: status autoritativo da resposta e observação
+      // como o backend a gravou (null limpa o campo). O refetch em background atualiza os
+      // campos derivados das demais linhas (ex.: elegivel/RL04) sem desmontar a lista.
+      setActivities((prev) =>
+        prev.map((item) =>
+          item.id === activity.id
+            ? { ...item, status: result.novo_status, observacao_coordenacao: observacao }
+            : item,
+        ),
+      );
       setValidateTarget(null);
       setValidateObs("");
       setValidateCreditos("");
-      await loadData(token);
+      await loadData(token, true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao validar atividade");
     } finally {
       setValidateSaving(false);
+    }
+  }
+
+  function canDelete(activity: Activity): boolean {
+    if (activity.producao_id) return false;
+    if (role === "coordenacao") {
+      return ["rascunho", "enviado", "rejeitado", "aprovado"].includes(activity.status);
+    }
+    if (role === "aluno") {
+      return ["rascunho", "enviado"].includes(activity.status);
+    }
+    return false;
+  }
+
+  async function handleDelete(activity: Activity): Promise<void> {
+    if (!token) return;
+
+    setDeleteSaving(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      await deleteActivity(token, activity.id);
+      setFeedback("Atividade excluída.");
+      setDeleteTarget(null);
+      setActivities((prev) => prev.filter((item) => item.id !== activity.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao excluir atividade");
+    } finally {
+      setDeleteSaving(false);
     }
   }
 
@@ -321,16 +424,19 @@ export function ActivitiesPage() {
             {currentUser?.name ? ` · ${currentUser.name}` : ""}
           </p>
         </div>
-        {canCreate && (
-          <button
-            onClick={openForm}
-            className="flex items-center gap-2 rounded-xl px-4 py-2.5"
-            style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}
-          >
-            <Plus size={16} />
-            {canCreateForOrientando ? "Nova atividade para orientando" : "Nova Atividade"}
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <TableExportMenu title="Atividades" fileName="atividades" rows={activities} columns={activityExportColumns} />
+          {canCreate && (
+            <button
+              onClick={openForm}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5"
+              style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}
+            >
+              <Plus size={16} />
+              {canCreateForOrientando ? "Nova atividade para orientando" : "Nova Atividade"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -422,6 +528,57 @@ export function ActivitiesPage() {
                 style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
               />
             </label>
+
+            {canRegister && (
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                  Coautores cadastrados (opcional)
+                </span>
+                {pickableCoauthors.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {pickableCoauthors.map((candidate) => {
+                      const selected = form.coautores.includes(candidate.uid);
+                      return (
+                        <button
+                          key={candidate.uid}
+                          type="button"
+                          onClick={() => toggleCoautor(candidate.uid)}
+                          className="rounded-lg px-2.5 py-1 transition-all"
+                          style={{
+                            background: selected ? "var(--tint-blue-bg)" : "var(--muted)",
+                            color: selected ? "var(--tint-blue-text)" : "var(--muted-foreground)",
+                            border: `1px solid ${selected ? "var(--tint-blue-border)" : "var(--border)"}`,
+                            fontSize: "11px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {candidate.nome}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                    Nenhum coautor cadastrado disponivel.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {canRegister && (
+              <label className="flex flex-col gap-1 sm:col-span-2">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                  Autores externos (separados por virgula)
+                </span>
+                <input
+                  value={form.autoresExternos}
+                  onChange={(e) => setForm((f) => ({ ...f, autoresExternos: e.target.value }))}
+                  placeholder="Ex.: Maria Souza, Joao Lima"
+                  className="rounded-xl px-3 py-2.5 outline-none"
+                  style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
+                />
+              </label>
+            )}
 
             {canCreateForOrientando && (
               <label className="flex flex-col gap-1 sm:col-span-2">
@@ -534,6 +691,11 @@ export function ActivitiesPage() {
                 </div>
 
                 <p style={{ fontSize: "13px", color: "var(--foreground)", marginBottom: "12px" }}>{activity.descricao}</p>
+                {(activity.coauthor_student_uids?.length > 0 || activity.external_authors?.length > 0) && (
+                  <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "12px" }}>
+                    Coautoria: {[...(activity.coauthor_student_uids ?? []).map((uid) => nameByUid.get(uid) ?? uid), ...(activity.external_authors ?? [])].join(", ")}
+                  </p>
+                )}
 
                 <div className="space-y-1.5" style={{ fontSize: "12px" }}>
                   <div className="flex justify-between">
@@ -710,6 +872,48 @@ export function ActivitiesPage() {
                     >
                       <CheckCircle2 size={13} />
                       Validar atividade
+                    </button>
+                  )
+                )}
+
+                {canDelete(activity) && (
+                  deleteTarget?.id === activity.id ? (
+                    <div className="flex items-center justify-between gap-2 mt-3">
+                      <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                        {activity.status === "aprovado"
+                          ? "Excluir? Os créditos serão revertidos."
+                          : "Excluir esta atividade?"}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(null)}
+                          className="rounded-lg px-3 py-1.5"
+                          style={{ border: "1px solid var(--border)", color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600 }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(activity)}
+                          disabled={deleteSaving}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+                          style={{ background: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600, opacity: deleteSaving ? 0.6 : 1 }}
+                        >
+                          <Trash2 size={12} />
+                          {deleteSaving ? "Excluindo…" : "Confirmar"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(activity)}
+                      className="flex items-center gap-1.5 mt-3"
+                      style={{ fontSize: "12px", color: "#dc2626", fontWeight: 600 }}
+                    >
+                      <Trash2 size={13} />
+                      Excluir
                     </button>
                   )
                 )}

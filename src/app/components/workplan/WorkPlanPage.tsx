@@ -21,6 +21,7 @@ import { ApiError } from "@/api/http";
 import { useApp } from "@/app/context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useChecklistStudent } from "@/hooks/useChecklistStudent";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
 type Modal =
   | { kind: "task"; stage: WorkPlanStage }
@@ -846,6 +847,7 @@ function ConfirmDeleteModal({
 }
 
 function ModalShell({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(15,23,42,0.45)" }}>
       <div className="w-full max-w-md rounded-lg p-4" style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 24px 70px rgba(0,0,0,0.25)" }}>

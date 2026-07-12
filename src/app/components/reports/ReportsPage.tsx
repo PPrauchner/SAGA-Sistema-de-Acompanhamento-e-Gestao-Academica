@@ -11,6 +11,7 @@ import {
 } from "recharts";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 import {
   getStudentsAtRisk, getStudentsByStatus, getStudentsByAdvisor,
   getCompletionTime, getProductionsReport,
@@ -720,6 +721,7 @@ function renderReport(id: string, data: ReportsData) {
 }
 
 function ReportModal({ reportId, stat, data, onClose }: { reportId: string; stat: string; data: ReportsData; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   const cfg = REPORTS.find(r => r.id === reportId)!;
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
@@ -796,7 +798,9 @@ export function ReportsPage() {
       .catch(() => { if (active) setError("Não foi possível carregar os relatórios. Tente novamente."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [token]);
+    // `role` nas dependências: o token chega antes do papel (GET /auth/me); sem re-executar
+    // quando o papel resolve, a página ficava presa no spinner sem nunca buscar (issue #320).
+  }, [token, role]);
 
   if (role && role !== "coordenacao") {
     return <EmptyState message="Os relatórios gerenciais são exclusivos da coordenação." />;

@@ -9,7 +9,12 @@ from fastapi import HTTPException
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
 from backend.app.models.advisor import AdvisorCreateRequest, AdvisorUpdateRequest
-from backend.app.models.student import SituacaoRequest, StudentCreateRequest
+from backend.app.models.student import (
+    ProficienciaRequest,
+    QualificacaoRequest,
+    SituacaoRequest,
+    StudentCreateRequest,
+)
 from backend.app.models.user import InviteRequest
 from backend.app.services import advisor_service as advisor_module
 from backend.app.services import student_service as student_module
@@ -102,6 +107,37 @@ class _FakeProgramRepository(_FakeRepo):
         return await self.get(programa_id)
 
 
+class _FakeDepartmentRepository:
+    """Fake de DepartmentRepository: nome fixo por teste (ou None por padrão)."""
+
+    nome: str | None = None
+
+    def __init__(self) -> None:
+        pass
+
+    async def get_nome_by_programa(self, programa_id: str | None) -> str | None:
+        return type(self).nome if programa_id is not None else None
+
+
+class _FakeWorkPlanRepository:
+    """Fake do plano de trabalho: tasks por aluno definidas pelo teste."""
+
+    tasks_by_student: dict[str, list[dict[str, Any]]] = {}
+
+    def __init__(self) -> None:
+        pass
+
+    async def list_all_tasks_grouped(self) -> list[dict[str, Any]]:
+        return [
+            {"student_id": sid, "status": task.get("status")}
+            for sid, tasks in type(self).tasks_by_student.items()
+            for task in tasks
+        ]
+
+    async def get_all_tasks_for_student(self, student_id: str) -> list[dict[str, Any]]:
+        return [dict(task) for task in type(self).tasks_by_student.get(student_id, [])]
+
+
 class _FakeAuthService:
     async def create_invite(
         self,
@@ -110,6 +146,14 @@ class _FakeAuthService:
         extra_fields: dict[str, Any] | None = None,
     ):
         return type("Invite", (), {"token": f"tok-{data.role}", "expira_em": "x"})()
+
+
+class _FakeInferenceService:
+    calls: list[tuple[str, str]] = []
+
+    async def run_inference(self, student_id: str, programa_id: str):
+        type(self).calls.append((student_id, programa_id))
+        return type("InferenceResult", (), {"situacao_inferida": "qualificado"})()
 
 
 def _coord() -> CurrentUser:
@@ -132,12 +176,17 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeAdvisorRepository.counter = 0
     _FakeProgramRepository.store = {}
     _FakeProgramRepository.counter = 0
+    _FakeWorkPlanRepository.tasks_by_student = {}
+    _FakeDepartmentRepository.nome = None
+    _FakeInferenceService.calls = []
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
     monkeypatch.setattr(student_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(student_module, "AdvisorRepository", _FakeAdvisorRepository)
     monkeypatch.setattr(student_module, "ProgramRepository", _FakeProgramRepository)
+    monkeypatch.setattr(student_module, "WorkPlanRepository", _FakeWorkPlanRepository)
     monkeypatch.setattr(advisor_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(advisor_module, "AdvisorRepository", _FakeAdvisorRepository)
+    monkeypatch.setattr(advisor_module, "DepartmentRepository", _FakeDepartmentRepository)
 
 
 async def test_create_student_usa_auto_id_e_retorna_invite_token() -> None:
@@ -333,6 +382,60 @@ async def test_update_situacao_nao_grava_observacao_no_documento() -> None:
     assert "situacao_observacao" not in _FakeStudentRepository.store["student1"]
 
 
+async def test_update_proficiencia_persiste_comprovante_e_recalcula_inferencia() -> None:
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Aluno", "programa_id": "prog"},
+    }
+    service = StudentService(
+        auth_service=_FakeAuthService(),
+        inference_service=_FakeInferenceService(),
+    )
+
+    result = await service.update_proficiencia(
+        "student1",
+        ProficienciaRequest(
+            comprovada=True,
+            data_proficiencia=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            comprovante_url="https://example.com/prof.pdf",
+        ),
+        _coord(),
+    )
+
+    student = _FakeStudentRepository.store["student1"]
+    assert student["proficiencia_comprovada"] is True
+    assert student["proficiencia_data"] == datetime(2026, 4, 1, tzinfo=timezone.utc)
+    assert student["proficiencia_comprovante_url"] == "https://example.com/prof.pdf"
+    assert _FakeInferenceService.calls == [("student1", "prog")]
+    assert result["situacao_inferida_atualizada"] is True
+
+
+async def test_update_qualificacao_persiste_comprovante_e_recalcula_inferencia() -> None:
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Aluno", "programa_id": "prog"},
+    }
+    service = StudentService(
+        auth_service=_FakeAuthService(),
+        inference_service=_FakeInferenceService(),
+    )
+
+    result = await service.update_qualificacao(
+        "student1",
+        QualificacaoRequest(
+            aprovada=True,
+            data_qualificacao=datetime(2026, 5, 1, tzinfo=timezone.utc),
+            comprovante_url="https://example.com/qual.pdf",
+        ),
+        _coord(),
+    )
+
+    student = _FakeStudentRepository.store["student1"]
+    assert student["qualificacao_aprovada"] is True
+    assert student["qualificacao_data"] == datetime(2026, 5, 1, tzinfo=timezone.utc)
+    assert student["qualificacao_comprovante_url"] == "https://example.com/qual.pdf"
+    assert _FakeInferenceService.calls == [("student1", "prog")]
+    assert result["situacao_inferida_atualizada"] is True
+
+
 async def test_create_advisor_usa_auto_id_e_retorna_invite_token() -> None:
     service = AdvisorService(auth_service=_FakeAuthService())
 
@@ -340,7 +443,6 @@ async def test_create_advisor_usa_auto_id_e_retorna_invite_token() -> None:
         AdvisorCreateRequest(
             nome="Orientador X",
             email="orientador@x.com",
-            departamento="Computação",
             programa_id="prog",
         ),
         _coord(),
@@ -462,6 +564,54 @@ async def test_update_advisor_rejeita_limite_menor_que_orientandos_ativos() -> N
 
     assert exc_info.value.status_code == 400
     assert _FakeAdvisorRepository.store["advisor1"]["limite_orientandos"] == 5
+
+
+async def test_list_students_calcula_progresso_do_plano() -> None:
+    """progresso_plano vem da fração de tasks concluídas; sem tasks é 0.0 (issue #317)."""
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Com plano", "orientador_id": "advisor1"},
+        "student2": {"nome": "Sem plano", "orientador_id": "advisor1"},
+    }
+    _FakeWorkPlanRepository.tasks_by_student = {
+        "student1": [
+            {"status": "concluido"},
+            {"status": "concluido"},
+            {"status": "concluido"},
+            {"status": "pendente"},
+        ],
+    }
+    service = StudentService(auth_service=_FakeAuthService())
+
+    result = await service.list_students(_coord())
+
+    by_id = {student["id"]: student for student in result}
+    assert by_id["student1"]["progresso_plano"] == 75.0
+    assert by_id["student2"]["progresso_plano"] == 0.0
+
+
+async def test_list_advisors_deriva_departamento_do_programa() -> None:
+    """departamento vem do resolver programa_id -> departments, nao mais armazenado (issue #249)."""
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador", "programa_id": "prog"},
+    }
+    _FakeDepartmentRepository.nome = "Ciência da Computação"
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.list_advisors(_coord())
+
+    assert result[0]["departamento"] == "Ciência da Computação"
+
+
+async def test_get_advisor_deriva_departamento_do_programa() -> None:
+    _FakeAdvisorRepository.store = {
+        "advisor1": {"uid": "uid-advisor", "nome": "Orientador", "programa_id": "prog"},
+    }
+    _FakeDepartmentRepository.nome = "Engenharia"
+    service = AdvisorService(auth_service=_FakeAuthService())
+
+    result = await service.get_advisor("advisor1")
+
+    assert result["departamento"] == "Engenharia"
 
 
 async def test_coordenacao_provisionada_aparece_no_dropdown_do_orientador() -> None:

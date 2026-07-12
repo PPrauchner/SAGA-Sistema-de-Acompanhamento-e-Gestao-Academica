@@ -112,9 +112,28 @@ def _coordenacao() -> CurrentUser:
     return CurrentUser(uid="coord1", role="coordenacao", programa_id="prog_default", email="c@x.com")
 
 
+class _FakeDepartmentRepo:
+    """Fake de DepartmentRepository: get_nome_by_programa configurável por teste."""
+
+    def __init__(self, nome: str | None = None) -> None:
+        self.nome = nome
+
+    async def get_nome_by_programa(self, programa_id: str | None) -> str | None:
+        return self.nome if programa_id is not None else None
+
+
 def _service(auth: _FakeAuth) -> tuple[AuthService, _FakeRepo, _FakeRepo]:
     invites, users = _FakeRepo(), _FakeRepo()
-    return AuthService(invite_repo=invites, user_repo=users, auth_client=auth), invites, users
+    return (
+        AuthService(
+            invite_repo=invites,
+            user_repo=users,
+            auth_client=auth,
+            department_repo=_FakeDepartmentRepo(),
+        ),
+        invites,
+        users,
+    )
 
 
 async def test_create_invite_persiste_convite() -> None:
@@ -267,6 +286,45 @@ async def test_get_me_retorna_perfil() -> None:
     assert resp.role == "aluno"
     assert resp.student_id is None
     assert resp.notification_preferences == NotificationPreferences()
+
+
+async def test_get_me_deriva_departamento_do_programa() -> None:
+    """departamento vem do resolver programa_id -> departments, nunca armazenado (issue #249)."""
+    invites, users = _FakeRepo(), _FakeRepo()
+    service = AuthService(
+        invite_repo=invites,
+        user_repo=users,
+        auth_client=_FakeAuth(),
+        department_repo=_FakeDepartmentRepo(nome="Ciência da Computação"),
+    )
+    users.store["u1"] = {
+        "uid": "u1", "email": "a@x.com", "nome": "A", "role": "orientador",
+        "programa_id": "p", "ativo": True,
+    }
+    user = CurrentUser(uid="u1", role="orientador", programa_id="p", email="a@x.com")
+
+    resp = await service.get_me(user)
+
+    assert resp.departamento == "Ciência da Computação"
+
+
+async def test_get_me_adm_sem_programa_departamento_none() -> None:
+    invites, users = _FakeRepo(), _FakeRepo()
+    service = AuthService(
+        invite_repo=invites,
+        user_repo=users,
+        auth_client=_FakeAuth(),
+        department_repo=_FakeDepartmentRepo(nome="Não deveria aparecer"),
+    )
+    users.store["adm1"] = {
+        "uid": "adm1", "email": "adm@x.com", "nome": "Adm", "role": "adm",
+        "programa_id": None, "ativo": True,
+    }
+    user = CurrentUser(uid="adm1", role="adm", programa_id=None, email="adm@x.com")
+
+    resp = await service.get_me(user)
+
+    assert resp.departamento is None
 
 
 async def test_get_me_perfil_inexistente_404() -> None:

@@ -34,11 +34,13 @@ export interface CreditoMaximoRequisito {
 export interface ProficienciaRequisito {
   status: RequisitoStatus;
   data_comprovacao: string | null;
+  comprovante_url: string | null;
 }
 
 export interface QualificacaoRequisito {
   status: RequisitoStatus;
   data_aprovacao: string | null;
+  comprovante_url: string | null;
 }
 
 export interface ProducaoRequisito {

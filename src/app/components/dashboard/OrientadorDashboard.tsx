@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { useAuth } from "@/hooks/useAuth";
 import { useOrientadorDashboard } from "@/hooks/useDashboard";
@@ -6,6 +6,8 @@ import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidat
 import { useNotifications } from "@/hooks/useNotifications";
 import { useOrientadorUpdates } from "@/hooks/useOrientadorUpdates";
 import { useOrientandos, type OrientandoView, type StudentStatus } from "@/hooks/useOrientandos";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
+import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
 import {
   AlertTriangle, X, Calendar, ChevronRight,
   CheckCircle2, Bell, Plus, RefreshCw, Star, Send,
@@ -90,6 +92,7 @@ function Avt({ init, size = 36, color = "#123C7A" }: { init: string; size?: numb
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 
 function StudentModal({ student: s, onClose }: { student: Student; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   const sc = ST[s.status];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4"
@@ -191,6 +194,7 @@ function StudentModal({ student: s, onClose }: { student: Student; onClose: () =
 }
 
 function QuickActionModal({ type, onClose, students }: { type: Exclude<QA, null>; onClose: () => void; students: Student[] }) {
+  useEscapeClose(true, onClose);
   const [done, setDone] = useState(false);
   const names = students.map((s) => s.name);
 
@@ -558,6 +562,7 @@ function StudentTable({ students, onSelect }: { students: Student[]; onSelect: (
 }
 
 function SituationChart({ total, emRisco, qualificados, defesa, prorrogacao }: OrientadorStatsProps) {
+  const chartRef = useRef<HTMLDivElement>(null);
   const regular = Math.max(0, total - (emRisco + qualificados + defesa + prorrogacao));
   const distribData = [
     { name: "Regular", value: regular, color: "#1F8A70" },
@@ -569,10 +574,25 @@ function SituationChart({ total, emRisco, qualificados, defesa, prorrogacao }: O
 
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SecHead title="Distribuição" sub="Situações acadêmicas" />
+      <SecHead
+        title="Distribuição"
+        sub="Situações acadêmicas"
+        right={
+          <ChartExportMenu
+            title="Distribuição de Orientandos"
+            fileName="distribuicao-orientandos"
+            chartRef={chartRef}
+            data={distribData}
+            columns={[
+              { key: "name", label: "Situação" },
+              { key: "value", label: "Orientandos" },
+            ]}
+          />
+        }
+      />
 
       <div className="flex justify-center mb-4">
-        <div className="relative">
+        <div ref={chartRef} className="relative">
           <PieChart width={160} height={160}>
             <Pie data={distribData} cx={75} cy={75} innerRadius={48} outerRadius={75} paddingAngle={3} dataKey="value" isAnimationActive={false}>
               {distribData.map((entry, i) => <Cell key={`distrib-${i}`} fill={entry.color} />)}
@@ -607,6 +627,7 @@ function SituationChart({ total, emRisco, qualificados, defesa, prorrogacao }: O
 }
 
 function CreditBarChart({ students }: { students: Student[] }) {
+  const chartRef = useRef<HTMLDivElement>(null);
   const chartData = students.map((s) => ({
     name: s.init,
     fullName: s.name,
@@ -618,7 +639,21 @@ function CreditBarChart({ students }: { students: Student[] }) {
       <SecHead
         title="Créditos por Orientando"
         sub="Créditos obtidos vs. restantes para conclusão do programa"
+      right={
+          <ChartExportMenu
+            title="Créditos por Orientando"
+            fileName="creditos-por-orientando"
+            chartRef={chartRef}
+            data={chartData}
+            columns={[
+              { key: "fullName", label: "Orientando" },
+              { key: "Obtidos", label: "Créditos obtidos" },
+              { key: "Restantes", label: "Créditos restantes" },
+            ]}
+          />
+        }
       />
+      <div ref={chartRef}>
       <ResponsiveContainer width="100%" height={175}>
         <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid key="cb-grid" strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -636,6 +671,7 @@ function CreditBarChart({ students }: { students: Student[] }) {
           <Bar key="cb-b2" dataKey="Restantes" name="Restantes" fill="#e2e8f0" stackId="a" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
+      </div>
       <div className="flex justify-center gap-5 mt-2">
         {[{ color: "#1F8A70", label: "Créditos Obtidos" }, { color: "#e2e8f0", label: "Créditos Restantes" }].map((l) => (
           <div key={l.label} className="flex items-center gap-1.5">
@@ -748,6 +784,7 @@ function ReviewDetailRow({ label, children }: { label: string; children: ReactNo
 // Modal read-only de detalhes de um item da fila de verificação (#264). Fechar apenas
 // fecha — nenhuma mutação na solicitação.
 function ReviewDetailModal({ item, onClose }: { item: ValidationQueueItem; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   const tc = REVIEW_TIPO_CFG[item.tipo];
   return (
     <div

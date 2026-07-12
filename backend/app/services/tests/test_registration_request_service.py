@@ -156,6 +156,19 @@ async def test_list_pending_filtra_programa_da_coordenacao() -> None:
     assert [item["id"] for item in result] == ["req1"]
 
 
+async def test_list_pending_ordena_por_created_at_no_service() -> None:
+    service, repo, _ = _service()
+    repo.store = {
+        "req1": {"nome": "A", "email": "a@test", "orientador_id": "advisor1", "programa_id": "prog", "status": "pendente", "created_at": datetime(2026, 3, 1, tzinfo=timezone.utc)},
+        "req2": {"nome": "B", "email": "b@test", "orientador_id": "advisor1", "programa_id": "prog", "status": "pendente", "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc)},
+        "req3": {"nome": "C", "email": "c@test", "orientador_id": "advisor1", "programa_id": "prog", "status": "pendente", "created_at": None},
+    }
+
+    result = await service.list_pending(_coord())
+
+    assert [item["id"] for item in result] == ["req3", "req2", "req1"]
+
+
 async def test_approve_cria_aluno_convite_e_marca_revisao() -> None:
     service, repo, students = _service()
     request = await service.create_request(

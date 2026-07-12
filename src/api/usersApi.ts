@@ -3,14 +3,12 @@ import type { NotificationPreferences } from "@/app/context/AppContext";
 
 export interface UpdateProfilePayload {
   nome?: string;
-  departamento?: string;
   notification_preferences?: NotificationPreferences;
 }
 
 export interface UpdateProfileResponse {
   uid: string;
   nome: string;
-  departamento?: string | null;
   notification_preferences: NotificationPreferences;
 }
 

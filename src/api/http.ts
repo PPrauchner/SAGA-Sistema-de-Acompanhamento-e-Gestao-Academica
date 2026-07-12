@@ -8,8 +8,22 @@
  * - apiGet/apiPost/apiPatch/apiPut/apiDelete(path, token?): incluem header Authorization: Bearer <token>
  *   quando um token é fornecido (forward-compatible com a autenticação das issues #04/#10),
  *   contra API_ROOT/api/v1.
- * - Lançar erro com o status HTTP em respostas não-ok, para tratamento nas páginas.
+ * - Lançar ApiError com o status HTTP e uma mensagem legível extraída do corpo da resposta
+ *   (campo `detail` do FastAPI — string em HTTPException, ou lista de erros de validação
+ *   Pydantic com `.msg`) em respostas não-ok, para tratamento nas páginas (issue #253).
  */
+
+/** Extrai uma mensagem legível de `detail`: string (HTTPException) ou lista Pydantic (422). */
+function extractErrorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => (typeof item?.msg === "string" ? item.msg : null))
+      .filter((msg): msg is string => msg !== null);
+    if (messages.length > 0) return messages.join("; ");
+  }
+  return fallback;
+}
 
 // Fonte única da base da API: único ponto que lê VITE_API_URL no frontend. Mantém o host
 // raiz sem /api/v1 para que clientes que embutem o prefixo no path e clientes que usam
@@ -38,7 +52,11 @@ export async function apiGet<T>(path: string, token?: string): Promise<T> {
 
   const response = await fetch(`${API_BASE}${path}`, { headers });
   if (!response.ok) {
-    throw new ApiError(response.status, `Falha na requisição (${response.status})`);
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(
+      response.status,
+      extractErrorMessage(data.detail, `Falha na requisição (${response.status})`),
+    );
   }
   return (await response.json()) as T;
 }
@@ -53,7 +71,11 @@ async function apiJson<T>(method: "POST" | "PATCH" | "PUT", path: string, body: 
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new ApiError(response.status, `Falha na requisição (${response.status})`);
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(
+      response.status,
+      extractErrorMessage(data.detail, `Falha na requisição (${response.status})`),
+    );
   }
   return (await response.json()) as T;
 }
@@ -76,7 +98,11 @@ export async function apiDelete<T>(path: string, token?: string): Promise<T> {
 
   const response = await fetch(`${API_BASE}${path}`, { method: "DELETE", headers });
   if (!response.ok) {
-    throw new ApiError(response.status, `Falha na requisição (${response.status})`);
+    const data = await response.json().catch(() => ({}));
+    throw new ApiError(
+      response.status,
+      extractErrorMessage(data.detail, `Falha na requisição (${response.status})`),
+    );
   }
   return (await response.json()) as T;
 }

@@ -1,5 +1,6 @@
 """Servico agregador para a pagina unificada de Solicitacoes."""
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -22,6 +23,8 @@ ORIGEM_POR_TIPO: dict[str, str] = {
     "atividade": "agregado",
     "producao": "agregado",
     "prorrogacao": "formulario",
+    "prazo_defesa": "formulario",
+    "prazo_qualificacao": "formulario",
     "trancamento": "formulario",
     "transferencia": "formulario",
     "transferencia_coordenacao": "agregado",
@@ -65,20 +68,24 @@ class RequestService:
 
     async def _get_student_requests(self, user: CurrentUser) -> list[RequestItem]:
         requests: list[RequestItem] = []
-        students = await self._students.list_all()
-        student = next((s for s in students if s.get("uid") == user.uid), None)
+        students = await self._students.query(filters=[("uid", "==", user.uid)])
+        student = students[0] if students else None
         if student is None:
             return requests
 
         student_id = student["id"]
         student_name = student.get("nome", "Desconhecido")
 
-        activities = await self._activities.list_by_student(student_id)
+        # Atividades e prorrogações são independentes — busca em paralelo (issue #319).
+        activities, extensions = await asyncio.gather(
+            self._activities.list_by_student(student_id),
+            self._extensions.list_by_student_ids({student_id}),
+        )
         for activity in activities:
             if activity.get("status") == "enviado":
                 requests.append(
                     self._build_request(
-                        id=activity.get("id", ""),
+                        request_id=activity.get("id", ""),
                         tipo=self._activity_request_type(activity),
                         solicitante=student_name,
                         data=activity.get("criado_em")
@@ -89,12 +96,11 @@ class RequestService:
                     )
                 )
 
-        extensions = await self._extensions.list_by_student_ids({student_id})
         for ext in extensions:
             if ext.get("status") == "pendente":
                 requests.append(
                     self._build_request(
-                        id=ext.get("id", ""),
+                        request_id=ext.get("id", ""),
                         tipo=self._extension_request_type(ext),
                         solicitante=student_name,
                         data=ext.get("created_at")
@@ -122,61 +128,70 @@ class RequestService:
         student_ids = {s["id"] for s in students}
         student_names = {s["id"]: s.get("nome", "Desconhecido") for s in students}
 
-        for sid in student_ids:
-            activities = await self._activities.list_by_student(sid)
-            for activity in activities:
-                if activity.get("status") == "enviado" and not activity.get(
-                    "parecer_orientador"
-                ):
-                    requests.append(
-                        self._build_request(
-                            id=activity.get("id", ""),
-                            tipo=self._activity_request_type(activity),
-                            solicitante=student_names.get(sid, "Desconhecido"),
-                            data=activity.get("criado_em")
-                            or datetime.now(timezone.utc),
-                            status="pendente_parecer",
-                            payload=activity,
-                        )
-                    )
-
-        if student_ids:
-            extensions = await self._extensions.list_by_student_ids(student_ids)
-            for ext in extensions:
-                if (
-                    ext.get("status") == "pendente"
-                    and not ext.get("parecer")
-                    and not ext.get("parecer_orientador")
-                ):
-                    sid = ext.get("student_id")
-                    requests.append(
-                        self._build_request(
-                            id=ext.get("id", ""),
-                            tipo=self._extension_request_type(ext),
-                            solicitante=student_names.get(
-                                sid, ext.get("aluno_nome", "Desconhecido")
-                            ),
-                            data=ext.get("created_at")
-                            or ext.get("solicitacao")
-                            or datetime.now(timezone.utc),
-                            status="pendente_parecer",
-                            payload=ext,
-                        )
-                    )
-
-        coord_transfers_as_successor = await self._coord_transfers.query(
-            filters=[("successor_uid", "==", user.uid)]
+        # As quatro fontes são independentes: a lista agregada de atividades substitui
+        # o loop N×list_by_student e tudo é buscado em paralelo (issue #319).
+        (
+            all_activities,
+            extensions,
+            coord_transfers_as_successor,
+            coord_transfers_as_initiator,
+        ) = await asyncio.gather(
+            self._activities.list_all_grouped(),
+            self._extensions.list_by_student_ids(student_ids),
+            self._coord_transfers.query(filters=[("successor_uid", "==", user.uid)]),
+            self._coord_transfers.query(filters=[("initiator_uid", "==", user.uid)]),
         )
-        coord_transfers_as_initiator = await self._coord_transfers.query(
-            filters=[("initiator_uid", "==", user.uid)]
-        )
+
+        for activity in all_activities:
+            sid = activity.get("student_id")
+            if sid not in student_ids:
+                continue
+            if activity.get("status") == "enviado" and not activity.get(
+                "parecer_orientador"
+            ):
+                requests.append(
+                    self._build_request(
+                        request_id=activity.get("id", ""),
+                        tipo=self._activity_request_type(activity),
+                        solicitante=student_names.get(sid, "Desconhecido"),
+                        data=activity.get("criado_em")
+                        or datetime.now(timezone.utc),
+                        status="pendente_parecer",
+                        payload=activity,
+                    )
+                )
+
+        for ext in extensions:
+            if (
+                ext.get("status") == "pendente"
+                and not ext.get("parecer")
+                and not ext.get("parecer_orientador")
+            ):
+                sid = ext.get("student_id")
+                requests.append(
+                    self._build_request(
+                        request_id=ext.get("id", ""),
+                        tipo=self._extension_request_type(ext),
+                        solicitante=student_names.get(
+                            sid, ext.get("aluno_nome", "Desconhecido")
+                        ),
+                        data=ext.get("created_at")
+                        or ext.get("solicitacao")
+                        or datetime.now(timezone.utc),
+                        status="pendente_parecer",
+                        payload=ext,
+                    )
+                )
+
         coord_transfers_map = {ct["id"]: ct for ct in coord_transfers_as_successor + coord_transfers_as_initiator}
         coord_transfers = [ct for ct in coord_transfers_map.values() if ct.get("status") in ["pendente", "concluido"]]
-        for ct in coord_transfers:
-            initiator_name = await self._get_user_name(ct.get("initiator_uid"))
+        initiator_names = await asyncio.gather(
+            *(self._get_user_name(ct.get("initiator_uid")) for ct in coord_transfers)
+        )
+        for ct, initiator_name in zip(coord_transfers, initiator_names):
             requests.append(
                 self._build_request(
-                    id=ct.get("id", ""),
+                    request_id=ct.get("id", ""),
                     tipo="transferencia_coordenacao",
                     solicitante=initiator_name,
                     data=ct.get("created_at") or datetime.now(timezone.utc),
@@ -202,7 +217,21 @@ class RequestService:
         if not program_id:
             return []
 
-        all_students = await self._students.list_all()
+        # As cinco fontes são independentes: a lista agregada de atividades substitui
+        # o loop N×list_by_student e tudo é buscado em paralelo (issue #319).
+        (
+            all_students,
+            all_activities,
+            extensions,
+            transfers,
+            coord_transfers,
+        ) = await asyncio.gather(
+            self._students.list_all(),
+            self._activities.list_all_grouped(),
+            self._extensions.list_all(),
+            self._transfers.list_by_program(program_id),
+            self._coord_transfers.list_by_program(program_id),
+        )
         program_students = {
             s["id"]: s for s in all_students if s.get("programa_id") == program_id
         }
@@ -211,25 +240,25 @@ class RequestService:
             s["id"]: s.get("nome", "Desconhecido") for s in program_students.values()
         }
 
-        for sid in program_student_ids:
-            activities = await self._activities.list_by_student(sid)
-            for activity in activities:
-                if activity.get("status") == "enviado" and activity.get(
-                    "parecer_orientador"
-                ):
-                    requests.append(
-                        self._build_request(
-                            id=activity.get("id", ""),
-                            tipo=self._activity_request_type(activity),
-                            solicitante=student_names.get(sid, "Desconhecido"),
-                            data=activity.get("criado_em")
-                            or datetime.now(timezone.utc),
-                            status="pendente_validacao",
-                            payload=activity,
-                        )
+        for activity in all_activities:
+            sid = activity.get("student_id")
+            if sid not in program_student_ids:
+                continue
+            if activity.get("status") == "enviado" and activity.get(
+                "parecer_orientador"
+            ):
+                requests.append(
+                    self._build_request(
+                        request_id=activity.get("id", ""),
+                        tipo=self._activity_request_type(activity),
+                        solicitante=student_names.get(sid, "Desconhecido"),
+                        data=activity.get("criado_em")
+                        or datetime.now(timezone.utc),
+                        status="pendente_validacao",
+                        payload=activity,
                     )
+                )
 
-        extensions = await self._extensions.list_all()
         for ext in extensions:
             sid = ext.get("student_id")
             if (
@@ -239,7 +268,7 @@ class RequestService:
             ):
                 requests.append(
                     self._build_request(
-                        id=ext.get("id", ""),
+                        request_id=ext.get("id", ""),
                         tipo=self._extension_request_type(ext),
                         solicitante=student_names.get(
                             sid, ext.get("aluno_nome", "Desconhecido")
@@ -252,77 +281,87 @@ class RequestService:
                     )
                 )
 
-        transfers = await self._transfers.list_by_program(program_id)
-        for t in transfers:
-            if t.get("status") == "pendente":
-                sid = t.get("student_id")
-                student_name = student_names.get(
-                    sid, t.get("aluno_nome", "Desconhecido")
+        pending_transfers = [t for t in transfers if t.get("status") == "pendente"]
+        requester_names = await asyncio.gather(
+            *(self._get_advisor_name(t.get("solicitante_id")) for t in pending_transfers)
+        )
+        for t, requester_name in zip(pending_transfers, requester_names):
+            sid = t.get("student_id")
+            student_name = student_names.get(
+                sid, t.get("aluno_nome", "Desconhecido")
+            )
+            label = f"{requester_name} (sobre {student_name})"
+            requests.append(
+                self._build_request(
+                    request_id=t.get("id", ""),
+                    tipo="transferencia",
+                    solicitante=label,
+                    data=t.get("created_at") or datetime.now(timezone.utc),
+                    status="pendente",
+                    payload=t,
                 )
-                requester_name = await self._get_advisor_name(t.get("solicitante_id"))
-                label = f"{requester_name} (sobre {student_name})"
-                requests.append(
-                    self._build_request(
-                        id=t.get("id", ""),
-                        tipo="transferencia",
-                        solicitante=label,
-                        data=t.get("created_at") or datetime.now(timezone.utc),
-                        status="pendente",
-                        payload=t,
-                    )
-                )
+            )
 
-        coord_transfers = await self._coord_transfers.list_by_program(program_id)
-        for ct in coord_transfers:
-            if (ct.get("initiator_uid") == user.uid or ct.get("successor_uid") == user.uid) and ct.get("status") in ["pendente", "concluido"]:
-                successor_name = await self._get_user_name(ct.get("successor_uid"))
-                requests.append(
-                    self._build_request(
-                        id=ct.get("id", ""),
-                        tipo="transferencia_coordenacao",
-                        solicitante=f"Para: {successor_name}",
-                        data=ct.get("created_at") or datetime.now(timezone.utc),
-                        status=ct.get("status", "pendente"),
-                        payload=ct,
-                    )
+        own_coord_transfers = [
+            ct
+            for ct in coord_transfers
+            if (ct.get("initiator_uid") == user.uid or ct.get("successor_uid") == user.uid)
+            and ct.get("status") in ["pendente", "concluido"]
+        ]
+        successor_names = await asyncio.gather(
+            *(self._get_user_name(ct.get("successor_uid")) for ct in own_coord_transfers)
+        )
+        for ct, successor_name in zip(own_coord_transfers, successor_names):
+            requests.append(
+                self._build_request(
+                    request_id=ct.get("id", ""),
+                    tipo="transferencia_coordenacao",
+                    solicitante=f"Para: {successor_name}",
+                    data=ct.get("created_at") or datetime.now(timezone.utc),
+                    status=ct.get("status", "pendente"),
+                    payload=ct,
                 )
+            )
 
         return requests
 
     async def _get_adm_requests(self) -> list[RequestItem]:
-        """Retorna as transferências de coordenação pendentes de todos os programas.
+        """Adm global vê as transferências de coordenação de todos os programas.
 
         O papel `adm` é global (ADR-0001): gere coordenadores cross-programa e, por
         isso, enxerga as transferências de coordenação de qualquer programa — não
-        apenas de um `programa_id`, que para o `adm` é `null`.
-
-        Returns:
-            Lista de RequestItem de `transferencia_coordenacao` com status pendente.
+        apenas de um `programa_id`, que para o `adm` é `null`. Inclui `concluido`
+        além de `pendente` (issue #329) para o histórico recente ficar visível.
         """
         requests: list[RequestItem] = []
-        all_coord_transfers = await self._coord_transfers.list_all()
-        for ct in all_coord_transfers:
-            if ct.get("status") == "pendente":
-                initiator_name = await self._get_user_name(ct.get("initiator_uid"))
-                requests.append(
-                    self._build_request(
-                        id=ct.get("id", ""),
-                        tipo="transferencia_coordenacao",
-                        solicitante=initiator_name,
-                        data=ct.get("created_at") or datetime.now(timezone.utc),
-                        status="pendente",
-                        payload=ct,
-                    )
+        coord_transfers = await self._coord_transfers.list_all()
+        relevant = [
+            ct for ct in coord_transfers if ct.get("status") in ["pendente", "concluido"]
+        ]
+        initiator_names = await asyncio.gather(
+            *(self._get_user_name(ct.get("initiator_uid")) for ct in relevant)
+        )
+        for ct, initiator_name in zip(relevant, initiator_names):
+            requests.append(
+                self._build_request(
+                    request_id=ct.get("id", ""),
+                    tipo="transferencia_coordenacao",
+                    solicitante=initiator_name,
+                    data=ct.get("created_at") or datetime.now(timezone.utc),
+                    status=ct.get("status", "pendente"),
+                    payload=ct,
                 )
+            )
         return requests
 
     async def _get_advisor_students(self, user: CurrentUser) -> list[dict[str, Any]]:
-        advisors = await self._advisors.list_all()
-        advisor = next((item for item in advisors if item.get("uid") == user.uid), None)
+        advisors = await self._advisors.query(filters=[("uid", "==", user.uid)])
+        advisor = advisors[0] if advisors else None
         if not advisor:
             return []
-        all_students = await self._students.list_all()
-        return [s for s in all_students if s.get("orientador_id") == advisor["id"]]
+        return await self._students.query(
+            filters=[("orientador_id", "==", advisor["id"])]
+        )
 
     @staticmethod
     def _activity_request_type(activity: dict[str, Any]) -> str:
@@ -330,18 +369,19 @@ class RequestService:
 
     @staticmethod
     def _extension_request_type(extension: dict[str, Any]) -> str:
-        """
-        Deriva o subtipo de Solicitação de um documento de `extensions/`.
+        """Mapeia extensions.tipo para o tipo exibido na Caixa de Entrada unificada.
 
-        Args:
-            extension: Documento de `extensions/` (campo `tipo`: `prazo_defesa`,
-                `prazo_qualificacao`, `trancamento` ou `mudanca_nivel`).
-
-        Returns:
-            "trancamento" quando `extension.tipo == "trancamento"`, senão
-            "prorrogacao" (demais subtipos de prazo).
+        Preserva os subtipos de prorrogação (prazo_defesa/prazo_qualificacao)
+        distintos da prorrogação genérica — antes todos colapsavam em
+        "prorrogacao" (issue #298). "mudanca_nivel" (escopo futuro, fora do MVP)
+        cai no fallback "prorrogacao".
         """
-        return "trancamento" if extension.get("tipo") == "trancamento" else "prorrogacao"
+        tipo = extension.get("tipo")
+        if tipo == "trancamento":
+            return "trancamento"
+        if tipo in ("prazo_defesa", "prazo_qualificacao"):
+            return tipo
+        return "prorrogacao"
 
     @staticmethod
     def _activity_status_for_student(activity: dict[str, Any]) -> str:
@@ -361,10 +401,8 @@ class RequestService:
         """
         if not uid:
             return "Desconhecido"
-        users = await self._users.list_all()
-        user_record = next(
-            (u for u in users if u.get("id") == uid or u.get("uid") == uid), None
-        )
+        # users/ é chaveado pelo uid — leitura direta em vez de list_all + busca linear.
+        user_record = await self._users.get(uid)
         return (
             user_record.get("nome", "Desconhecido") if user_record else "Desconhecido"
         )
@@ -386,7 +424,7 @@ class RequestService:
 
     def _build_request(
         self,
-        id: str,
+        request_id: str,
         tipo: Any,
         solicitante: str,
         data: Any,
@@ -397,7 +435,7 @@ class RequestService:
         Monta um objeto RequestItem com os dados da requisição.
 
         Args:
-            id: Id da requisição.
+            request_id: Id da requisição.
             tipo: Tipo da requisição.
             solicitante: Nome do solicitante.
             data: Data da requisição.
@@ -410,7 +448,7 @@ class RequestService:
         if not isinstance(data, datetime):
             data = datetime.now(timezone.utc)
         return RequestItem(
-            id=id,
+            id=request_id,
             tipo=tipo,
             origem=ORIGEM_POR_TIPO[tipo],
             solicitante_nome=solicitante,
