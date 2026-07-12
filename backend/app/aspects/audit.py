@@ -17,7 +17,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 from pydantic import BaseModel
@@ -34,9 +34,11 @@ SENSITIVE_FIELDS: frozenset[str] = frozenset(
 
 _REDACTED = "***"
 
-# Tipos escalares que o Firestore persiste diretamente. Qualquer valor fora desta
-# lista (e que não seja BaseModel/dict/list) é coagido a repr() em _serializar_modelos.
-_FIRESTORE_SAFE_SCALARS: tuple[type, ...] = (str, int, float, bool, bytes, datetime, date)
+# Tipos escalares que o Firestore persiste diretamente. `date` puro NÃO entra: o
+# encoder do google-cloud-firestore só aceita `datetime` (rejeita `datetime.date`).
+# Qualquer valor fora desta lista (e que não seja BaseModel/dict/list) é coagido a
+# repr() em _serializar_modelos.
+_FIRESTORE_SAFE_SCALARS: tuple[type, ...] = (str, int, float, bool, bytes, datetime)
 
 def _redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
     """Substitui valores de campos sensíveis por '***' em valor_entrada.
@@ -114,10 +116,11 @@ def _serializar_modelos(value: Any) -> Any:
     """Converte valores para uma forma que o Firestore aceita gravar.
 
     Desfaz modelos Pydantic (crus, o Firestore rejeita — regressão #151),
-    preservando datetimes/date intactos (o Firestore os aceita). Qualquer valor
-    fora dos tipos serializáveis — ex.: uma dependência injetada via `Depends`
-    que caia em `valor_entrada` — é coagido a `repr()`, evitando que o encoder do
-    Firestore levante e a gravação do `audit_log` falhe silenciosamente.
+    preservando `datetime` intacto (o Firestore o aceita). Qualquer valor fora dos
+    tipos serializáveis — ex.: um `date` puro (rejeitado pelo encoder do Firestore)
+    ou uma dependência injetada via `Depends` que caia em `valor_entrada` — é
+    coagido a `repr()`, evitando que o encoder do Firestore levante e a gravação do
+    `audit_log` falhe silenciosamente.
     """
     if isinstance(value, BaseModel):
         return value.model_dump(mode="json")

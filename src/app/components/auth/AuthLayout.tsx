@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { useApp } from "../../context/AppContext";
 import { AuthIllustration } from "./AuthIllustration";
-import { GraduationCap, Shield, Lock, Users, BookOpen } from "lucide-react";
+import { GraduationCap, Shield, Lock, Users, BookOpen, Sun, Moon } from "lucide-react";
 
 interface AuthLayoutProps {
   children: ReactNode;
@@ -19,8 +19,30 @@ const SECURITY_BADGES = [
 ];
 
 export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutProps) {
+  const { darkMode, toggleDarkMode } = useApp();
+
   return (
-    <div className="min-h-screen w-full flex" style={{ background: "#f0f4fa" }}>
+    <div className="min-h-screen w-full flex relative" style={{ background: "var(--muted)" }}>
+
+      {/* Theme toggle — disponível em todas as telas de auth, inclusive mobile */}
+      <button
+        type="button"
+        onClick={toggleDarkMode}
+        className="absolute z-20 flex items-center justify-center rounded-lg transition-colors"
+        style={{
+          top: 16,
+          right: 16,
+          width: 38,
+          height: 38,
+          color: "var(--muted-foreground)",
+          background: "var(--card)",
+          border: "1px solid var(--border)",
+        }}
+        aria-label={darkMode ? "Ativar modo claro" : "Ativar modo escuro"}
+        title={darkMode ? "Modo Claro" : "Modo Escuro"}
+      >
+        {darkMode ? <Sun size={17} /> : <Moon size={17} />}
+      </button>
 
       {/* ── LEFT PANEL ─────────────────────────────────────────────── */}
       <div
@@ -129,12 +151,12 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
         {/* Mobile-only logo */}
         <div className="flex lg:hidden items-center gap-3 mb-8">
           <div className="flex items-center justify-center rounded-xl flex-shrink-0"
-            style={{ width: 40, height: 40, background: "#123C7A" }}>
+            style={{ width: 40, height: 40, background: "var(--brand-blue)" }}>
             <GraduationCap size={22} color="#fff" />
           </div>
           <div>
-            <p style={{ fontWeight: 800, color: "#123C7A", fontSize: "15px" }}>SAGA</p>
-            <p style={{ fontSize: "10px", color: "#64748b" }}>Gestão Acadêmica</p>
+            <p style={{ fontWeight: 800, color: "var(--brand-blue)", fontSize: "15px" }}>SAGA</p>
+            <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Gestão Acadêmica</p>
           </div>
         </div>
 
@@ -146,10 +168,10 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
                 style={{
                   width: i + 1 === step ? 24 : 8,
                   height: 8,
-                  background: i + 1 <= step ? "#123C7A" : "#cbd5e1",
+                  background: i + 1 <= step ? "var(--brand-blue)" : "var(--switch-background)",
                 }} />
             ))}
-            <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "4px" }}>
+            <span style={{ fontSize: "11px", color: "var(--muted-foreground)", marginLeft: "4px" }}>
               {step} de {totalSteps}
             </span>
           </div>
@@ -161,8 +183,8 @@ export function AuthLayout({ children, step, totalSteps, noScroll }: AuthLayoutP
 
         {/* Mobile security notice */}
         <div className="flex lg:hidden items-center gap-2 mt-6">
-          <Shield size={12} style={{ color: "#94a3b8" }} />
-          <p style={{ fontSize: "11px", color: "#94a3b8" }}>Conexão segura — dados criptografados</p>
+          <Shield size={12} style={{ color: "var(--muted-foreground)" }} />
+          <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Conexão segura — dados criptografados</p>
         </div>
       </div>
     </div>

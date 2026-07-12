@@ -465,8 +465,8 @@ export function SettingsPage() {
                 onClick={() => setActiveTab(tab.id)}
                 className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1 transition-all text-left"
                 style={{
-                  background: activeTab === tab.id ? "#eef3fc" : "transparent",
-                  color: activeTab === tab.id ? "#123C7A" : "var(--muted-foreground)",
+                  background: activeTab === tab.id ? "var(--tint-blue-bg)" : "transparent",
+                  color: activeTab === tab.id ? "var(--tint-blue-text)" : "var(--muted-foreground)",
                   fontWeight: activeTab === tab.id ? 600 : 400,
                   fontSize: "13px",
                 }}
@@ -506,7 +506,7 @@ export function SettingsPage() {
               </div>
 
               {profileError && (
-                <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px" }}>
+                <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: "13px" }}>
                   {profileError}
                 </div>
               )}
@@ -649,10 +649,10 @@ export function SettingsPage() {
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl" style={{ background: "#fef9c3", border: "1px solid #D4A01730" }}>
-                  <h3 style={{ fontSize: "14px", fontWeight: 700, color: "#D4A017", marginBottom: "8px" }}>⚠️ Zona de Perigo</h3>
-                  <p style={{ fontSize: "12px", color: "#64748b", marginBottom: "12px" }}>Ações irreversíveis que afetam permanentemente sua conta.</p>
-                  <button className="px-4 py-2 rounded-xl" style={{ background: "#fee2e2", color: "#dc2626", fontWeight: 600, fontSize: "13px" }}>
+                <div className="p-4 rounded-xl" style={{ background: "var(--tint-gold-bg)", border: "1px solid var(--tint-gold-border)" }}>
+                  <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--tint-gold-text)", marginBottom: "8px" }}>⚠️ Zona de Perigo</h3>
+                  <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "12px" }}>Ações irreversíveis que afetam permanentemente sua conta.</p>
+                  <button className="px-4 py-2 rounded-xl" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontWeight: 600, fontSize: "13px" }}>
                     Solicitar Exclusão da Conta
                   </button>
                 </div>
@@ -676,8 +676,8 @@ export function SettingsPage() {
                         onClick={() => { if (darkMode !== theme.value) toggleDarkMode(); }}
                         className="rounded-xl p-4 border-2 transition-all"
                         style={{
-                          borderColor: darkMode === theme.value ? "#123C7A" : "var(--border)",
-                          background: darkMode === theme.value ? "#eef3fc" : "var(--muted)",
+                          borderColor: darkMode === theme.value ? "var(--tint-blue-border)" : "var(--border)",
+                          background: darkMode === theme.value ? "var(--tint-blue-bg)" : "var(--muted)",
                         }}
                       >
                         <div className="rounded-lg mb-3 overflow-hidden" style={{ height: 60, background: theme.preview }}>
@@ -689,7 +689,7 @@ export function SettingsPage() {
                             </div>
                           </div>
                         </div>
-                        <p style={{ fontSize: "13px", fontWeight: 600, color: darkMode === theme.value ? "#123C7A" : "var(--foreground)" }}>
+                        <p style={{ fontSize: "13px", fontWeight: 600, color: darkMode === theme.value ? "var(--tint-blue-text)" : "var(--foreground)" }}>
                           {theme.label} {darkMode === theme.value ? "✓" : ""}
                         </p>
                       </button>
@@ -710,9 +710,9 @@ export function SettingsPage() {
                           onClick={() => setFontSizePreference(size.value)}
                           className="px-4 py-2 rounded-xl border-2 transition-all"
                           style={{
-                            borderColor: selected ? "#123C7A" : "var(--border)",
-                            background: selected ? "#eef3fc" : "var(--muted)",
-                            color: selected ? "#123C7A" : "var(--foreground)",
+                            borderColor: selected ? "var(--tint-blue-border)" : "var(--border)",
+                            background: selected ? "var(--tint-blue-bg)" : "var(--muted)",
+                            color: selected ? "var(--tint-blue-text)" : "var(--foreground)",
                             fontWeight: 600,
                             fontSize: "13px",
                           }}
@@ -769,7 +769,8 @@ export function SettingsPage() {
                         type="button"
                         disabled={loading}
                         onClick={() => handleCancelTransfer(pendingTransfer.id)}
-                        className="mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-red-50 text-red-700 font-semibold text-sm disabled:opacity-60"
+                        className="mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-sm disabled:opacity-60"
+                        style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)" }}
                       >
                         <Ban size={15} /> Cancelar transferência
                       </button>
@@ -838,7 +839,8 @@ export function SettingsPage() {
                           type="button"
                           disabled={loading}
                           onClick={() => handleRejectTransfer(transfer.id)}
-                          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 bg-red-50 text-red-700 font-semibold text-sm disabled:opacity-60"
+                          className="inline-flex items-center gap-2 rounded-xl px-4 py-2 font-semibold text-sm disabled:opacity-60"
+                          style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)" }}
                         >
                           <XCircle size={15} /> Rejeitar
                         </button>
@@ -863,7 +865,7 @@ export function SettingsPage() {
                 ) : (
                   <form onSubmit={handleSaveConfig} className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     {programConfigError && (
-                      <p className="sm:col-span-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+                      <p className="sm:col-span-2 rounded-xl px-4 py-3 text-sm font-semibold" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)", color: "var(--tint-danger-text)" }}>
                         {programConfigError}
                       </p>
                     )}

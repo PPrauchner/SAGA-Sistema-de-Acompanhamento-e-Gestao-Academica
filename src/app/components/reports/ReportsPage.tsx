@@ -81,6 +81,13 @@ const REPORTS: ReportConfig[] = [
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
 
+/** Estilo de tooltip Recharts adaptado ao tema (o default é fundo branco, ilegível no dark). */
+const TOOLTIP_STYLE = {
+  contentStyle: { borderRadius: 8, fontSize: 12, background: "var(--card)", border: "1px solid var(--border)", color: "var(--foreground)" },
+  labelStyle: { color: "var(--foreground)" },
+  itemStyle: { color: "var(--foreground)" },
+} as const;
+
 function showToast(msg: string, color = "#1F8A70") {
   const el = document.createElement("div");
   el.textContent = msg;
@@ -138,15 +145,17 @@ function SortTh({ children, sKey, active, dir, onSort }: { children: React.React
 }
 
 function StatusPill({ status, color }: { status: string; color?: string }) {
+  // `color` vem sempre em hex (STATUS_META); o fallback precisa ser hex porque
+  // `${c}1f` anexa alfa de 8 dígitos ao fundo — uma CSS var quebraria o valor.
   const c = color ?? "#64748b";
   return <span className="px-2 py-0.5 rounded-lg" style={{ background: `${c}1f`, color: c, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>{status}</span>;
 }
 
 function ProrrogStatusPill({ status }: { status: string }) {
   const cfg: Record<string, { bg: string; color: string }> = {
-    aprovada: { bg: "#dcfce7", color: "#1F8A70" }, pendente: { bg: "#fef9c3", color: "#D4A017" }, negada: { bg: "#fee2e2", color: "#dc2626" },
+    aprovada: { bg: "var(--tint-teal-bg)", color: "var(--tint-teal-text)" }, pendente: { bg: "var(--tint-gold-bg)", color: "var(--tint-gold-text)" }, negada: { bg: "var(--tint-danger-bg)", color: "var(--tint-danger-text)" },
   };
-  const c = cfg[status] ?? { bg: "#f1f5f9", color: "#64748b" };
+  const c = cfg[status] ?? { bg: "var(--muted)", color: "var(--muted-foreground)" };
   return <span className="px-2 py-0.5 rounded-lg" style={{ background: c.bg, color: c.color, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>{status}</span>;
 }
 
@@ -204,9 +213,9 @@ function AlunosRiscoReport({ data }: { data: StudentsAtRiskResponse }) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
             <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
             <YAxis dataKey="nome" type="category" tick={{ fontSize: 10, fill: "var(--foreground)" }} width={70} />
-            <Tooltip formatter={(v) => [`${v} dias`, "Prazo"]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+            <Tooltip formatter={(v) => [`${v} dias`, "Prazo"]} {...TOOLTIP_STYLE} />
             <Bar dataKey="dias" radius={[0, 4, 4, 0]}>
-              {chartData.map((e, i) => <Cell key={i} fill={e.dias < 0 ? "#dc2626" : e.dias < 90 ? "#D4A017" : "#94a3b8"} />)}
+              {chartData.map((e, i) => <Cell key={i} fill={e.dias < 0 ? "var(--status-danger)" : e.dias < 90 ? "var(--status-warning)" : "var(--muted-foreground)"} />)}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -227,7 +236,7 @@ function AlunosRiscoReport({ data }: { data: StudentsAtRiskResponse }) {
               const dias = s.dias_restantes_prazo;
               return (
                 <React.Fragment key={s.student_id}>
-                  <tr onClick={() => setSel(sel === s.student_id ? null : s.student_id)} className="cursor-pointer" style={{ background: sel === s.student_id ? "#dc26260a" : "transparent", borderBottom: "1px solid var(--border)" }}>
+                  <tr onClick={() => setSel(sel === s.student_id ? null : s.student_id)} className="cursor-pointer" style={{ background: sel === s.student_id ? "var(--tint-danger-bg)" : "transparent", borderBottom: "1px solid var(--border)" }}>
                     <td className="px-3 py-2.5"><p style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>{s.nome}</p></td>
                     <td className="px-3 py-2.5" style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{s.orientador_nome || "—"}</td>
                     <td className="px-3 py-2.5"><StatusPill status={STATUS_META[s.situacao_inferida as SituacaoRegistrada]?.label ?? s.situacao_inferida} color={STATUS_META[s.situacao_inferida as SituacaoRegistrada]?.color} /></td>
@@ -236,15 +245,15 @@ function AlunosRiscoReport({ data }: { data: StudentsAtRiskResponse }) {
                   </tr>
                   {sel === s.student_id && selected && (
                     <tr><td colSpan={5} className="px-3 py-0">
-                      <div className="rounded-xl p-4 my-2" style={{ background: "#fee2e2", border: "1px solid #fca5a5" }}>
-                        <p style={{ fontSize: 12, fontWeight: 700, color: "#dc2626", marginBottom: 8 }}>Razões do risco — {selected.nome}</p>
+                      <div className="rounded-xl p-4 my-2" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: "var(--tint-danger-text)", marginBottom: 8 }}>Razões do risco — {selected.nome}</p>
                         {selected.razoes_risco.length > 0 ? (
                           <div className="space-y-1.5">
                             {selected.razoes_risco.map((m, i) => (
-                              <div key={i} className="flex items-center gap-2"><AlertTriangle size={11} style={{ color: "#dc2626", flexShrink: 0 }} /><span style={{ fontSize: 12, color: "#991b1b" }}>{m}</span></div>
+                              <div key={i} className="flex items-center gap-2"><AlertTriangle size={11} style={{ color: "var(--tint-danger-text)", flexShrink: 0 }} /><span style={{ fontSize: 12, color: "var(--tint-danger-text)" }}>{m}</span></div>
                             ))}
                           </div>
-                        ) : <p style={{ fontSize: 12, color: "#991b1b" }}>Sem razões detalhadas no último snapshot de inferência.</p>}
+                        ) : <p style={{ fontSize: 12, color: "var(--tint-danger-text)" }}>Sem razões detalhadas no último snapshot de inferência.</p>}
                       </div>
                     </td></tr>
                   )}
@@ -289,7 +298,7 @@ function AlunosPorStatusReport({ data }: { data: StudentsByStatusResponse }) {
                 onClick={d => setSelStatus(selStatus === d.status ? null : d.status)}>
                 {entries.map((e, i) => <Cell key={i} fill={e.color} stroke={selStatus === e.status ? "#fff" : "none"} strokeWidth={3} style={{ cursor: "pointer" }} />)}
               </Pie>
-              <Tooltip formatter={(v, n) => [`${v} alunos`, n]} />
+              <Tooltip formatter={(v, n) => [`${v} alunos`, n]} {...TOOLTIP_STYLE} />
               <Legend formatter={v => <span style={{ fontSize: 11 }}>{v}</span>} />
             </PieChart>
           </ResponsiveContainer>
@@ -319,7 +328,7 @@ function AlunosPorStatusReport({ data }: { data: StudentsByStatusResponse }) {
             <div className="space-y-2">
               {selected.alunos.map(s => (
                 <div key={s.student_id} className="flex items-center gap-3 rounded-xl p-3" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-                  <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, background: "#eef3fc" }}><GraduationCap size={14} style={{ color: "#123C7A" }} /></div>
+                  <div className="rounded-full flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, background: "var(--tint-blue-bg)" }}><GraduationCap size={14} style={{ color: "var(--tint-blue-text)" }} /></div>
                   <div className="flex-1"><p style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>{s.nome}</p><p style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{s.orientador_nome || "Sem orientador"}</p></div>
                 </div>
               ))}
@@ -359,10 +368,10 @@ function AlunosPorOrientadorReport({ data }: { data: StudentsByAdvisorResponse }
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="nome" tick={{ fontSize: 11, fill: "var(--foreground)" }} />
             <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} allowDecimals={false} />
-            <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+            <Tooltip {...TOOLTIP_STYLE} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="total" name="Total" fill="#123C7A" radius={[3, 3, 0, 0]} />
-            <Bar dataKey="emRisco" name="Em Risco" fill="#dc2626" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="total" name="Total" fill="var(--chart-1)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="emRisco" name="Em Risco" fill="var(--status-danger)" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -396,9 +405,9 @@ function AlunosPorOrientadorReport({ data }: { data: StudentsByAdvisorResponse }
 
 function TempoIntegralizacaoReport({ data }: { data: CompletionTimeResponse }) {
   const kpis = [
-    { l: "Média", v: data.media_meses, c: "#123C7A", bg: "#eef3fc" },
-    { l: "Mínimo", v: data.minimo_meses, c: "#1F8A70", bg: "#dcfce7" },
-    { l: "Máximo", v: data.maximo_meses, c: "#D4A017", bg: "#fef9c3" },
+    { l: "Média", v: data.media_meses, c: "var(--tint-blue-text)", bg: "var(--tint-blue-bg)" },
+    { l: "Mínimo", v: data.minimo_meses, c: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)" },
+    { l: "Máximo", v: data.maximo_meses, c: "var(--tint-gold-text)", bg: "var(--tint-gold-bg)" },
   ];
   const chartData = data.historico.map(h => ({ nome: h.student_nome.split(" ")[0], meses: h.meses }));
 
@@ -430,9 +439,9 @@ function TempoIntegralizacaoReport({ data }: { data: CompletionTimeResponse }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis dataKey="nome" tick={{ fontSize: 10, fill: "var(--foreground)" }} />
                 <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} label={{ value: "meses", angle: -90, position: "insideLeft", fontSize: 10, fill: "var(--muted-foreground)" }} />
-                <Tooltip formatter={(v) => [`${v} meses`, "Integralização"]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+                <Tooltip formatter={(v) => [`${v} meses`, "Integralização"]} {...TOOLTIP_STYLE} />
                 <Bar dataKey="meses" radius={[4, 4, 0, 0]}>
-                  {chartData.map((e, i) => <Cell key={i} fill={e.meses <= 24 ? "#1F8A70" : e.meses <= 48 ? "#D4A017" : "#dc2626"} />)}
+                  {chartData.map((e, i) => <Cell key={i} fill={e.meses <= 24 ? "var(--status-active)" : e.meses <= 48 ? "var(--status-warning)" : "var(--status-danger)"} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -495,7 +504,7 @@ function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="nome" tick={{ fontSize: 10, fill: "var(--foreground)" }} />
             <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} allowDecimals={false} />
-            <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+            <Tooltip {...TOOLTIP_STYLE} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Bar dataKey="A1" fill="#123C7A" stackId="a" />
             <Bar dataKey="A2" fill="#1B4F9C" stackId="a" />
@@ -565,7 +574,7 @@ function ProducaoPorOrientadorReport({ data }: { data: ProductionsReportResponse
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
             <XAxis dataKey="nome" tick={{ fontSize: 10, fill: "var(--foreground)" }} />
             <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} allowDecimals={false} />
-            <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+            <Tooltip {...TOOLTIP_STYLE} />
             <Bar dataKey="total" name="Produções" fill="#0891b2" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
@@ -618,7 +627,7 @@ function HistoricoProrrogacoesReport() {
 
   return (
     <div className="space-y-5">
-      <div className="rounded-xl px-4 py-2.5" style={{ background: "#fff7ed", border: "1px solid #fdba74", fontSize: 12, color: "#9a3412" }}>
+      <div className="rounded-xl px-4 py-2.5" style={{ background: "var(--tint-orange-bg)", border: "1px solid var(--tint-orange-border)", fontSize: 12, color: "var(--tint-orange-text)" }}>
         Dados ilustrativos — a integração de prorrogações com a API será feita em issue futura.
       </div>
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -637,14 +646,14 @@ function HistoricoProrrogacoesReport() {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="periodo" tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} />
               <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-              <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+              <Tooltip {...TOOLTIP_STYLE} />
               <Area type="monotone" dataKey="total" name="Prorrogações" stroke="#ea580c" fill="url(#gradPr)" strokeWidth={2.5} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
         <div className="space-y-3">
-          {[{ l: "Aprovadas", n: counts.aprovada, c: "#1F8A70", bg: "#dcfce7" }, { l: "Pendentes", n: counts.pendente, c: "#D4A017", bg: "#fef9c3" }, { l: "Negadas", n: counts.negada, c: "#dc2626", bg: "#fee2e2" }].map(s => (
-            <div key={s.l} className="rounded-xl p-4" style={{ background: s.bg, border: `1px solid ${s.c}30` }}>
+          {[{ l: "Aprovadas", n: counts.aprovada, c: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)" }, { l: "Pendentes", n: counts.pendente, c: "var(--tint-gold-text)", bg: "var(--tint-gold-bg)" }, { l: "Negadas", n: counts.negada, c: "var(--tint-danger-text)", bg: "var(--tint-danger-bg)" }].map(s => (
+            <div key={s.l} className="rounded-xl p-4" style={{ background: s.bg, border: "1px solid var(--border)" }}>
               <p style={{ fontSize: 28, fontWeight: 900, color: s.c }}>{s.n}</p>
               <p style={{ fontSize: 11, color: s.c }}>{s.l}</p>
             </div>
@@ -667,7 +676,7 @@ function HistoricoProrrogacoesReport() {
           <tbody>
             {filtered.map(p => (
               <React.Fragment key={p.id}>
-                <tr onClick={() => setSel(sel === p.id ? null : p.id)} className="cursor-pointer" style={{ borderBottom: "1px solid var(--border)", background: sel === p.id ? "#fff7ed" : "transparent" }}>
+                <tr onClick={() => setSel(sel === p.id ? null : p.id)} className="cursor-pointer" style={{ borderBottom: "1px solid var(--border)", background: sel === p.id ? "var(--tint-orange-bg)" : "transparent" }}>
                   <td className="px-3 py-2.5" style={{ fontSize: 13, fontWeight: 600, color: "var(--foreground)" }}>{p.aluno}</td>
                   <td className="px-3 py-2.5" style={{ fontSize: 11, color: "var(--muted-foreground)" }}>{p.orientador.split(" ").slice(0, 3).join(" ")}</td>
                   <td className="px-3 py-2.5" style={{ fontSize: 12, color: "var(--muted-foreground)" }}>{p.prazoOriginal}</td>
@@ -678,11 +687,11 @@ function HistoricoProrrogacoesReport() {
                 </tr>
                 {sel === p.id && selItem && (
                   <tr><td colSpan={7} className="px-3 py-0">
-                    <div className="rounded-xl p-4 my-2" style={{ background: "#fff7ed", border: "1px solid #fdba74" }}>
+                    <div className="rounded-xl p-4 my-2" style={{ background: "var(--tint-orange-bg)", border: "1px solid var(--tint-orange-border)" }}>
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div><p style={{ fontSize: 10, color: "#ea580c", fontWeight: 600 }}>MOTIVO</p><p style={{ fontSize: 12, color: "var(--foreground)", marginTop: 2 }}>{selItem.motivo}</p></div>
-                        <div><p style={{ fontSize: 10, color: "#ea580c", fontWeight: 600 }}>PROTOCOLO</p><p style={{ fontSize: 12, color: "var(--foreground)", marginTop: 2 }}>{selItem.protocolo}</p></div>
-                        <div><p style={{ fontSize: 10, color: "#ea580c", fontWeight: 600 }}>APROVADO POR</p><p style={{ fontSize: 12, color: "var(--foreground)", marginTop: 2 }}>{selItem.aprovadoPor}</p></div>
+                        <div><p style={{ fontSize: 10, color: "var(--tint-orange-text)", fontWeight: 600 }}>MOTIVO</p><p style={{ fontSize: 12, color: "var(--foreground)", marginTop: 2 }}>{selItem.motivo}</p></div>
+                        <div><p style={{ fontSize: 10, color: "var(--tint-orange-text)", fontWeight: 600 }}>PROTOCOLO</p><p style={{ fontSize: 12, color: "var(--foreground)", marginTop: 2 }}>{selItem.protocolo}</p></div>
+                        <div><p style={{ fontSize: 10, color: "var(--tint-orange-text)", fontWeight: 600 }}>APROVADO POR</p><p style={{ fontSize: 12, color: "var(--foreground)", marginTop: 2 }}>{selItem.aprovadoPor}</p></div>
                       </div>
                     </div>
                   </td></tr>
@@ -798,10 +807,10 @@ export function ReportsPage() {
   }
 
   const summary = data ? [
-    { label: "Total de Alunos", value: statFor("status", data), color: "#123C7A" },
-    { label: "Em Risco", value: String(data.atRisk.total), color: "#dc2626" },
-    { label: "Concluídos", value: String(data.completion.total_concluidos), color: "#1F8A70" },
-    { label: "Produções", value: String(data.productions.total_producoes_aprovadas), color: "#8b5cf6" },
+    { label: "Total de Alunos", value: statFor("status", data), color: "var(--tint-blue-text)" },
+    { label: "Em Risco", value: String(data.atRisk.total), color: "var(--tint-danger-text)" },
+    { label: "Concluídos", value: String(data.completion.total_concluidos), color: "var(--tint-teal-text)" },
+    { label: "Produções", value: String(data.productions.total_producoes_aprovadas), color: "var(--tint-violet-text)" },
   ] : [];
 
   return (
@@ -814,7 +823,7 @@ export function ReportsPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl px-4 py-3" style={{ background: "#fee2e2", color: "#991b1b", fontSize: 13 }}>{error}</div>
+        <div className="rounded-xl px-4 py-3" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: 13 }}>{error}</div>
       )}
 
       {loading ? (

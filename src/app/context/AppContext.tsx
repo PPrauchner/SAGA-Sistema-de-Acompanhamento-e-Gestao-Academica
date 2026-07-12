@@ -15,6 +15,22 @@ export interface NotificationPreferences {
   extensions: boolean;
 }
 
+const DARK_MODE_STORAGE_KEY = "saga:darkMode";
+
+function getInitialDarkMode(): boolean {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const stored = window.localStorage.getItem(DARK_MODE_STORAGE_KEY);
+    if (stored === "true") return true;
+    if (stored === "false") return false;
+  } catch {
+    // Sem storage: cai para a preferencia do sistema abaixo.
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
 const FONT_SIZE_STORAGE_KEY = "saga:fontSizePreference";
 const FONT_SIZE_SCALES: Record<FontSizePreference, string> = {
   small: "0.875",
@@ -133,7 +149,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeView, setActiveViewState] = useState<ActiveView>("aluno");
   const [fontSizePreference, setFontSizePreferenceState] = useState<FontSizePreference>(
@@ -199,13 +215,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // assim que existe sessao, mostrando o skeleton enquanto profileLoading e true.
   const isAuthenticated = !!firebaseUser;
 
+  // Persistimos apenas na escolha explicita do usuario: sem preferencia salva, o
+  // app continua seguindo prefers-color-scheme a cada carregamento.
   const toggleDarkMode = () => {
-    setDarkMode((d) => {
-      const next = !d;
-      document.documentElement.classList.toggle("dark", next);
-      return next;
-    });
+    const next = !darkMode;
+    setDarkMode(next);
+    try {
+      window.localStorage.setItem(DARK_MODE_STORAGE_KEY, String(next));
+    } catch {
+      // A preferencia de tema ainda funciona na sessao atual mesmo sem storage.
+    }
   };
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+  }, [darkMode]);
 
   useLayoutEffect(() => {
     applyFontSizePreference(fontSizePreference);

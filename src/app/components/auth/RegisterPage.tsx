@@ -43,12 +43,12 @@ function FieldInput({
 }) {
   return (
     <div>
-      <label htmlFor={id} style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>
-        {label} {required && <span style={{ color: "#ef4444" }}>*</span>}
+      <label htmlFor={id} style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "5px" }}>
+        {label} {required && <span style={{ color: "var(--destructive)" }}>*</span>}
       </label>
       <div className="relative">
         {icon && (
-          <span className="absolute top-1/2 -translate-y-1/2 left-3.5" style={{ color: "#94a3b8", pointerEvents: "none" }}>
+          <span className="absolute top-1/2 -translate-y-1/2 left-3.5" style={{ color: "var(--muted-foreground)", pointerEvents: "none" }}>
             {icon}
           </span>
         )}
@@ -60,20 +60,20 @@ function FieldInput({
           placeholder={placeholder}
           className="w-full rounded-xl py-2.5 outline-none transition-all"
           style={{
-            border: "2px solid #e2e8f0",
-            background: "#f8fafc",
+            border: "2px solid var(--border)",
+            background: "var(--input-background)",
             fontSize: "13px",
-            color: "#0f172a",
+            color: "var(--foreground)",
             paddingLeft: icon ? "38px" : "14px",
             paddingRight: "14px",
           }}
           onFocus={(event) => {
-            event.currentTarget.style.borderColor = "#123C7A";
-            event.currentTarget.style.background = "#fff";
+            event.currentTarget.style.borderColor = "var(--ring)";
+            event.currentTarget.style.background = "var(--card)";
           }}
           onBlur={(event) => {
-            event.currentTarget.style.borderColor = "#e2e8f0";
-            event.currentTarget.style.background = "#f8fafc";
+            event.currentTarget.style.borderColor = "var(--border)";
+            event.currentTarget.style.background = "var(--input-background)";
           }}
         />
       </div>
@@ -176,14 +176,14 @@ export function RegisterPage() {
         <div className="text-center py-8">
           <div
             className="flex items-center justify-center mx-auto mb-6 rounded-full"
-            style={{ width: 80, height: 80, background: "#dcfce7", border: "3px solid #bbf7d0" }}
+            style={{ width: 80, height: 80, background: "var(--tint-teal-bg)", border: "3px solid var(--tint-teal-border)" }}
           >
-            <CheckCircle2 size={40} style={{ color: "#16a34a" }} />
+            <CheckCircle2 size={40} style={{ color: "var(--tint-teal-text)" }} />
           </div>
-          <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", marginBottom: "12px" }}>
             Solicitação enviada
           </h2>
-          <p style={{ fontSize: "14px", color: "#64748b", lineHeight: 1.65, marginBottom: "28px" }}>
+          <p style={{ fontSize: "14px", color: "var(--muted-foreground)", lineHeight: 1.65, marginBottom: "28px" }}>
             Sua solicitação foi enviada com sucesso. Aguarde o contato e a aprovação da coordenação para prosseguir com o cadastro.
           </p>
           <button
@@ -201,10 +201,10 @@ export function RegisterPage() {
   return (
     <AuthLayout>
       <div className="mb-7">
-        <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", lineHeight: 1.2, marginBottom: "4px" }}>
+        <h2 style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1.2, marginBottom: "4px" }}>
           Solicitar Cadastro
         </h2>
-        <p style={{ fontSize: "14px", color: "#64748b" }}>
+        <p style={{ fontSize: "14px", color: "var(--muted-foreground)" }}>
           Envie seus dados para análise da coordenação.
         </p>
       </div>
@@ -220,7 +220,7 @@ export function RegisterPage() {
             icon={<User size={14} />}
             required
           />
-          {errors.nome && <p style={{ fontSize: "11px", color: "#ef4444", marginTop: "-8px" }}>{errors.nome}</p>}
+          {errors.nome && <p style={{ fontSize: "11px", color: "var(--destructive)", marginTop: "-8px" }}>{errors.nome}</p>}
 
           <FieldInput
             label="E-mail"
@@ -232,14 +232,14 @@ export function RegisterPage() {
             icon={<Mail size={14} />}
             required
           />
-          {errors.email && <p style={{ fontSize: "11px", color: "#ef4444", marginTop: "-8px" }}>{errors.email}</p>}
+          {errors.email && <p style={{ fontSize: "11px", color: "var(--destructive)", marginTop: "-8px" }}>{errors.email}</p>}
 
           <div>
-            <label htmlFor="advisor_id" style={{ fontSize: "12px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "5px" }}>
-              Orientador desejado <span style={{ color: "#ef4444" }}>*</span>
+            <label htmlFor="advisor_id" style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "5px" }}>
+              Orientador desejado <span style={{ color: "var(--destructive)" }}>*</span>
             </label>
             <div className="relative">
-              <span className="absolute top-1/2 -translate-y-1/2 left-3.5" style={{ color: "#94a3b8", pointerEvents: "none" }}>
+              <span className="absolute top-1/2 -translate-y-1/2 left-3.5" style={{ color: "var(--muted-foreground)", pointerEvents: "none" }}>
                 <UserCheck size={14} />
               </span>
               <select
@@ -249,10 +249,10 @@ export function RegisterPage() {
                 disabled={advisorsLoading || advisors.length === 0}
                 className="w-full rounded-xl py-2.5 outline-none transition-all"
                 style={{
-                  border: "2px solid #e2e8f0",
-                  background: "#f8fafc",
+                  border: "2px solid var(--border)",
+                  background: "var(--input-background)",
                   fontSize: "13px",
-                  color: form.advisor_id ? "#0f172a" : "#94a3b8",
+                  color: form.advisor_id ? "var(--foreground)" : "var(--muted-foreground)",
                   paddingLeft: "38px",
                   paddingRight: "14px",
                   opacity: advisorsLoading ? 0.75 : 1,
@@ -268,19 +268,19 @@ export function RegisterPage() {
                 ))}
               </select>
             </div>
-            {errors.advisor_id && <p style={{ fontSize: "11px", color: "#ef4444", marginTop: "4px" }}>{errors.advisor_id}</p>}
+            {errors.advisor_id && <p style={{ fontSize: "11px", color: "var(--destructive)", marginTop: "4px" }}>{errors.advisor_id}</p>}
             {advisorsError && (
-              <p style={{ fontSize: "11px", color: "#ef4444", marginTop: "4px" }}>
+              <p style={{ fontSize: "11px", color: "var(--destructive)", marginTop: "4px" }}>
                 {advisorsError}
               </p>
             )}
           </div>
 
           {submitError && (
-            <div className="rounded-2xl p-4" style={{ background: "#fee2e2", border: "1px solid #fecaca" }}>
+            <div className="rounded-2xl p-4" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
               <div className="flex items-start gap-3">
-                <AlertCircle size={18} style={{ color: "#dc2626", flexShrink: 0, marginTop: 1 }} />
-                <p style={{ fontSize: "12px", color: "#991b1b", lineHeight: 1.5 }}>{submitError}</p>
+                <AlertCircle size={18} style={{ color: "var(--tint-danger-text)", flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: "12px", color: "var(--tint-danger-text)", lineHeight: 1.5 }}>{submitError}</p>
               </div>
             </div>
           )}
@@ -312,12 +312,12 @@ export function RegisterPage() {
         </button>
       </form>
 
-      <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", marginTop: "20px" }}>
+      <p style={{ fontSize: "13px", color: "var(--muted-foreground)", textAlign: "center", marginTop: "20px" }}>
         Já tem acesso?{" "}
         <button
           type="button"
           onClick={() => setCurrentPage("login")}
-          style={{ color: "#123C7A", fontWeight: 700, background: "none", border: "none" }}
+          style={{ color: "var(--brand-blue)", fontWeight: 700, background: "none", border: "none" }}
           className="hover:underline"
         >
           Fazer login
