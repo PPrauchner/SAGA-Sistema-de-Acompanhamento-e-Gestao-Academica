@@ -5,7 +5,7 @@ import {
   LayoutDashboard, Users, UserCheck, FileText, BookOpen,
   FlaskConical, CheckSquare, Clock, BarChart3, Brain,
   ShieldCheck, Settings, Bell, ChevronLeft, ChevronRight,
-  GraduationCap, LogOut, X, ArrowRightLeft
+  GraduationCap, LogOut, X, ArrowRightLeft, Inbox
 } from "lucide-react";
 
 interface NavItem {
@@ -24,7 +24,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: "atividades", label: "Atividades Creditáveis", icon: <BookOpen size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
   { id: "producoes", label: "Produções", icon: <FlaskConical size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
   { id: "checklist", label: "Checklist", icon: <CheckSquare size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
-  { id: "solicitacoes", label: "Solicitações", icon: <Clock size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
+  { id: "prorrogacoes", label: "Solicitações", icon: <FileText size={18} />, roles: ["aluno"] },
+  { id: "solicitacoes", label: "Caixa de Entrada", icon: <Inbox size={18} />, roles: ["aluno", "orientador", "coordenacao"] },
   { id: "relatorios", label: "Relatórios", icon: <BarChart3 size={18} />, roles: ["orientador", "coordenacao"] },
   { id: "inferencia", label: "Inferência Acadêmica", icon: <Brain size={18} />, roles: ["orientador", "coordenacao"] },
   { id: "registration-requests", label: "Cadastros Pendentes", icon: <UserCheck size={18} />, roles: ["coordenacao"] },
@@ -155,7 +156,7 @@ function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavig
                       {notificationCount}
                     </span>
                   )}
-                  {item.id === "solicitacoes" && item.badge && item.badge > 0 && (
+                  {item.id === "solicitacoes" && item.badge !== undefined && item.badge > 0 && (
                     <span
                       className="rounded-full flex items-center justify-center"
                       style={{ background: "#e74c3c", color: "#fff", fontSize: "10px", fontWeight: 700, minWidth: 18, height: 18, padding: "0 4px" }}

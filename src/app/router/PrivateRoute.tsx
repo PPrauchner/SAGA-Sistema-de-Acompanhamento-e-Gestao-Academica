@@ -20,6 +20,7 @@ export const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
   inferencia: ["orientador", "coordenacao"],
   auditoria: ["coordenacao"],
   solicitacoes: ["aluno", "orientador", "coordenacao"],
+  prorrogacoes: ["aluno"],
   "registration-requests": ["coordenacao"],
 };
 
