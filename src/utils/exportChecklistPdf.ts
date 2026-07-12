@@ -37,6 +37,18 @@ function formatStatus(value?: string | null): string {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+// O status e a fonte de verdade: a coordenacao pode salvar a data sem aprovar o
+// requisito, e nesse caso o relatorio nao pode declara-lo aprovado (issue #342).
+function academicFactDetail(
+  status: RequisitoStatus,
+  date: string | null | undefined,
+  labels: { cumprido: string; naoCumpridoComData: string; semData: string },
+): string {
+  if (status === "cumprido") return date ? `${labels.cumprido} em ${formatDateTime(date)}` : labels.cumprido;
+  if (date) return `Registrada em ${formatDateTime(date)} - ${labels.naoCumpridoComData}`;
+  return labels.semData;
+}
+
 function buildRequirements(data: ChecklistResponse): RequirementRow[] {
   const r = data.requisitos;
   return [
@@ -76,7 +88,11 @@ function buildRequirements(data: ChecklistResponse): RequirementRow[] {
       nome: "Proficiencia",
       descricao: "Proficiencia em lingua estrangeira",
       status: r.proficiencia.status,
-      atual: r.proficiencia.data_comprovacao ? `Comprovada em ${formatDateTime(r.proficiencia.data_comprovacao)}` : "Nao comprovada",
+      atual: academicFactDetail(r.proficiencia.status, r.proficiencia.data_comprovacao, {
+        cumprido: "Comprovada",
+        naoCumpridoComData: "nao comprovada",
+        semData: "Nao comprovada",
+      }),
       exigido: "Comprovada",
       comprovanteUrl: r.proficiencia.comprovante_url,
     },
@@ -84,7 +100,11 @@ function buildRequirements(data: ChecklistResponse): RequirementRow[] {
       nome: "Qualificacao",
       descricao: "Aprovacao no exame de qualificacao",
       status: r.qualificacao.status,
-      atual: r.qualificacao.data_aprovacao ? `Aprovada em ${formatDateTime(r.qualificacao.data_aprovacao)}` : "Pendente",
+      atual: academicFactDetail(r.qualificacao.status, r.qualificacao.data_aprovacao, {
+        cumprido: "Aprovada",
+        naoCumpridoComData: "nao aprovada",
+        semData: "Pendente",
+      }),
       exigido: "Aprovada",
       comprovanteUrl: r.qualificacao.comprovante_url,
     },
