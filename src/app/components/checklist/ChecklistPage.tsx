@@ -138,7 +138,7 @@ export function ChecklistPage() {
   async function handleSaveProficiencia(): Promise<void> {
     if (!token || !studentId) return;
     if (academicForm.proficienciaComprovada && !academicForm.proficienciaData) {
-      setError("Informe a data da proficiÃªncia.");
+      setError("Informe a data da proficiência.");
       return;
     }
     setSavingAcademicFact("proficiencia");
@@ -151,9 +151,9 @@ export function ChecklistPage() {
         comprovante_url: academicForm.proficienciaComprovanteUrl.trim() || null,
       });
       await reloadChecklist();
-      setFeedback("ProficiÃªncia atualizada.");
+      setFeedback("Proficiência atualizada.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao atualizar proficiÃªncia.");
+      setError(err instanceof Error ? err.message : "Falha ao atualizar proficiência.");
     } finally {
       setSavingAcademicFact(null);
     }
@@ -162,7 +162,7 @@ export function ChecklistPage() {
   async function handleSaveQualificacao(): Promise<void> {
     if (!token || !studentId) return;
     if (!academicForm.qualificacaoData) {
-      setError("Informe a data da qualificaÃ§Ã£o.");
+      setError("Informe a data da qualificação.");
       return;
     }
     setSavingAcademicFact("qualificacao");
@@ -175,9 +175,9 @@ export function ChecklistPage() {
         comprovante_url: academicForm.qualificacaoComprovanteUrl.trim() || null,
       });
       await reloadChecklist();
-      setFeedback("QualificaÃ§Ã£o atualizada.");
+      setFeedback("Qualificação atualizada.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Falha ao atualizar qualificaÃ§Ã£o.");
+      setError(err instanceof Error ? err.message : "Falha ao atualizar qualificação.");
     } finally {
       setSavingAcademicFact(null);
     }
@@ -465,8 +465,8 @@ export function ChecklistPage() {
                                     checked={academicForm.proficienciaComprovada}
                                     date={academicForm.proficienciaData}
                                     comprovanteUrl={academicForm.proficienciaComprovanteUrl}
-                                    checkedLabel="ProficiÃªncia comprovada"
-                                    dateLabel="Data da proficiÃªncia"
+                                    checkedLabel="Proficiência comprovada"
+                                    dateLabel="Data da proficiência"
                                     saving={savingAcademicFact === "proficiencia"}
                                     onCheckedChange={(value) => setAcademicForm((f) => ({ ...f, proficienciaComprovada: value }))}
                                     onDateChange={(value) => setAcademicForm((f) => ({ ...f, proficienciaData: value }))}
@@ -479,8 +479,8 @@ export function ChecklistPage() {
                                     checked={academicForm.qualificacaoAprovada}
                                     date={academicForm.qualificacaoData}
                                     comprovanteUrl={academicForm.qualificacaoComprovanteUrl}
-                                    checkedLabel="QualificaÃ§Ã£o aprovada"
-                                    dateLabel="Data da qualificaÃ§Ã£o"
+                                    checkedLabel="Qualificação aprovada"
+                                    dateLabel="Data da qualificação"
                                     saving={savingAcademicFact === "qualificacao"}
                                     onCheckedChange={(value) => setAcademicForm((f) => ({ ...f, qualificacaoAprovada: value }))}
                                     onDateChange={(value) => setAcademicForm((f) => ({ ...f, qualificacaoData: value }))}

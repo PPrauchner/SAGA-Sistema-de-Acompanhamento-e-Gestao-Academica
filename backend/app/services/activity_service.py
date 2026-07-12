@@ -366,7 +366,7 @@ class ActivityService:
         if missing:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Coautor cadastrado nÃ£o encontrado",
+                detail="Coautor cadastrado não encontrado",
             )
 
         author_id = author_student.get("id")
