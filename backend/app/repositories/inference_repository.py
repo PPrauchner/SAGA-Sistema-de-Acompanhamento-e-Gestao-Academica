@@ -78,14 +78,18 @@ class InferenceRepository:
             "prazo_final": _to_date_str(data.get("prazo_final")),
             "proficiencia_comprovada": bool(data.get("proficiencia_comprovada", False)),
             "proficiencia_data": _to_date_str(data.get("proficiencia_data")),
+            "proficiencia_comprovante_url": data.get("proficiencia_comprovante_url"),
             "qualificacao_aprovada": bool(data.get("qualificacao_aprovada", False)),
             "qualificacao_data": _to_date_str(data.get("qualificacao_data")),
+            "qualificacao_comprovante_url": data.get("qualificacao_comprovante_url"),
         }
 
     async def get_program(self, programa_id: str) -> dict[str, Any] | None:
-        """Lê configuração do programa e normaliza nomes de campos.
+        """Lê a configuração do programa preservando os nomes de campo do Firestore.
 
-        Retorna configuração com defaults se o documento não existir no Firestore. Os pesos
+        As chaves de crédito saem daqui com o mesmo nome que têm em programs/ — renomeá-las
+        aqui faria o InferenceService, que as lê por esse nome, cair silenciosamente nos
+        defaults. Retorna configuração com defaults se o documento não existir. Os pesos
         Qualis não vêm daqui — são versionados e resolvidos por data via
         get_qualis_weights_versions (ADR-0003).
 
@@ -93,7 +97,7 @@ class InferenceRepository:
             programa_id: ID do documento em programs/ (ex: 'prog_default').
 
         Returns:
-            Dict com campos normalizados ao contrato InferenceDataSource.
+            Dict com a configuração consumida pelo InferenceService.
         """
         data = await self._programs.get(programa_id)
         if data is None:
