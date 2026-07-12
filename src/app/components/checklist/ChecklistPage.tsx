@@ -64,6 +64,24 @@ const GROUPS = [
   },
 ];
 
+interface FatoAcademicoLabels {
+  cumprido: string;
+  naoCumpridoComData: string;
+  semData: string;
+}
+
+// O status é a fonte de verdade: a coordenação pode salvar a data sem aprovar o
+// requisito, e nesse caso o card não pode se declarar aprovado (issue #342).
+function fatoAcademicoDetalhe(
+  status: RequisitoStatus,
+  data: string | null | undefined,
+  labels: FatoAcademicoLabels,
+): string {
+  if (status === "cumprido") return data ? `${labels.cumprido} em ${data}` : labels.cumprido;
+  if (data) return `Registrada em ${data} — ${labels.naoCumpridoComData}`;
+  return labels.semData;
+}
+
 function buildRequisitos(data: ChecklistResponse): RequisitoView[] {
   const r = data.requisitos;
   return [
@@ -71,8 +89,8 @@ function buildRequisitos(data: ChecklistResponse): RequisitoView[] {
     { key: "creditos_grupo_basico", label: "Créditos — grupo básico", descricao: r.creditos_grupo_basico.descricao, status: r.creditos_grupo_basico.status, detalhe: `${r.creditos_grupo_basico.obtidos} / ${r.creditos_grupo_basico.minimo} créditos` },
     { key: "creditos_grupo_especifico", label: "Créditos — grupo específico", descricao: r.creditos_grupo_especifico.descricao, status: r.creditos_grupo_especifico.status, detalhe: `${r.creditos_grupo_especifico.obtidos} / ${r.creditos_grupo_especifico.minimo} créditos` },
     { key: "creditos_grupo_tecnologico", label: "Créditos — grupo tecnológico", descricao: r.creditos_grupo_tecnologico.descricao, status: r.creditos_grupo_tecnologico.status, detalhe: `${r.creditos_grupo_tecnologico.obtidos} / máx ${r.creditos_grupo_tecnologico.maximo} créditos` },
-    { key: "proficiencia", label: "Proficiência", descricao: "Proficiência em língua estrangeira", status: r.proficiencia.status, detalhe: r.proficiencia.data_comprovacao ? `Comprovada em ${r.proficiencia.data_comprovacao}` : "Não comprovada" },
-    { key: "qualificacao", label: "Qualificação", descricao: "Aprovação no exame de qualificação", status: r.qualificacao.status, detalhe: r.qualificacao.data_aprovacao ? `Aprovada em ${r.qualificacao.data_aprovacao}` : "Pendente" },
+    { key: "proficiencia", label: "Proficiência", descricao: "Proficiência em língua estrangeira", status: r.proficiencia.status, detalhe: fatoAcademicoDetalhe(r.proficiencia.status, r.proficiencia.data_comprovacao, { cumprido: "Comprovada", naoCumpridoComData: "não comprovada", semData: "Não comprovada" }) },
+    { key: "qualificacao", label: "Qualificação", descricao: "Aprovação no exame de qualificação", status: r.qualificacao.status, detalhe: fatoAcademicoDetalhe(r.qualificacao.status, r.qualificacao.data_aprovacao, { cumprido: "Aprovada", naoCumpridoComData: "não aprovada", semData: "Pendente" }) },
     { key: "producao_validada", label: "Produção bibliográfica", descricao: "Produção bibliográfica validada", status: r.producao_validada.status, detalhe: `${r.producao_validada.quantidade_aprovadas} validada(s)` },
     { key: "plano_concluido", label: "Plano de trabalho", descricao: "Conclusão das etapas (não-defesa)", status: r.plano_concluido.status, detalhe: `${r.plano_concluido.tasks_concluidas}/${r.plano_concluido.tasks_total_nao_defesa} etapas concluídas` },
   ];
