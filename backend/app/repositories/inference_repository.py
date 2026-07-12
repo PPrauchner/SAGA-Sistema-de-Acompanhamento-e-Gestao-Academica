@@ -84,9 +84,11 @@ class InferenceRepository:
         }
 
     async def get_program(self, programa_id: str) -> dict[str, Any] | None:
-        """Lê configuração do programa e normaliza nomes de campos.
+        """Lê a configuração do programa preservando os nomes de campo do Firestore.
 
-        Retorna configuração com defaults se o documento não existir no Firestore. Os pesos
+        As chaves de crédito saem daqui com o mesmo nome que têm em programs/ — renomeá-las
+        aqui faria o InferenceService, que as lê por esse nome, cair silenciosamente nos
+        defaults. Retorna configuração com defaults se o documento não existir. Os pesos
         Qualis não vêm daqui — são versionados e resolvidos por data via
         get_qualis_weights_versions (ADR-0003).
 
@@ -94,25 +96,25 @@ class InferenceRepository:
             programa_id: ID do documento em programs/ (ex: 'prog_default').
 
         Returns:
-            Dict com campos normalizados ao contrato InferenceDataSource.
+            Dict com a configuração consumida pelo InferenceService.
         """
         data = await self._programs.get(programa_id)
         if data is None:
             return {
                 "id": programa_id,
-                "min_creditos_basico": 12,
-                "min_creditos_especifico": 8,
-                "max_creditos_tecnologico": 4,
-                "min_creditos_total": 24,
+                "creditos_grupo_basico_min": 12,
+                "creditos_grupo_especifico_min": 8,
+                "creditos_grupo_tecnologico_max": 4,
+                "creditos_total_min": 24,
                 "max_prorrogacoes": 1,
                 "meses_ate_qualificacao": 12,
             }
         return {
             "id": programa_id,
-            "min_creditos_basico": int(data.get("creditos_grupo_basico_min", 12)),
-            "min_creditos_especifico": int(data.get("creditos_grupo_especifico_min", 8)),
-            "max_creditos_tecnologico": int(data.get("creditos_grupo_tecnologico_max", 4)),
-            "min_creditos_total": int(data.get("creditos_total_min", 24)),
+            "creditos_grupo_basico_min": int(data.get("creditos_grupo_basico_min", 12)),
+            "creditos_grupo_especifico_min": int(data.get("creditos_grupo_especifico_min", 8)),
+            "creditos_grupo_tecnologico_max": int(data.get("creditos_grupo_tecnologico_max", 4)),
+            "creditos_total_min": int(data.get("creditos_total_min", 24)),
             "max_prorrogacoes": int(data.get("max_prorrogacoes", 1)),
             "meses_ate_qualificacao": int(data.get("meses_ate_qualificacao", 12)),
         }
