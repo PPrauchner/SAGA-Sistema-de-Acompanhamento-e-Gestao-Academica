@@ -1,9 +1,11 @@
 """
-Testes de InferenceRepository.get_approved_activities — mapeamento de
-students/{id}/activities/ + activity_types/ ao contrato do motor (RL02).
+Testes de InferenceRepository — mapeamento das coleções do Firestore ao contrato do motor.
 
-Corrige o stub que sempre retornava [] (issue #306): a re-execução do motor após
-qualquer mudança em atividades (aprovação, exclusão) agora reflete créditos reais.
+- get_approved_activities: students/{id}/activities/ + activity_types/ (RL02). Corrige o stub
+  que sempre retornava [] (issue #306): a re-execução do motor após qualquer mudança em
+  atividades (aprovação, exclusão) agora reflete créditos reais.
+- get_student: normalização do documento do aluno, incluindo as URLs de comprovante de
+  proficiência e qualificação consumidas pelo checklist (issue #343).
 """
 
 from __future__ import annotations
@@ -20,7 +22,31 @@ def repo() -> InferenceRepository:
     instance = InferenceRepository()
     instance._activities = AsyncMock()
     instance._activity_types = AsyncMock()
+    instance._students = AsyncMock()
     return instance
+
+
+async def test_get_student_devolve_comprovantes_registrados(repo: InferenceRepository) -> None:
+    repo._students.get.return_value = {
+        "nome": "Aluna",
+        "programa_id": "prog1",
+        "proficiencia_comprovante_url": "https://x/prof.pdf",
+        "qualificacao_comprovante_url": "https://x/qual.pdf",
+    }
+
+    student = await repo.get_student("s1")
+
+    assert student["proficiencia_comprovante_url"] == "https://x/prof.pdf"
+    assert student["qualificacao_comprovante_url"] == "https://x/qual.pdf"
+
+
+async def test_get_student_comprovantes_none_quando_ausentes(repo: InferenceRepository) -> None:
+    repo._students.get.return_value = {"nome": "Aluno", "programa_id": "prog1"}
+
+    student = await repo.get_student("s1")
+
+    assert student["proficiencia_comprovante_url"] is None
+    assert student["qualificacao_comprovante_url"] is None
 
 
 async def test_mapeia_atividade_aprovada_com_creditos_gerados(repo: InferenceRepository) -> None:
