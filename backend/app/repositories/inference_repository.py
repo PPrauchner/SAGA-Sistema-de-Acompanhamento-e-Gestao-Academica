@@ -77,8 +77,10 @@ class InferenceRepository:
             "prazo_final": _to_date_str(data.get("prazo_final")),
             "proficiencia_comprovada": bool(data.get("proficiencia_comprovada", False)),
             "proficiencia_data": _to_date_str(data.get("proficiencia_data")),
+            "proficiencia_comprovante_url": data.get("proficiencia_comprovante_url"),
             "qualificacao_aprovada": bool(data.get("qualificacao_aprovada", False)),
             "qualificacao_data": _to_date_str(data.get("qualificacao_data")),
+            "qualificacao_comprovante_url": data.get("qualificacao_comprovante_url"),
         }
 
     async def get_program(self, programa_id: str) -> dict[str, Any] | None:
