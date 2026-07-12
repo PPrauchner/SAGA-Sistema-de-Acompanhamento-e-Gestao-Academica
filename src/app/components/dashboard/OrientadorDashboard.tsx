@@ -6,6 +6,7 @@ import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidat
 import { useNotifications } from "@/hooks/useNotifications";
 import { useOrientadorUpdates } from "@/hooks/useOrientadorUpdates";
 import { useOrientandos, type OrientandoView, type StudentStatus } from "@/hooks/useOrientandos";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
 import {
   AlertTriangle, X, Calendar, ChevronRight,
@@ -91,6 +92,7 @@ function Avt({ init, size = 36, color = "#123C7A" }: { init: string; size?: numb
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 
 function StudentModal({ student: s, onClose }: { student: Student; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   const sc = ST[s.status];
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-4"
@@ -192,6 +194,7 @@ function StudentModal({ student: s, onClose }: { student: Student; onClose: () =
 }
 
 function QuickActionModal({ type, onClose, students }: { type: Exclude<QA, null>; onClose: () => void; students: Student[] }) {
+  useEscapeClose(true, onClose);
   const [done, setDone] = useState(false);
   const names = students.map((s) => s.name);
 
@@ -781,6 +784,7 @@ function ReviewDetailRow({ label, children }: { label: string; children: ReactNo
 // Modal read-only de detalhes de um item da fila de verificação (#264). Fechar apenas
 // fecha — nenhuma mutação na solicitação.
 function ReviewDetailModal({ item, onClose }: { item: ValidationQueueItem; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   const tc = REVIEW_TIPO_CFG[item.tipo];
   return (
     <div

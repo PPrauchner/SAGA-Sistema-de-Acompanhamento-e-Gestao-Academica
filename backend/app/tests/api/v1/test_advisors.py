@@ -35,6 +35,16 @@ class _FakeAdvisorRepository:
         self.store.setdefault(advisor_id, {}).update(data)
 
 
+class _FakeDepartmentRepository:
+    """Fake de DepartmentRepository: nome fixo, devolvido para qualquer programa_id."""
+
+    def __init__(self, nome: str | None = "Computacao") -> None:
+        self.nome = nome
+
+    async def get_nome_by_programa(self, programa_id: str | None) -> str | None:
+        return self.nome if programa_id is not None else None
+
+
 def _coord() -> CurrentUser:
     return CurrentUser(uid="coord1", role="coordenacao", programa_id="prog", email="coord@saga.edu")
 
@@ -55,10 +65,13 @@ def _legacy_advisor() -> dict[str, Any]:
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     original_advisors = advisors_router.service._advisors
+    original_departments = advisors_router.service._departments
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
+    advisors_router.service._departments = _FakeDepartmentRepository()
     app.dependency_overrides[get_current_user] = _coord
     yield TestClient(app)
     advisors_router.service._advisors = original_advisors
+    advisors_router.service._departments = original_departments
     app.dependency_overrides.clear()
 
 

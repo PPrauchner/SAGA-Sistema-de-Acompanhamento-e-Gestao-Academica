@@ -30,6 +30,8 @@ export interface Student {
   proficiencia_data?: string | null;
   qualificacao_comprovante_url?: string | null;
   proficiencia_comprovante_url?: string | null;
+  // Percentual (0-100) de tasks concluídas do plano de trabalho, calculado no backend.
+  progresso_plano?: number;
 }
 
 export interface StudentCreatePayload {

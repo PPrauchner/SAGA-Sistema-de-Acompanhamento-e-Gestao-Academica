@@ -67,6 +67,7 @@ erDiagram
     users ||--o| students : "é aluno"
     users ||--o| advisors : "é orientador"
     advisors ||--o{ students : orienta
+    departments ||--o{ programs : sedia
     programs ||--o{ vehicle_levels : classifica
     vehicles ||--o| vehicle_levels : "tem nível"
     students ||--o{ work_plan : possui
@@ -121,7 +122,6 @@ erDiagram
     advisors {
         string id PK
         string uid FK
-        string departamento
         int limite_orientandos
     }
     programs {
@@ -215,12 +215,12 @@ a **divergência entre as duas é sinal de atenção**.
 |-------|------|-----|-------|
 | `uid` | string | →`users.uid` | |
 | `nome` / `email` | string | | |
-| `departamento` | string | | |
 | `lattes` | string\|null | | |
 | `programa_id` | string | →`programs` (soft) | |
 | `limite_orientandos` | int | | default 5 |
 | `criado_em` / `atualizado_em` | timestamp | | |
 | `orientandos_ativos` | int | `calc` | computado em leitura (contagem de `students` por `orientador_id`) |
+| `departamento` | string\|null | `calc` | **não persistido** — derivado em leitura de `programa_id` → `programs.departamento_id` → `departments.nome` ([ADR-0004](./adr/0004-departamento-como-pai-estrutural-do-programa.md), issue #249). `users` (perfil do orientador em `GET /auth/me`) expõe o mesmo campo, derivado da mesma forma. |
 
 ### `transfer_requests` - colecao raiz - chave: `auto-id`
 
@@ -300,22 +300,41 @@ com aceite obrigatorio do sucessor. Nao gera A03 porque nao altera historico de 
 > o documento `advisors/` e reutilizado/criado com id estavel, e tokens podem ser revogados
 > novamente sem alterar o resultado final.
 
-### `programs` 🔲 — chave: `prog_default` (singleton de configuração)
+### `departments` ✅ — **coleção raiz** — chave: `auto-id` ([ADR-0004](./adr/0004-departamento-como-pai-estrutural-do-programa.md))
 
-Guarda os **fatos de configuração do motor**. `vehicle_levels` é sub-coleção (ver subdomínio 3).
+Entidade **global à instituição** (sem `programa_id`): sedia um ou mais `programs`. CRUD
+exclusivo do papel `adm` — demais papéis recebem 403. Um departamento com programa(s)
+vinculado(s) não pode ser excluído.
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| `nome` / `instituicao` | string | |
-| `duracao_meses` | int | default 24 |
-| `creditos_grupo_basico_min` | int | default 12 |
-| `creditos_grupo_especifico_min` | int | default 8 |
-| `creditos_grupo_tecnologico_max` | int | default 4 |
-| `creditos_total_min` | int | default 24 |
-| `max_prorrogacoes` | int | default 1 |
-| `duracao_prorrogacao_meses` | int | default 6 |
-| `meses_ate_qualificacao` | int | default 12 |
+| `nome` | string | |
+| `instituicao` | string\|null | |
 | `criado_em` / `atualizado_em` | timestamp | |
+
+### `programs` ✅ — chave: `auto-id` (`prog_default` é o registro seed/dev)
+
+Guarda os **fatos de configuração do motor**. `vehicle_levels` é sub-coleção (ver subdomínio 3).
+`POST /api/v1/programs` (criação) é restrito a `adm`, mesmo nível hierárquico da criação de
+departamentos; `PUT /api/v1/programs/config` (edição operacional) segue restrito a `coordenacao`.
+
+| Campo | Tipo | Ref | Notas |
+|-------|------|-----|-------|
+| `nome` / `instituicao` | string | | |
+| `departamento_id` | string | →`departments` | **obrigatório na criação** (ADR-0004); imutável via `PUT /config` |
+| `duracao_meses` | int | | default 24 |
+| `creditos_grupo_basico_min` | int | | default 12 |
+| `creditos_grupo_especifico_min` | int | | default 8 |
+| `creditos_grupo_tecnologico_max` | int | | default 4 |
+| `creditos_total_min` | int | | default 24 |
+| `max_prorrogacoes` | int | | default 1 |
+| `duracao_prorrogacao_meses` | int | | default 6 |
+| `meses_ate_qualificacao` | int | | default 12 |
+| `criado_em` / `atualizado_em` | timestamp | | |
+
+> Programas criados antes do ADR-0004 (hoje, só `prog_default`) foram migrados via
+> `backend/scripts/migrate_departamento_default.py`, que aponta todo `programs/` sem
+> `departamento_id` para um Departamento default (`dept_default`, semeado idempotentemente).
 
 ---
 

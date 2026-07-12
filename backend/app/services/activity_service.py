@@ -8,6 +8,7 @@ Serviço de negócio para atividades creditáveis.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from datetime import date, datetime, timezone
@@ -281,34 +282,43 @@ class ActivityService:
         status_filter: str | None = None,
         categoria: str | None = None,
     ) -> list[dict]:
-        visible_ids = await self._visible_student_ids(user, student_id)
-        types_map = {item["id"]: item for item in await self._types.list_all()}
-        student_by_id = {item["id"]: item for item in await self._students.list_all()}
-        advisor_name_by_id = {
-            item["id"]: item.get("nome", "") for item in await self._advisors.list_all()
-        }
+        # Quatro leituras independentes em paralelo; a lista agregada substitui o loop
+        # N×list_by_student e o list_all duplicado de students (issue #319).
+        students_list, types_list, advisors_list, all_activities = await asyncio.gather(
+            self._students.list_all(),
+            self._types.list_all(),
+            self._advisors.list_all(),
+            self._activities.list_all_grouped(),
+        )
+        visible_ids = set(
+            self._filter_visible_ids(user, student_id, students_list, advisors_list)
+        )
+        types_map = {item["id"]: item for item in types_list}
+        student_by_id = {item["id"]: item for item in students_list}
+        advisor_name_by_id = {item["id"]: item.get("nome", "") for item in advisors_list}
 
         result: list[dict] = []
-        for sid in visible_ids:
+        for activity in all_activities:
+            sid = activity.get("student_id")
+            if sid not in visible_ids:
+                continue
+            tipo = types_map.get(activity.get("tipo_id"), {})
+            activity_categoria = tipo.get("categoria")
+            if status_filter is not None and activity.get("status") != status_filter:
+                continue
+            if categoria is not None and activity_categoria != categoria:
+                continue
             student = student_by_id.get(sid, {})
-            orientador_nome = advisor_name_by_id.get(student.get("orientador_id"))
-            for activity in await self._activities.list_by_student(sid):
-                tipo = types_map.get(activity.get("tipo_id"), {})
-                activity_categoria = tipo.get("categoria")
-                if status_filter is not None and activity.get("status") != status_filter:
-                    continue
-                if categoria is not None and activity_categoria != categoria:
-                    continue
-                result.append(
-                    {
-                        **activity,
-                        "student_id": sid,
-                        "aluno_nome": student.get("nome", ""),
-                        "orientador_nome": orientador_nome,
-                        "tipo_nome": tipo.get("nome"),
-                        "categoria": activity_categoria,
-                    }
-                )
+            result.append(
+                {
+                    **activity,
+                    "student_id": sid,
+                    "aluno_nome": student.get("nome", ""),
+                    "orientador_nome": advisor_name_by_id.get(student.get("orientador_id")),
+                    "tipo_nome": tipo.get("nome"),
+                    "categoria": activity_categoria,
+                }
+            )
         return result
 
     # -- helpers ------------------------------------------------------------------------
@@ -382,19 +392,31 @@ class ActivityService:
         advisor = await self._advisors.get(orientador_id)
         return advisor.get("uid") if advisor else None
 
-    async def _advisor_id_for_user(self, user: CurrentUser) -> str | None:
-        advisors = await self._advisors.list_all()
-        advisor = next((item for item in advisors if item.get("uid") == _uid(user)), None)
-        return advisor["id"] if advisor else None
+    @staticmethod
+    def _filter_visible_ids(
+        user: CurrentUser,
+        student_id: str | None,
+        students: list[dict],
+        advisors: list[dict],
+    ) -> list[str]:
+        """Resolve os ids de alunos visíveis ao usuário sobre listas já carregadas.
 
-    async def _visible_student_ids(self, user: CurrentUser, student_id: str | None) -> list[str]:
-        students = await self._students.list_all()
+        Args:
+            user: Usuário autenticado (aluno vê a si; orientador, seus orientandos;
+                demais papéis, todos).
+            student_id: Filtro opcional para restringir a um único aluno.
+            students: Documentos de students/ já lidos.
+            advisors: Documentos de advisors/ já lidos.
 
+        Returns:
+            Lista de ids de alunos cujas atividades o usuário pode ver.
+        """
         if user.role == "aluno":
             own = next((item for item in students if item.get("uid") == _uid(user)), None)
             ids = [own["id"]] if own else []
         elif user.role == "orientador":
-            advisor_id = await self._advisor_id_for_user(user)
+            advisor = next((item for item in advisors if item.get("uid") == _uid(user)), None)
+            advisor_id = advisor["id"] if advisor else None
             ids = [
                 item["id"]
                 for item in students
@@ -521,6 +543,76 @@ async def emitir_parecer_orientador(
         },
     )
     return ActivityResponse(**updated)
+
+
+async def delete_activity(activity_id: str, current_user: CurrentUser) -> None:
+    """Exclui (hard delete) uma atividade em rascunho/enviado/rejeitado/aprovado.
+
+    Propriedade (aluno dono ou coordenação) já é garantida pelo A01 no router.
+    Aqui só as regras de negócio que dependem do estado da atividade:
+    - `rejeitado` só pode ser excluída pela coordenação (não pelo aluno dono).
+    - `aprovado` só pode ser excluída pela coordenação (issue #306); ao excluir, os
+      créditos concedidos são revertidos e o motor de inferência re-executa para o
+      aluno — a exclusão do documento já retira a atividade da agregação de créditos
+      (RL02), então a "reversão" é o efeito natural de excluir + re-inferir.
+    - Atividade lastreada em produção (`producao_id`) é bloqueada — a remoção se
+      dá excluindo a produção, não a atividade.
+
+    Args:
+        activity_id: ID da atividade a excluir.
+        current_user: Usuário autenticado (aluno dono ou coordenação).
+
+    Raises:
+        HTTPException: 404 se a atividade não existir; 409 se o status não permitir
+            exclusão ou a atividade for lastreada em produção; 403 se um aluno tentar
+            excluir atividade rejeitada/aprovada.
+    """
+    activity = await _repo.get_by_id(activity_id)
+    if not activity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Atividade não encontrada.")
+
+    if activity.get("producao_id"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Atividade lastreada em produção não pode ser excluída por esta rota.",
+        )
+
+    activity_status = activity.get("status")
+    if activity_status not in (
+        ActivityStatus.rascunho,
+        ActivityStatus.enviado,
+        ActivityStatus.rejeitado,
+        ActivityStatus.aprovado,
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Atividade com status '{activity_status}' não pode ser excluída.",
+        )
+
+    if (
+        activity_status in (ActivityStatus.rejeitado, ActivityStatus.aprovado)
+        and current_user.role != "coordenacao"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Apenas a coordenação pode excluir atividade {activity_status}.",
+        )
+
+    student_id = activity.get("student_id")
+    await _repo.delete_by_id(activity_id)
+
+    if activity_status == ActivityStatus.aprovado and student_id:
+        try:
+            student = await _student_repo.get(student_id)
+            programa_id = student.get("programa_id", "") if student else ""
+            inference_svc = InferenceService(InferenceRepository())
+            await inference_svc.run_inference(student_id, programa_id)
+            logger.info(
+                "[#306] Motor reexecutado para aluno %s após exclusão da atividade aprovada %s",
+                student_id, activity_id,
+            )
+        except Exception as exc:
+            logger.error("[#306] Falha ao reexecutar motor após exclusão de atividade aprovada: %s", exc)
 
 
 async def validate_activity(

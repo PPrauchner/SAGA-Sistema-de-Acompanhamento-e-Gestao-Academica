@@ -40,6 +40,7 @@ from backend.app.models.user import (
     NotificationPreferences,
     UserResponse,
 )
+from backend.app.repositories.department_repository import DepartmentRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
 logger = logging.getLogger(__name__)
@@ -110,11 +111,13 @@ class AuthService:
         user_repo: FirebaseRepository | None = None,
         auth_client: Any | None = None,
         email_sender: EmailSender | None = None,
+        department_repo: DepartmentRepository | None = None,
     ) -> None:
         self._invites = invite_repo or FirebaseRepository("invites")
         self._users = user_repo or FirebaseRepository("users")
         self._auth = auth_client if auth_client is not None else get_auth_client()
         self._email = email_sender if email_sender is not None else get_email_sender()
+        self._departments = department_repo or DepartmentRepository()
 
     async def create_invite(
         self,
@@ -346,6 +349,8 @@ class AuthService:
                 detail="Perfil de usuário não encontrado",
             )
 
+        departamento = await self._departments.get_nome_by_programa(doc["programa_id"])
+
         return UserResponse(
             uid=doc["uid"],
             email=doc["email"],
@@ -356,6 +361,7 @@ class AuthService:
             notification_preferences=doc.get("notification_preferences", {}),
             student_id=doc.get("student_id"),
             advisor_id=doc.get("advisor_id"),
+            departamento=departamento,
         )
 
     async def _email_ja_tem_conta(self, email: str) -> bool:

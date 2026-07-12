@@ -20,6 +20,8 @@ const DEEP_LINK_PAGE: Partial<Record<RequestItem["tipo"], PageId>> = {
 const TYPE_LABELS: Record<string, string> = {
   atividade: "Validação de atividade",
   prorrogacao: "Prorrogação",
+  prazo_defesa: "Prorrogação de Prazo de Defesa",
+  prazo_qualificacao: "Prorrogação de Qualificação",
   trancamento: "Trancamento de Matrícula",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",
@@ -51,10 +53,12 @@ export function RequestsPage() {
   const [filterPeriodo, setFilterPeriodo] = useState<string>("");
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
-  const loadData = async () => {
+  // background=true refaz o fetch sem acionar o estado de loading — evita desmontar a
+  // página inteira ("Carregando…") ao despachar uma solicitação (issue #325).
+  const loadData = async (background = false) => {
     if (!token) return;
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const data = await requestsApi.getRequests(token);
       setRequests(data);
     } catch (err) {
@@ -85,7 +89,7 @@ export function RequestsPage() {
       }
       setRejectingReq(null);
       setRejectMotivo("");
-      await loadData();
+      await loadData(true);
     } catch (err) {
       alert("Erro ao rejeitar: " + (err instanceof Error ? err.message : String(err)));
       setLoading(false);
@@ -98,9 +102,8 @@ export function RequestsPage() {
       setRejectingReq(req);
       return;
     }
-    
+
     try {
-      setLoading(true);
       if (req.tipo === "transferencia") {
         await approveTransferRequest(token, req.id);
       } else if (req.tipo === "prorrogacao" || req.tipo === "trancamento") {
@@ -108,7 +111,7 @@ export function RequestsPage() {
       } else if (req.tipo === "transferencia_coordenacao") {
         alert("Aprovação não implementada diretamente aqui.");
       }
-      await loadData();
+      await loadData(true);
     } catch (err) {
       alert("Erro na ação: " + (err instanceof Error ? err.message : String(err)));
       setLoading(false);

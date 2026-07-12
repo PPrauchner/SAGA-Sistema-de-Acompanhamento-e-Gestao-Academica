@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { useAlunoDashboard } from "@/hooks/useDashboard";
 import { useNotifications, type Notification as ApiNotification } from "@/hooks/useNotifications";
 import { useAuth } from "@/hooks/useAuth";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 import { getChecklist, type ChecklistResponse, type RequisitoStatus } from "@/api/checklistApi";
 import { getWorkPlan, type WorkPlan, type StageStatus } from "@/api/workPlanApi";
 import { ApiError } from "@/api/http";
@@ -289,6 +290,7 @@ function MHead({ title, onClose, bg, color }: { title: string; onClose: () => vo
 }
 
 function Modal({ data, onClose }: { data: ModalData; onClose: () => void }) {
+  useEscapeClose(true, onClose);
   if (!data) return null;
 
   const renderBody = () => {

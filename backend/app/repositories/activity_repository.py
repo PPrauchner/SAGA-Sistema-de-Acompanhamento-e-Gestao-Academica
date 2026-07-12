@@ -48,6 +48,28 @@ class ActivityRepository(FirebaseRepository):
     async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
         return await self.list_subcollection(student_id, "activities")
 
+    async def list_all_grouped(self) -> list[dict[str, Any]]:
+        """Lista as atividades de todos os alunos em uma única consulta.
+
+        Um único stream de collection_group("activities") substitui os loops
+        N×list_by_student dos services (padrão N+1 — issue #319). O student_id
+        de cada atividade é extraído do path do documento.
+
+        Returns:
+            Lista de atividades com 'id' e 'student_id' injetados.
+        """
+
+        def _list() -> list[dict[str, Any]]:
+            result: list[dict[str, Any]] = []
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                item = snapshot.to_dict() or {}
+                item["id"] = snapshot.id
+                item["student_id"] = snapshot.reference.parent.parent.id
+                result.append(item)
+            return result
+
+        return await asyncio.to_thread(_list)
+
     # -- usado pelos fluxos de validação (PATCH /parecer e /validate), que só têm --
     # activity_id na URL: localiza o documento via collection_group, sem o student_id.
     # O scan roda em thread separada (asyncio.to_thread) para não bloquear o event loop.
@@ -77,6 +99,22 @@ class ActivityRepository(FirebaseRepository):
             raise ValueError(f"Atividade {activity_id} não encontrada.")
 
         return await asyncio.to_thread(_update)
+
+    async def delete_by_id(self, activity_id: str) -> None:
+        """Exclui (hard delete) a atividade localizada por collection_group scan.
+
+        Usado pelo DELETE /activities/{activity_id} (issue #305), que só tem o
+        activity_id na URL — igual padrão de get_by_id/update_by_id.
+        """
+
+        def _delete() -> None:
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                if snapshot.id == activity_id:
+                    snapshot.reference.delete()
+                    return
+            raise ValueError(f"Atividade {activity_id} não encontrada.")
+
+        await asyncio.to_thread(_delete)
 
     async def update_group_comprovante(
         self,

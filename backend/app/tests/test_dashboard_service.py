@@ -437,7 +437,7 @@ async def test_orientador_dashboard_returns_basic_data():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -450,7 +450,7 @@ async def test_orientador_dashboard_returns_basic_data():
 
     MockAdvR.return_value.get.assert_called_once_with("adv_001")
     MockSR.return_value.list_all.assert_called_once()
-    assert MockAR.return_value.list_by_student.call_count == 2
+    MockAR.return_value.list_all_grouped.assert_called_once()
 
 
 
@@ -480,7 +480,7 @@ async def test_orientador_dashboard_counts_by_status():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -506,9 +506,11 @@ async def test_orientador_dashboard_counts_pending_activities():
         _make_student({"id": "s1", "orientador_id": "adv_001"}),
     ]
     activities = [
-        {"id": "a1", "status": "enviado"},
-        {"id": "a2", "status": "enviado"},
-        {"id": "a3", "status": "aprovado"},
+        {"id": "a1", "status": "enviado", "student_id": "s1"},
+        {"id": "a2", "status": "enviado", "student_id": "s1"},
+        {"id": "a3", "status": "aprovado", "student_id": "s1"},
+        # Atividade de aluno de outro orientador não deve contar.
+        {"id": "a4", "status": "enviado", "student_id": "s_outro"},
     ]
 
     with (
@@ -520,7 +522,7 @@ async def test_orientador_dashboard_counts_pending_activities():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=activities)
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -528,7 +530,7 @@ async def test_orientador_dashboard_counts_pending_activities():
 
     assert result.atividades_aguardando_parecer == 2
     MockAdvR.return_value.get.assert_called_once_with("adv_001")
-    MockAR.return_value.list_by_student.assert_called_once_with("s1")
+    MockAR.return_value.list_all_grouped.assert_called_once()
 
 
 
@@ -576,8 +578,9 @@ async def test_coord_dashboard_returns_basic_totals():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -590,7 +593,7 @@ async def test_coord_dashboard_returns_basic_totals():
     assert result.alunos_por_status.em_risco == 1
 
     MockSR.return_value.list_all.assert_called_once()
-    assert MockAR.return_value.list_by_student.call_count == 3
+    MockAR.return_value.list_all_grouped.assert_called_once()
 
 
 
@@ -612,8 +615,9 @@ async def test_coord_dashboard_tempo_medio_none_when_no_completed():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -633,13 +637,12 @@ async def test_coord_dashboard_counts_global_pending_activities():
         _make_student({"id": "s2"}),
     ]
 
-    call_count = 0
-    async def mock_list_by_student(student_id: str) -> list[dict]:
-        nonlocal call_count
-        call_count += 1
-        if student_id == "s1":
-            return [{"id": "a1", "status": "enviado"}, {"id": "a2", "status": "aprovado"}]
-        return [{"id": "a3", "status": "enviado"}, {"id": "a4", "status": "enviado"}]
+    activities = [
+        {"id": "a1", "status": "enviado", "student_id": "s1"},
+        {"id": "a2", "status": "aprovado", "student_id": "s1"},
+        {"id": "a3", "status": "enviado", "student_id": "s2"},
+        {"id": "a4", "status": "enviado", "student_id": "s2"},
+    ]
 
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
@@ -650,8 +653,9 @@ async def test_coord_dashboard_counts_global_pending_activities():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(side_effect=mock_list_by_student)
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=activities)
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -682,8 +686,9 @@ async def test_coord_dashboard_includes_recent_audit():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=[])
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
-        MockFBR.return_value.list_all = AsyncMock(return_value=audit_logs)
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=audit_logs)
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -691,6 +696,9 @@ async def test_coord_dashboard_includes_recent_audit():
 
     assert len(result.auditoria_recente) == 2
     assert result.auditoria_recente[0].operacao == "update_student"  # mais recente primeiro
+    MockFBR.return_value.query.assert_called_once_with(
+        order_by="timestamp", descending=True, limit=5
+    )
 
 
 # ─── Cycle 14: total concluidos ──────────────────────────────────────────────
@@ -715,8 +723,9 @@ async def test_coord_dashboard_counts_total_concluidos():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -742,8 +751,9 @@ async def test_coord_dashboard_counts_total_concluidos_zero():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -774,8 +784,9 @@ async def test_coord_dashboard_counts_total_alunos_vs_ativos():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -873,7 +884,7 @@ async def test_orientador_dashboard_shows_orientando_progress():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(side_effect=mock_get_all_tasks)
 
         service = DashboardService()

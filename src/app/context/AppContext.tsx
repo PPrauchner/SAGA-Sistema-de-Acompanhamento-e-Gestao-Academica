@@ -3,7 +3,7 @@ import React, { createContext, useContext, useEffect, useLayoutEffect, useState,
 import { useAuth } from "@/hooks/useAuth";
 import { useNotifications } from "@/hooks/useNotifications";
 
-export type UserRole = "aluno" | "orientador" | "coordenacao";
+export type UserRole = "aluno" | "orientador" | "coordenacao" | "adm";
 export type ActiveView = "aluno" | "orientador" | "coordenador";
 export type FontSizePreference = "small" | "normal" | "large";
 export interface NotificationPreferences {
@@ -17,9 +17,9 @@ export interface NotificationPreferences {
 
 const FONT_SIZE_STORAGE_KEY = "saga:fontSizePreference";
 const FONT_SIZE_SCALES: Record<FontSizePreference, string> = {
-  small: "0.94",
+  small: "0.875",
   normal: "1",
-  large: "1.08",
+  large: "1.125",
 };
 
 function isFontSizePreference(value: string | null): value is FontSizePreference {
@@ -64,7 +64,8 @@ export type PageId =
   | "inferencia"
   | "auditoria"
   | "notificacoes"
-  | "configuracoes";
+  | "configuracoes"
+  | "departamentos";
 
 export interface User {
   id: string;

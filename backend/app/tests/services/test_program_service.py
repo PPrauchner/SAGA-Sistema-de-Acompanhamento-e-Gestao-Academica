@@ -18,11 +18,22 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from backend.app.services.program_service import ProgramService
-from backend.app.models.program_config import ProgramConfigUpdate
+from backend.app.models.program_config import ProgramConfigCreate, ProgramConfigUpdate
 
 
 VALID_CONFIG = {
     "id": "prog_default",
+    "creditos_grupo_basico_min": 8,
+    "creditos_grupo_especifico_min": 4,
+    "creditos_grupo_tecnologico_max": 4,
+    "creditos_total_min": 12,
+    "max_prorrogacoes": 1,
+    "duracao_prorrogacao_meses": 6,
+    "meses_ate_qualificacao": 24,
+}
+
+VALID_CREATE_FIELDS = {
+    "departamento_id": "dept1",
     "creditos_grupo_basico_min": 8,
     "creditos_grupo_especifico_min": 4,
     "creditos_grupo_tecnologico_max": 4,
@@ -40,9 +51,15 @@ def mock_repo():
 
 
 @pytest.fixture
-def service(mock_repo):
-    """Fixture para ProgramService com repositório mockado."""
-    return ProgramService(repository=mock_repo)
+def mock_department_repo():
+    """Fixture para DepartmentRepository mockado."""
+    return AsyncMock()
+
+
+@pytest.fixture
+def service(mock_repo, mock_department_repo):
+    """Fixture para ProgramService com repositórios mockados."""
+    return ProgramService(repository=mock_repo, department_repository=mock_department_repo)
 
 
 @pytest.mark.parametrize(
@@ -135,3 +152,39 @@ async def test_update_config_rejeita_invariante_usando_config_atual(service, moc
         await service.update_config("prog_default", update_data)
 
     mock_repo.update_config.assert_not_called()
+
+
+def test_program_config_create_rejeita_sem_departamento_id():
+    fields = {k: v for k, v in VALID_CREATE_FIELDS.items() if k != "departamento_id"}
+    with pytest.raises(ValidationError):
+        ProgramConfigCreate(**fields)
+
+
+def test_program_config_create_rejeita_departamento_id_vazio():
+    with pytest.raises(ValidationError):
+        ProgramConfigCreate(**{**VALID_CREATE_FIELDS, "departamento_id": ""})
+
+
+@pytest.mark.anyio
+async def test_create_program_rejeita_departamento_inexistente(service, mock_repo, mock_department_repo):
+    mock_department_repo.get.return_value = None
+
+    with pytest.raises(HTTPException) as exc:
+        await service.create_program(ProgramConfigCreate(**VALID_CREATE_FIELDS))
+
+    assert exc.value.status_code == 404
+    mock_repo.create.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_create_program_cria_quando_departamento_existe(service, mock_repo, mock_department_repo):
+    mock_department_repo.get.return_value = {"id": "dept1", "nome": "Computação"}
+    mock_repo.create.return_value = "prog1"
+
+    result = await service.create_program(ProgramConfigCreate(**VALID_CREATE_FIELDS))
+
+    assert result["id"] == "prog1"
+    assert result["departamento_id"] == "dept1"
+    assert "criado_em" in result and "atualizado_em" in result
+    mock_department_repo.get.assert_called_once_with("dept1")
+    mock_repo.create.assert_called_once()

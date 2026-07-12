@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Plus, ExternalLink, BookOpen, FileText, X, Check } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 import { validateReasonableDate } from "@/lib/dateValidation";
 import {
   getProductions,
@@ -75,6 +76,9 @@ export function ProductionsPage() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+
+  // ESC fecha o formulario de registro de producao (issue #316).
+  useEscapeClose(showForm, () => setShowForm(false));
   const [dateError, setDateError] = useState<string | null>(null);
 
   const [filterTipo, setFilterTipo] = useState("todos");

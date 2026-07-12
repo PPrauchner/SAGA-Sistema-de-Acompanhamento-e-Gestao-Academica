@@ -252,7 +252,12 @@ def test_work_plan_mutations_require_orientador_role(fake_db) -> None:
     assert response.status_code == 403
 
 
-def test_work_plan_mutations_block_coordenacao_without_advisor_ownership(fake_db) -> None:
+def test_work_plan_mutations_bloqueiam_coordenacao_sem_vinculo_de_orientacao(fake_db) -> None:
+    """Coordenação sem vínculo de orientação com o aluno é read-only (issue #248) —
+    ver backend/app/aspects/ownership.py e test_work_plan_ownership.py. "aluno_coord"
+    é orientado por "advisor_orientador" (uid="orientador"), não pela coordenação
+    autenticada aqui, então a edição deve ser negada mesmo com o papel coordenacao.
+    """
     response = _client("coordenacao").post(
         "/api/v1/work-plan/aluno_coord",
         json={

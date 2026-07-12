@@ -2,8 +2,9 @@
 Implementação de InferenceDataSource com dados reais do Firestore.
 
 Responsabilidades:
-- Costurar as coleções students/ e programs/ para fornecer os dados que o InferenceService
-  consome, mapeando nomes de campos do Firestore ao contrato InferenceDataSource.
+- Costurar as coleções students/, programs/ e students/{id}/activities/ para fornecer os
+  dados que o InferenceService consome, mapeando nomes de campos do Firestore ao contrato
+  InferenceDataSource.
 - Converter Timestamps Firestore para strings ISO 'YYYY-MM-DD'.
 - Carregar atividades aprovadas (juntando activity_types para grupo/tipo_ativo), tasks do
   plano (via WorkPlanRepository) e produções aprovadas do aluno, normalizando cada uma ao

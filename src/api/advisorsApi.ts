@@ -5,7 +5,8 @@ export interface Advisor {
   uid?: string | null;
   nome: string;
   email: string;
-  departamento: string;
+  // Derivado no backend de programa_id -> departments (ADR-0004) — somente leitura.
+  departamento: string | null;
   programa_id: string;
   lattes?: string | null;
   limite_orientandos: number;
@@ -16,7 +17,6 @@ export interface AdvisorCreatePayload {
   uid?: string | null;
   nome: string;
   email: string;
-  departamento: string;
   lattes?: string | null;
   programa_id: string;
   limite_orientandos: number;

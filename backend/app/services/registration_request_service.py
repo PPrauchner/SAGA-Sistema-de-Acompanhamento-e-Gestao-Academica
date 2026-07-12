@@ -113,6 +113,11 @@ class RegistrationRequestService:
 
     async def list_pending(self, user: CurrentUser) -> list[dict[str, Any]]:
         requests = await self._repo.list_pending_by_program(user.programa_id)
+        # Ordenação em memória: a query usa só igualdades para não exigir índice composto.
+        requests.sort(
+            key=lambda request: request.get("created_at")
+            or datetime.min.replace(tzinfo=timezone.utc)
+        )
         advisors = {advisor["id"]: advisor for advisor in await self._advisors.list_all()}
 
         return [

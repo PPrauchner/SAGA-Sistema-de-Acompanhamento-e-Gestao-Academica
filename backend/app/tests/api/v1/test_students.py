@@ -36,6 +36,16 @@ class _FakeStudentRepository:
         ]
 
 
+class _FakeWorkPlanRepository:
+    """Fake sem tasks: progresso_plano calculado é 0.0 para todos os alunos."""
+
+    async def list_all_tasks_grouped(self) -> list[dict[str, Any]]:
+        return []
+
+    async def get_all_tasks_for_student(self, student_id: str) -> list[dict[str, Any]]:
+        return []
+
+
 class _FakeStudentService:
     def __init__(self) -> None:
         self.user: CurrentUser | None = None
@@ -80,10 +90,13 @@ def _legacy_student() -> dict[str, Any]:
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     original_students = students_router.service._students
+    original_work_plan = students_router.service._work_plan
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
+    students_router.service._work_plan = _FakeWorkPlanRepository()
     app.dependency_overrides[get_current_user] = _coord
     yield TestClient(app)
     students_router.service._students = original_students
+    students_router.service._work_plan = original_work_plan
     app.dependency_overrides.clear()
 
 
@@ -114,6 +127,7 @@ def test_get_students_response_model_normaliza_documento_legado(client: TestClie
             "proficiencia_data": None,
             "qualificacao_comprovante_url": None,
             "proficiencia_comprovante_url": None,
+            "progresso_plano": 0.0,
         },
     ]
 

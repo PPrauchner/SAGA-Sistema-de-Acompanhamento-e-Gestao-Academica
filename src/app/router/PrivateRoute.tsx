@@ -22,6 +22,7 @@ export const PAGE_ROLES: Partial<Record<PageId, UserRole[]>> = {
   solicitacoes: ["aluno", "orientador", "coordenacao"],
   prorrogacoes: ["aluno"],
   "registration-requests": ["coordenacao"],
+  departamentos: ["adm"],
 };
 
 export function isAuthPage(page: PageId): boolean {
@@ -30,6 +31,13 @@ export function isAuthPage(page: PageId): boolean {
 
 export function getAllowedRoles(page: PageId): UserRole[] {
   return PAGE_ROLES[page] ?? ALL_ROLES;
+}
+
+// "adm" não tem dashboard (ADR-0001, issue #336): sem esta exceção, o fallback
+// hardcoded "dashboard" abaixo cairia num redirect-loop, já que "dashboard" não
+// está em PAGE_ROLES e herda o fallback ALL_ROLES (que não inclui "adm").
+export function getDefaultPageForRole(role: UserRole | null): PageId {
+  return role === "adm" ? "departamentos" : "dashboard";
 }
 
 interface RouteGuardState {
@@ -66,10 +74,10 @@ export function getPrivateRouteRedirect({
   }
 
   if (onAuthPage) {
-    return "dashboard";
+    return getDefaultPageForRole(role);
   }
 
-  return role && getAllowedRoles(currentPage).includes(role) ? null : "dashboard";
+  return role && getAllowedRoles(currentPage).includes(role) ? null : getDefaultPageForRole(role);
 }
 
 interface PrivateRouteProps {

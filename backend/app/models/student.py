@@ -99,6 +99,10 @@ class StudentResponse(BaseModel):
     qualificacao_comprovante_url: str | None = None
     proficiencia_comprovante_url: str | None = None
 
+    # calc: percentual de tasks concluídas do plano de trabalho (0-100), computado
+    # em leitura pelo StudentService — não é persistido em students/ (issue #317).
+    progresso_plano: float = 0.0
+
 
 class CoauthorCandidate(BaseModel):
     uid: str

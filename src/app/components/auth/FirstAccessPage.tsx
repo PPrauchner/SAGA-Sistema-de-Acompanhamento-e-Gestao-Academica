@@ -25,6 +25,9 @@ const ROLES_META: Record<UserRole, { label: string; desc: string; icon: React.Re
   aluno: { label: "Aluno(a)", desc: "Visualize e atue como aluno do programa", icon: <GraduationCap size={14} />, color: "#D4A017", bg: "#fef9c3" },
   orientador: { label: "Orientador(a)", desc: "Acompanhe e oriente seus alunos", icon: <UserCheck size={14} />, color: "#1F8A70", bg: "#dcfce7" },
   coordenacao: { label: "Coordenação", desc: "Administre o programa completo", icon: <Shield size={14} />, color: "#123C7A", bg: "#eef3fc" },
+  // adm nunca chega neste fluxo — não é criado por convite (ADR-0001). Entrada
+  // só para satisfazer o Record<UserRole, ...> exaustivo.
+  adm: { label: "Administrador(a)", desc: "Superusuário global do sistema", icon: <Shield size={14} />, color: "#123C7A", bg: "#eef3fc" },
 };
 
 const NOTIF_OPTIONS = [

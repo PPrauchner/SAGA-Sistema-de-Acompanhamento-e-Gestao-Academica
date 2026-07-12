@@ -4,8 +4,9 @@ Router FastAPI para gestão de usuários privilegiados.
 Responsabilidades:
 - POST /api/v1/users/coordenadores: adm cria um coordenador diretamente.
   Protegido por @requires_role('adm') — coordenacao e demais papéis recebem 403.
-- PUT /api/v1/users/profile: usuário autenticado edita o próprio perfil (nome
-  e, para orientador, departamento). Auditado por A02 e versionado por A03.
+- PUT /api/v1/users/profile: usuário autenticado edita o próprio nome. Auditado
+  por A02 e versionado por A03. `departamento` não é mais editável — é derivado
+  de `programa_id` (ADR-0004 / issue #249).
 
 Referência: issues #162 (US-PA05), #195; docs/specs/04_autenticacao.json.
 """

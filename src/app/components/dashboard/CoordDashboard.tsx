@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useCoordDashboard } from "@/hooks/useDashboard";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 import { useAuth } from "@/hooks/useAuth";
 import {
   getStudentsByAdvisor, getCompletionTime, getProductionsReport,
@@ -249,6 +250,7 @@ interface ReportModalData {
 }
 
 function ReportModal({ type, onClose, statusData, advisorData, completionData, productionsData }: { type: ReportType; onClose: () => void; statusData: StatusDataProp[] } & ReportModalData) {
+  useEscapeClose(true, onClose);
   if (!type) return null;
 
   const advisorList = advisorData ? advisorRows(advisorData) : [];

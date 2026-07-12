@@ -12,6 +12,7 @@ import {
   Award,
   MessageSquare,
   Send,
+  Trash2,
 } from "lucide-react";
 
 import { useApp } from "../../context/AppContext";
@@ -21,6 +22,7 @@ import { validateReasonableDate } from "@/lib/dateValidation";
 import {
   createActivity,
   createActivityForOrientando,
+  deleteActivity,
   emitirParecer,
   getActivities,
   getActivityTypes,
@@ -122,6 +124,9 @@ export function ActivitiesPage() {
   const [validateCreditos, setValidateCreditos] = useState("");
   const [validateSaving, setValidateSaving] = useState(false);
 
+  const [deleteTarget, setDeleteTarget] = useState<Activity | null>(null);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
   const canRegister = role === "aluno";
   const canCreateForOrientando = role === "orientador";
   const canCreate = canRegister || canCreateForOrientando;
@@ -132,8 +137,10 @@ export function ActivitiesPage() {
   // checklist/plano de trabalho). Para o aluno, o hook retorna students=null.
   const { students } = useChecklistStudent();
 
-  async function loadData(authToken: string): Promise<void> {
-    setLoading(true);
+  // background=true refaz o fetch sem acionar o estado de loading — evita desmontar a
+  // lista ("Carregando…") ao validar uma atividade (issue #325).
+  async function loadData(authToken: string, background = false): Promise<void> {
+    if (!background) setLoading(true);
     setError(null);
     try {
       const [activityList, typeList, coauthors] = await Promise.all([
@@ -345,9 +352,10 @@ export function ActivitiesPage() {
     try {
       const creditos =
         acao === "aprovar" && validateCreditos.trim() !== "" ? Number(validateCreditos) : null;
+      const observacao = validateObs.trim() || null;
       const result = await validarAtividade(token, activity.id, {
         acao,
-        observacao: validateObs.trim() || null,
+        observacao,
         creditos_concedidos: creditos,
       });
       const label = acao === "aprovar" ? "aprovada" : "rejeitada";
@@ -356,14 +364,53 @@ export function ActivitiesPage() {
           ? `Atividade ${label}. O motor reavaliou a situação do aluno.`
           : `Atividade ${label}.`,
       );
+      // Reflete o resultado imediatamente: status autoritativo da resposta e observação
+      // como o backend a gravou (null limpa o campo). O refetch em background atualiza os
+      // campos derivados das demais linhas (ex.: elegivel/RL04) sem desmontar a lista.
+      setActivities((prev) =>
+        prev.map((item) =>
+          item.id === activity.id
+            ? { ...item, status: result.novo_status, observacao_coordenacao: observacao }
+            : item,
+        ),
+      );
       setValidateTarget(null);
       setValidateObs("");
       setValidateCreditos("");
-      await loadData(token);
+      await loadData(token, true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao validar atividade");
     } finally {
       setValidateSaving(false);
+    }
+  }
+
+  function canDelete(activity: Activity): boolean {
+    if (activity.producao_id) return false;
+    if (role === "coordenacao") {
+      return ["rascunho", "enviado", "rejeitado", "aprovado"].includes(activity.status);
+    }
+    if (role === "aluno") {
+      return ["rascunho", "enviado"].includes(activity.status);
+    }
+    return false;
+  }
+
+  async function handleDelete(activity: Activity): Promise<void> {
+    if (!token) return;
+
+    setDeleteSaving(true);
+    setError(null);
+    setFeedback(null);
+    try {
+      await deleteActivity(token, activity.id);
+      setFeedback("Atividade excluída.");
+      setDeleteTarget(null);
+      setActivities((prev) => prev.filter((item) => item.id !== activity.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao excluir atividade");
+    } finally {
+      setDeleteSaving(false);
     }
   }
 
@@ -825,6 +872,48 @@ export function ActivitiesPage() {
                     >
                       <CheckCircle2 size={13} />
                       Validar atividade
+                    </button>
+                  )
+                )}
+
+                {canDelete(activity) && (
+                  deleteTarget?.id === activity.id ? (
+                    <div className="flex items-center justify-between gap-2 mt-3">
+                      <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                        {activity.status === "aprovado"
+                          ? "Excluir? Os créditos serão revertidos."
+                          : "Excluir esta atividade?"}
+                      </span>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(null)}
+                          className="rounded-lg px-3 py-1.5"
+                          style={{ border: "1px solid var(--border)", color: "var(--muted-foreground)", fontSize: "12px", fontWeight: 600 }}
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(activity)}
+                          disabled={deleteSaving}
+                          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5"
+                          style={{ background: "#dc2626", color: "#fff", fontSize: "12px", fontWeight: 600, opacity: deleteSaving ? 0.6 : 1 }}
+                        >
+                          <Trash2 size={12} />
+                          {deleteSaving ? "Excluindo…" : "Confirmar"}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setDeleteTarget(activity)}
+                      className="flex items-center gap-1.5 mt-3"
+                      style={{ fontSize: "12px", color: "#dc2626", fontWeight: 600 }}
+                    >
+                      <Trash2 size={13} />
+                      Excluir
                     </button>
                   )
                 )}
