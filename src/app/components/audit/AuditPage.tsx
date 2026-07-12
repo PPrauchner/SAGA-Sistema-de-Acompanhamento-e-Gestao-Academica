@@ -35,8 +35,8 @@ function formatTimestamp(value?: string | null): string {
 
 function StatusBadge({ status }: { status: AuditLog["resultado_status"] }) {
   const erro = status === "erro";
-  const color = erro ? "#dc2626" : "#1F8A70";
-  const bg = erro ? "#fee2e2" : "#dcfce7";
+  const color = erro ? "var(--tint-danger-text)" : "var(--tint-teal-text)";
+  const bg = erro ? "var(--tint-danger-bg)" : "var(--tint-teal-bg)";
   return (
     <span
       className="flex items-center gap-1 px-2 py-0.5 rounded-lg"
@@ -238,7 +238,7 @@ export function AuditPage() {
       {error && (
         <div
           className="rounded-xl px-4 py-3 mb-4"
-          style={{ background: "#fee2e2", color: "#dc2626", fontSize: "13px" }}
+          style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: "13px" }}
         >
           {error}
         </div>
@@ -292,7 +292,7 @@ export function AuditPage() {
                     {log.recurso ?? log.modulo ?? "—"}
                   </p>
                   {log.resultado_status === "erro" && log.erro_mensagem && (
-                    <p style={{ fontSize: "11px", color: "#dc2626", marginTop: "2px" }}>{log.erro_mensagem}</p>
+                    <p style={{ fontSize: "11px", color: "var(--tint-danger-text)", marginTop: "2px" }}>{log.erro_mensagem}</p>
                   )}
                   {(log.usuario_nome ?? log.usuario_id) && (
                     <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>
