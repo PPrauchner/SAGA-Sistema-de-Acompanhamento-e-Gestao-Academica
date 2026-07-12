@@ -63,6 +63,18 @@ class _FakeExtensionRepository:
         self.created = data
         return "ext_new"
 
+    async def get(self, extension_id: str) -> dict[str, Any] | None:
+        return next(
+            (dict(item) for item in self.extensions if item["id"] == extension_id),
+            None,
+        )
+
+    async def update(self, extension_id: str, data: dict[str, Any]) -> bool:
+        for item in self.extensions:
+            if item["id"] == extension_id:
+                item.update(data)
+        return True
+
 
 class _PendingExtensionRepository(_FakeExtensionRepository):
     async def has_pending_for_student(self, student_id: str) -> bool:
@@ -70,6 +82,9 @@ class _PendingExtensionRepository(_FakeExtensionRepository):
 
 
 class _FakeStudentRepository:
+    def __init__(self) -> None:
+        self.updates: dict[str, dict[str, Any]] = {}
+
     async def list_all(self) -> list[dict[str, Any]]:
         return [
             {
@@ -99,6 +114,16 @@ class _FakeStudentRepository:
             if student.get("programa_id") == programa_id
         ]
 
+    async def get(self, student_id: str) -> dict[str, Any] | None:
+        return next(
+            (dict(student) for student in await self.list_all() if student["id"] == student_id),
+            None,
+        )
+
+    async def update(self, student_id: str, data: dict[str, Any]) -> bool:
+        self.updates[student_id] = {**self.updates.get(student_id, {}), **data}
+        return True
+
 
 class _MixedExtensionRepository(_FakeExtensionRepository):
     """Inclui uma prorrogação aprovada e uma de outro programa, para testar o filtro."""
@@ -127,6 +152,24 @@ class _MixedExtensionRepository(_FakeExtensionRepository):
         ]
 
 
+class _TrancamentoSemDataRepository(_FakeExtensionRepository):
+    """Trancamento pendente sem `nova_data` (permitido pelo modelo)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.extensions = [
+            {
+                "id": "ext_tranc",
+                "student_id": "student1",
+                "tipo": "trancamento",
+                "status": "pendente",
+                "motivo": "Licenca medica",
+                "nova_data": None,
+                "programa_id": "prog",
+            }
+        ]
+
+
 class _FakeAdvisorRepository:
     async def list_all(self) -> list[dict[str, Any]]:
         return [
@@ -147,6 +190,17 @@ def _service(repo: _FakeExtensionRepository | None = None) -> ExtensionService:
     return ExtensionService(
         repo=repo or _FakeExtensionRepository(),
         student_repo=_FakeStudentRepository(),
+        advisor_repo=_FakeAdvisorRepository(),
+    )
+
+
+def _service_with(
+    repo: _FakeExtensionRepository,
+    student_repo: _FakeStudentRepository,
+) -> ExtensionService:
+    return ExtensionService(
+        repo=repo,
+        student_repo=student_repo,
         advisor_repo=_FakeAdvisorRepository(),
     )
 
@@ -265,3 +319,111 @@ def test_extension_request_rejeita_tipo_invalido() -> None:
 def test_extension_request_exige_tipo() -> None:
     with pytest.raises(ValidationError):
         ExtensionCreateRequest(nova_data=date(2028, 7, 1), motivo="Ajuste")
+
+
+@pytest.mark.asyncio
+async def test_approve_extension_recalcula_prazo_do_aluno() -> None:
+    repo = _FakeExtensionRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.approve_extension("ext1", _user("coordenacao", "uid-coord"))
+
+    assert result["status"] == "aprovada"
+    assert student_repo.updates["student1"]["prazo_final"] == date(2028, 7, 1)
+    assert repo.extensions[0]["aprovado_por"] == "uid-coord"
+
+
+@pytest.mark.asyncio
+async def test_approve_prorrogacao_move_situacao_para_em_prorrogacao() -> None:
+    repo = _FakeExtensionRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.approve_extension("ext1", _user("coordenacao", "uid-coord"))
+
+    # Prorrogação aprovada move o aluno para "Em Prorrogação" (CONTEXT.md → Prorrogação).
+    assert student_repo.updates["student1"]["situacao_registrada"] == "em_prorrogacao"
+    assert result["situacao_registrada"] == "em_prorrogacao"
+
+
+@pytest.mark.asyncio
+async def test_approve_trancamento_nao_muda_situacao() -> None:
+    repo = _TrancamentoSemDataRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.approve_extension(
+        "ext_tranc", _user("coordenacao", "uid-coord")
+    )
+
+    # Trancamento não dispara a transição de "Em Prorrogação".
+    assert "student1" not in student_repo.updates
+    assert result["situacao_registrada"] is None
+
+
+@pytest.mark.asyncio
+async def test_approve_trancamento_sem_data_preserva_prazo() -> None:
+    repo = _TrancamentoSemDataRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.approve_extension(
+        "ext_tranc", _user("coordenacao", "uid-coord")
+    )
+
+    assert result["status"] == "aprovada"
+    # Sem nova_data, a aprovacao nao pode sobrescrever (zerar) o prazo_final do aluno.
+    assert "student1" not in student_repo.updates
+
+
+@pytest.mark.asyncio
+async def test_approve_extension_bloqueia_nao_pendente() -> None:
+    repo = _FakeExtensionRepository()
+    repo.extensions[0]["status"] = "aprovada"
+    service = _service_with(repo, _FakeStudentRepository())
+
+    with pytest.raises(HTTPException) as exc:
+        await service.approve_extension("ext1", _user("coordenacao", "uid-coord"))
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_approve_extension_bloqueia_outro_programa() -> None:
+    repo = _FakeExtensionRepository()
+    service = _service_with(repo, _FakeStudentRepository())
+    outro_programa = CurrentUser(
+        uid="uid-coord2", role="coordenacao", programa_id="prog_outro", email="c2@saga.test"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await service.approve_extension("ext1", outro_programa)
+
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_reject_extension_exige_motivo() -> None:
+    repo = _FakeExtensionRepository()
+    service = _service_with(repo, _FakeStudentRepository())
+
+    with pytest.raises(HTTPException) as exc:
+        await service.reject_extension("ext1", "  ", _user("coordenacao", "uid-coord"))
+
+    assert exc.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_reject_extension_marca_rejeitada_sem_alterar_prazo() -> None:
+    repo = _FakeExtensionRepository()
+    student_repo = _FakeStudentRepository()
+    service = _service_with(repo, student_repo)
+
+    result = await service.reject_extension(
+        "ext1", "Sem justificativa suficiente", _user("coordenacao", "uid-coord")
+    )
+
+    assert result["status"] == "rejeitada"
+    assert repo.extensions[0]["motivo_rejeicao"] == "Sem justificativa suficiente"
+    assert "student1" not in student_repo.updates

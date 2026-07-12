@@ -4,7 +4,9 @@ Serviço de gestão de usuários privilegiados.
 Responsabilidades:
 - create_coordinator: adm cria um coordenador diretamente (sem fluxo de
   convite), definindo e-mail, senha, nome e programa no Firebase Auth e
-  Firestore. Rejeita e-mail que já possui conta ativa (409).
+  Firestore. Rejeita e-mail que já possui conta ativa (409). Provisiona o
+  documento advisors/ do novo coordenador (issue #309), já que coordenação é
+  superset de orientador (ADR-0002).
 - update_profile: usuário autenticado edita o próprio perfil (apenas `nome`;
   `departamento` não é mais editável aqui — é derivado de `programa_id`,
   ADR-0004 / issue #249). Remove o campo telefone do documento se existir.
@@ -30,7 +32,9 @@ from backend.app.models.user import (
     ProfileUpdateRequest,
     ProfileUpdateResponse,
 )
+from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.services.advisor_service import AdvisorService
 
 
 class UserService:
@@ -45,9 +49,13 @@ class UserService:
         self,
         user_repo: FirebaseRepository | None = None,
         auth_client: Any | None = None,
+        advisor_repo: FirebaseRepository | None = None,
+        advisor_service: AdvisorService | None = None,
     ) -> None:
         self._users = user_repo or FirebaseRepository("users")
         self._auth = auth_client if auth_client is not None else get_auth_client()
+        self._advisors = advisor_repo or AdvisorRepository()
+        self._advisor_service = advisor_service or AdvisorService(advisor_repo=self._advisors)
 
     async def create_coordinator(
         self, data: CreateCoordinatorRequest
@@ -87,6 +95,16 @@ class UserService:
             "primeiro_acesso_completo": True,
             "criado_em": agora,
             "atualizado_em": agora,
+        })
+
+        # Coordenação é superset de orientador (ADR-0002): provisiona o doc advisors/ já
+        # na atribuição do papel, para que apareça no dropdown de orientador (issue #309)
+        # sem exigir backfill numa rota de leitura.
+        await self._advisor_service.ensure_advisor_for_coordenacao({
+            "uid": uid,
+            "nome": data.nome,
+            "email": data.email,
+            "programa_id": data.programa_id,
         })
 
         return CreateCoordinatorResponse(

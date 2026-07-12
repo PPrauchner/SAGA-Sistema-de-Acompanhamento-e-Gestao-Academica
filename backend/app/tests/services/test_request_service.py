@@ -106,6 +106,48 @@ async def test_get_requests_orientador(request_service):
 
 
 @pytest.mark.asyncio
+async def test_get_requests_origem_por_tipo(request_service):
+    """Cada RequestItem carrega a origem correta (Solicitacao, CONTEXT.md):
+
+    - formulario: prorrogacao (inclui prazo_defesa/prazo_qualificacao, issue #298),
+      trancamento, transferencia (de orientando)
+    - agregado: atividade (inclui producao), transferencia_coordenacao
+    """
+    user = CurrentUser(uid="uid_coord", email="coord@test.com", role="coordenacao", programa_id="prog_1")
+
+    request_service._students.list_all = AsyncMock(return_value=[
+        {"id": "stu_1", "programa_id": "prog_1", "nome": "Aluno 1"}
+    ])
+    request_service._advisors.get = AsyncMock(return_value={"nome": "Orientador"})
+    request_service._users.list_all = AsyncMock(return_value=[])
+    request_service._users.get = AsyncMock(return_value={"nome": "Sucessor"})
+
+    request_service._activities.list_all_grouped = AsyncMock(return_value=[
+        {"id": "act_1", "status": "enviado", "parecer_orientador": "Aprovado", "student_id": "stu_1"}
+    ])
+    # Uma prorrogacao de prazo e um trancamento, ambos aguardando a coordenacao.
+    request_service._extensions.list_all = AsyncMock(return_value=[
+        {"id": "ext_1", "tipo": "prazo_defesa", "status": "pendente", "student_id": "stu_1", "parecer_orientador": "Ok"},
+        {"id": "ext_2", "tipo": "trancamento", "status": "pendente", "student_id": "stu_1", "parecer_orientador": "Ok"},
+    ])
+    request_service._transfers.list_by_program = AsyncMock(return_value=[
+        {"id": "tr_1", "status": "pendente", "student_id": "stu_1", "solicitante_id": "adv_x"}
+    ])
+    request_service._coord_transfers.list_by_program = AsyncMock(return_value=[
+        {"id": "ct_1", "status": "pendente", "initiator_uid": "uid_coord", "successor_uid": "uid_outro"}
+    ])
+
+    requests = await request_service.get_requests(user)
+    origem_by_tipo = {r.tipo: r.origem for r in requests}
+
+    assert origem_by_tipo["atividade"] == "agregado"
+    assert origem_by_tipo["prazo_defesa"] == "formulario"
+    assert origem_by_tipo["trancamento"] == "formulario"
+    assert origem_by_tipo["transferencia"] == "formulario"
+    assert origem_by_tipo["transferencia_coordenacao"] == "agregado"
+
+
+@pytest.mark.asyncio
 async def test_get_requests_coordenacao(request_service):
     user = CurrentUser(
         uid="uid_coord",

@@ -6,9 +6,9 @@ Responsabilidades:
   dados que o InferenceService consome, mapeando nomes de campos do Firestore ao contrato
   InferenceDataSource.
 - Converter Timestamps Firestore para strings ISO 'YYYY-MM-DD'.
-- Retornar [] para tasks enquanto WorkPlanRepository não estiver implementado — o motor
-  opera normalmente, só o fato de plano concluído fica sempre falso. Quando esse
-  repositório for implementado, basta delegar para ele em get_plan_tasks.
+- Carregar atividades aprovadas (juntando activity_types para grupo/tipo_ativo), tasks do
+  plano (via WorkPlanRepository) e produções aprovadas do aluno, normalizando cada uma ao
+  contrato InferenceDataSource consumido pelo InferenceService.
 
 Restrição: sem lógica de negócio — apenas leitura e mapeamento de campos.
 """
@@ -25,6 +25,7 @@ from backend.app.repositories.production_repository import ProductionRepository
 from backend.app.repositories.qualis_weights_repository import QualisWeightsRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.vehicle_repository import VehicleRepository
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
 
 
 def _to_date_str(value: Any) -> str | None:
@@ -41,9 +42,8 @@ def _to_date_str(value: Any) -> str | None:
 class InferenceRepository:
     """Fonte de dados real do Firestore que implementa o contrato InferenceDataSource.
 
-    get_plan_tasks depende do WorkPlanRepository, ainda não implementado, e retorna [] —
-    o motor opera normalmente, só o fato de plano concluído fica sempre falso. Quando esse
-    repositório for implementado, basta delegar para ele.
+    Costura students/, programs/, activities/, activity_types/, o plano de trabalho e as
+    produções raiz, normalizando cada coleção aos campos que o InferenceService espera.
     """
 
     def __init__(self) -> None:
@@ -54,6 +54,7 @@ class InferenceRepository:
         self._activity_types = ActivityTypeRepository()
         self._vehicles = VehicleRepository()
         self._qualis_weights = QualisWeightsRepository()
+        self._work_plan = WorkPlanRepository()
 
     async def get_student(self, student_id: str) -> dict[str, Any] | None:
         """Lê o aluno do Firestore e normaliza campos para o contrato InferenceDataSource.
@@ -127,12 +128,12 @@ class InferenceRepository:
         return await self._qualis_weights.list_versions(programa_id)
 
     async def get_approved_activities(self, student_id: str) -> list[dict[str, Any]]:
-        """Retorna as atividades aprovadas do aluno, normalizadas ao contrato do motor (RL02).
+        """Retorna as atividades aprovadas do aluno normalizadas ao contrato de inferência.
 
-        `grupo` (categoria: basico/especifico/tecnologico) e `tipo_ativo` vêm de
-        activity_types/{tipo_id}, não da própria atividade. `creditos` segue a mesma
-        precedência do override da coordenação usada no resto do backend:
-        `creditos_concedidos` quando definido, senão `creditos_gerados`.
+        Lê a sub-coleção students/{id}/activities/, filtra por status='aprovado' e junta cada
+        atividade ao seu activity_type para derivar o grupo (categoria) e se o tipo está ativo.
+        Créditos seguem o override da coordenação: creditos_concedidos quando presente, senão
+        creditos_gerados (mesma regra de ActivityService._approved_credits_in_category).
 
         Args:
             student_id: ID do documento em students/.
@@ -141,13 +142,13 @@ class InferenceRepository:
             Lista de dicts com id, grupo, creditos, comprovante, tipo_ativo e data.
         """
         activities = await self._activities.list_by_student(student_id)
-        types = {tipo["id"]: tipo for tipo in await self._activity_types.list_all()}
+        types_by_id = {item["id"]: item for item in await self._activity_types.list_all()}
 
         result: list[dict[str, Any]] = []
         for activity in activities:
             if activity.get("status") != "aprovado":
                 continue
-            tipo = types.get(activity.get("tipo_id"), {})
+            tipo = types_by_id.get(activity.get("tipo_id"), {})
             creditos = activity.get("creditos_concedidos")
             if creditos is None:
                 creditos = activity.get("creditos_gerados", 0)
@@ -155,8 +156,8 @@ class InferenceRepository:
                 {
                     "id": activity["id"],
                     "grupo": tipo.get("categoria"),
-                    "creditos": creditos,
-                    "comprovante": activity.get("comprovante_url") or "",
+                    "creditos": float(creditos),
+                    "comprovante": activity.get("comprovante_url"),
                     "tipo_ativo": bool(tipo.get("ativo", False)),
                     "data": _to_date_str(activity.get("data_realizacao")),
                 }
@@ -164,8 +165,8 @@ class InferenceRepository:
         return result
 
     async def get_plan_tasks(self, student_id: str) -> list[dict[str, Any]]:
-        """Retorna [] até WorkPlanRepository.get_all_tasks_for_student estar implementado."""
-        return []
+        """Retorna as tasks do plano do aluno (id, is_defesa, concluida) para a inferência."""
+        return await self._work_plan.get_plan_tasks(student_id)
 
     async def get_approved_productions(self, student_id: str) -> list[dict[str, Any]]:
         """Retorna as produções aprovadas do aluno com nível do veículo e pontuação base.
@@ -205,6 +206,9 @@ class InferenceRepository:
                     "veiculo_id": veiculo_id,
                     "nivel": nivel_by_vehicle.get(veiculo_id),
                     "pontuacao_base": production.get("pontuacao_base", 0),
+                    # Todo documento em productions/ é bibliográfico por definição do domínio
+                    # (RL01 depende do fato producao_bibliografica_validada).
+                    "bibliografica": True,
                     # Resolução de peso por data (ADR-0003): a data de publicação é a
                     # data_realizacao da atividade; status_publicacao distingue publicado
                     # (peso travado na data) de submetido/aceito (peso vigente atual).

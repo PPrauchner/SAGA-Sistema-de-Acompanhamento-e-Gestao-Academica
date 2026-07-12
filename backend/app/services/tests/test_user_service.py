@@ -93,8 +93,22 @@ class _FakeAuth:
 
 
 def _service(auth: _FakeAuth | None = None) -> tuple[UserService, _FakeRepo]:
+    service, users, _ = _service_with_advisors(auth)
+    return service, users
+
+
+def _service_with_advisors(
+    auth: _FakeAuth | None = None,
+) -> tuple[UserService, _FakeRepo, _FakeRepo]:
+    """UserService com repositórios fakes, incluindo o de advisors (issue #309)."""
     users = _FakeRepo()
-    return UserService(user_repo=users, auth_client=auth or _FakeAuth()), users
+    advisors = _FakeRepo()
+    service = UserService(
+        user_repo=users,
+        auth_client=auth or _FakeAuth(),
+        advisor_repo=advisors,
+    )
+    return service, users, advisors
 
 
 def _req(**kwargs: Any) -> CreateCoordinatorRequest:
@@ -126,6 +140,19 @@ async def test_create_coordinator_persiste_usuario() -> None:
     assert doc["notification_preferences"] == NotificationPreferences().model_dump()
     assert doc["primeiro_acesso_completo"] is True
     assert auth.claims[resp.uid] == {"role": "coordenacao", "programa_id": "prog_default"}
+
+
+async def test_create_coordinator_provisiona_advisor() -> None:
+    """Issue #309/M5: o advisor do coordenador nasce na atribuição do papel,
+    não como side-effect de GET /advisors."""
+    service, _, advisors = _service_with_advisors()
+
+    resp = await service.create_coordinator(_req())
+
+    advisor = advisors.store[resp.uid]
+    assert advisor["uid"] == resp.uid
+    assert advisor["programa_id"] == "prog_default"
+    assert advisor["limite_orientandos"] == 5
 
 
 async def test_create_coordinator_email_existente_409() -> None:

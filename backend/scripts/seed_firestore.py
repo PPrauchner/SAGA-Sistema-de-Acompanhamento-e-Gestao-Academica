@@ -18,6 +18,10 @@ Responsabilidades:
   pontuacao_base=10), Artigo Submetido (específico, 5), Disciplina Cursada (básico, 4),
   Estágio Docência (básico, 2), Software Registrado (tecnológico, 3, limite=4),
   Participação Banca (básico, 1).
+- Provisionar advisors/ para coordenadores pré-existentes (issue #309): coordenação é
+  superset de orientador (ADR-0002) e precisa de um doc em advisors/ para aparecer no
+  dropdown de orientador. Coordenadores novos são provisionados na atribuição do papel,
+  de modo que GET /advisors permaneça uma rota de leitura pura.
 - Executar uma única vez no setup do ambiente de desenvolvimento ou produção.
 - Idempotente: verificar existência de documentos antes de criar para evitar duplicatas.
 """
@@ -40,9 +44,13 @@ from backend.app.models.work_plan import STATUS_CONCLUIDO  # noqa: E402
 from backend.app.repositories.firebase_repository import (
     FirebaseRepository,
 )  # noqa: E402
+from backend.app.repositories.advisor_repository import (
+    AdvisorRepository,
+)  # noqa: E402
 from backend.app.repositories.work_plan_repository import (
     WorkPlanRepository,
 )  # noqa: E402
+from backend.app.services.advisor_service import AdvisorService  # noqa: E402
 
 PROGRAM_ID = "prog_default"
 DEPARTMENT_ID = "dept_default"
@@ -222,6 +230,36 @@ async def _create_if_missing(
     return True
 
 
+async def _backfill_coordinator_advisors() -> int:
+    """Provisiona advisors/ para coordenadores pré-existentes (issue #309).
+
+    Coordenação é superset de orientador (ADR-0002), então todo `coordenacao` precisa de
+    um doc em advisors/ para aparecer no dropdown de orientador. Coordenadores criados a
+    partir de agora são provisionados na atribuição do papel (UserService.create_coordinator
+    e CoordinationTransferService.accept_transfer); este passo cobre os anteriores, para que
+    a rota de leitura GET /advisors nunca precise escrever.
+
+    Returns:
+        Quantidade de documentos advisors/ criados.
+    """
+    users = FirebaseRepository("users")
+    advisors = AdvisorRepository()
+    advisor_service = AdvisorService(advisor_repo=advisors)
+
+    coordinators = await users.query(filters=[("role", "==", "coordenacao")])
+    created = 0
+    for coordinator in coordinators:
+        coordinator.setdefault("uid", coordinator["id"])
+        # `adm` é global (programa_id nulo) e não orienta; só coordenação de um programa.
+        if not coordinator.get("programa_id"):
+            continue
+        if await advisors.get(coordinator["uid"]) is not None:
+            continue
+        await advisor_service.ensure_advisor_for_coordenacao(coordinator)
+        created += 1
+    return created
+
+
 async def seed_firestore() -> dict[str, int]:
     now = datetime.now(timezone.utc)
     departments = FirebaseRepository("departments")
@@ -237,6 +275,7 @@ async def seed_firestore() -> dict[str, int]:
         "qualis_weights": 0,
         "activity_types": 0,
         "work_plans": 0,
+        "coordinator_advisors": 0,
     }
 
     if await _create_if_missing(
@@ -283,6 +322,7 @@ async def seed_firestore() -> dict[str, int]:
             created["activity_types"] += 1
 
     created["work_plans"] += await _seed_example_work_plan(now)
+    created["coordinator_advisors"] += await _backfill_coordinator_advisors()
 
     return created
 
@@ -300,6 +340,7 @@ def main() -> None:
     print(f"qualis_weights criados: {created['qualis_weights']}")
     print(f"activity_types criados: {created['activity_types']}")
     print(f"work_plans criados: {created['work_plans']}")
+    print(f"advisors de coordenadores criados: {created['coordinator_advisors']}")
 
 
 if __name__ == "__main__":

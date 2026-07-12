@@ -72,7 +72,7 @@ async def test_creditos_concedidos_tem_precedencia_sobre_gerados(repo: Inference
     result = await repo.get_approved_activities("s1")
 
     assert result[0]["creditos"] == 2.5
-    assert result[0]["comprovante"] == ""
+    assert result[0]["comprovante"] is None
 
 
 async def test_ignora_atividades_nao_aprovadas(repo: InferenceRepository) -> None:

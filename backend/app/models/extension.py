@@ -28,6 +28,10 @@ class ExtensionCreateRequest(BaseModel):
         return self
 
 
+class ExtensionRejectRequest(BaseModel):
+    motivo: str = Field(..., min_length=1)
+
+
 class ExtensionResponse(BaseModel):
     id: str
     tipo: str
@@ -47,3 +51,6 @@ class ExtensionResponse(BaseModel):
     motivo: str
     justificativa: str
     parecer: str | None = None
+    # Situação do aluno após a decisão (spec 08 → situacao_aluno_atualizada);
+    # 'em_prorrogacao' quando uma prorrogação é aprovada, None caso contrário.
+    situacao_registrada: str | None = None

@@ -11,6 +11,7 @@ export interface RequestItem {
     | "trancamento"
     | "transferencia"
     | "transferencia_coordenacao";
+  origem: "formulario" | "agregado";
   solicitante_nome: string;
   data_solicitacao: string;
   status: string;

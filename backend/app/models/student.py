@@ -9,6 +9,9 @@ Responsabilidades:
 - Definir StudentResponse para leitura, incluindo situacao_registrada, situacao_inferida,
   proficiencia_comprovada, qualificacao_aprovada e campos de data.
 - Definir modelos de patch para qualificacao, proficiencia e situacao (PATCH endpoints).
+- Definir CoauthorCandidate: entrada mínima (uid, nome) exposta por GET
+  /students/coauthors para popular o seletor de co-autores de produções/atividades
+  (issue #310, ADR-0006), sem vazar o StudentResponse completo a pares do programa.
 - Mapear o documento Firestore da coleção students/ — entidade central do sistema.
 """
 
@@ -95,3 +98,8 @@ class StudentResponse(BaseModel):
     # calc: percentual de tasks concluídas do plano de trabalho (0-100), computado
     # em leitura pelo StudentService — não é persistido em students/ (issue #317).
     progresso_plano: float = 0.0
+
+
+class CoauthorCandidate(BaseModel):
+    uid: str
+    nome: str

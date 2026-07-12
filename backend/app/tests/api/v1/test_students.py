@@ -28,6 +28,13 @@ class _FakeStudentRepository:
         student = self.store.get(student_id)
         return {"id": student_id, **student} if student is not None else None
 
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            {"id": key, **value}
+            for key, value in self.store.items()
+            if value.get("programa_id") == programa_id
+        ]
+
 
 class _FakeWorkPlanRepository:
     """Fake sem tasks: progresso_plano calculado é 0.0 para todos os alunos."""
@@ -126,6 +133,37 @@ def test_get_student_response_model_normaliza_documento_legado(client: TestClien
     assert body["qualificacao_aprovada"] is False
     assert body["proficiencia_comprovada"] is False
     assert body["coorientador_id"] is None
+
+
+def _aluno() -> CurrentUser:
+    return CurrentUser(uid="uid-aluno1", role="aluno", programa_id="prog", email="aluno@saga.edu")
+
+
+def test_get_students_coauthors_acessivel_a_aluno(client: TestClient) -> None:
+    students_router.service._students = _FakeStudentRepository(
+        {
+            "student1": {"uid": "uid-aluno1", "nome": "Aluno 1", "programa_id": "prog"},
+            "student2": {"uid": "uid-aluno2", "nome": "Aluno 2", "programa_id": "prog"},
+            "student3": {"uid": "uid-outro-prog", "nome": "Outro programa", "programa_id": "outro"},
+        }
+    )
+    app.dependency_overrides[get_current_user] = _aluno
+
+    response = client.get("/api/v1/students/coauthors")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"uid": "uid-aluno1", "nome": "Aluno 1"},
+        {"uid": "uid-aluno2", "nome": "Aluno 2"},
+    ]
+
+
+def test_get_students_bloqueia_aluno(client: TestClient) -> None:
+    app.dependency_overrides[get_current_user] = _aluno
+
+    response = client.get("/api/v1/students")
+
+    assert response.status_code == 403
 
 
 def test_post_students_permite_orientador(client: TestClient) -> None:

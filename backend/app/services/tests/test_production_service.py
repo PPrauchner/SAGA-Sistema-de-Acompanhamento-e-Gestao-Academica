@@ -98,6 +98,13 @@ class _FakeStudentService:
         ]
 
 
+class _FakeStudentRepository:
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [
+            {"id": "student1", "uid": "uid-aluno", "nome": "Maria", "orientador_id": "adv1"}
+        ]
+
+
 class _FakeAdvisorRepository:
     async def list_all(self) -> list[dict[str, Any]]:
         return [{"id": "adv1", "nome": "Dr. Silva"}]
@@ -129,6 +136,7 @@ def _setup_coupling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(production_module, "AdvisorRepository", _FakeAdvisorRepository)
     monkeypatch.setattr(production_module, "VehicleRepository", _FakeVehicleRepository)
     monkeypatch.setattr(production_module, "StudentService", _FakeStudentService)
+    monkeypatch.setattr(production_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(production_module, "InferenceService", _FakeInferenceService)
     monkeypatch.setattr(production_module, "InferenceRepository", lambda: object())
     monkeypatch.setattr(production_module, "QualisWeightsService", _FakeQualisWeightsService)

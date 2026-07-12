@@ -16,6 +16,20 @@ from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.transfer_repository import TransferRepository
 
+# Origem de cada subtipo de Solicitação (CONTEXT.md → Solicitação): "formulario"
+# nasce do formulário "Nova Solicitação"; "agregado" nasce de outro fluxo e é só
+# consolidado nesta lista.
+ORIGEM_POR_TIPO: dict[str, str] = {
+    "atividade": "agregado",
+    "producao": "agregado",
+    "prorrogacao": "formulario",
+    "prazo_defesa": "formulario",
+    "prazo_qualificacao": "formulario",
+    "trancamento": "formulario",
+    "transferencia": "formulario",
+    "transferencia_coordenacao": "agregado",
+}
+
 
 class RequestService:
     def __init__(self) -> None:
@@ -312,7 +326,13 @@ class RequestService:
         return requests
 
     async def _get_adm_requests(self) -> list[RequestItem]:
-        """Adm global vê as transferências de coordenação de todos os programas."""
+        """Adm global vê as transferências de coordenação de todos os programas.
+
+        O papel `adm` é global (ADR-0001): gere coordenadores cross-programa e, por
+        isso, enxerga as transferências de coordenação de qualquer programa — não
+        apenas de um `programa_id`, que para o `adm` é `null`. Inclui `concluido`
+        além de `pendente` (issue #329) para o histórico recente ficar visível.
+        """
         requests: list[RequestItem] = []
         coord_transfers = await self._coord_transfers.list_all()
         relevant = [
@@ -430,6 +450,7 @@ class RequestService:
         return RequestItem(
             id=id,
             tipo=tipo,
+            origem=ORIGEM_POR_TIPO[tipo],
             solicitante_nome=solicitante,
             data_solicitacao=data,
             status=status,

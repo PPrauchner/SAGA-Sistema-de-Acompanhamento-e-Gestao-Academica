@@ -17,6 +17,11 @@ from backend.app.repositories.extension_repository import (
 from backend.app.repositories.student_repository import StudentRepository
 
 
+# Subtipos de prorrogação que movem o aluno para "Em Prorrogação" ao serem aprovados
+# (CONTEXT.md → Prorrogação). Trancamento e mudança de nível não disparam esta transição.
+PRORROGACAO_TYPES = {"prorrogacao", "prazo_defesa", "prazo_qualificacao"}
+
+
 def _to_date(value: object) -> date | None:
     if isinstance(value, datetime):
         return value.date()
@@ -114,6 +119,146 @@ class ExtensionService:
         extension_id = await self._repo.create(payload)
         return self._normalize_response({"id": extension_id, **payload}, student)
 
+    async def approve_extension(
+        self,
+        extension_id: str,
+        user: CurrentUser,
+    ) -> dict[str, Any]:
+        """Aprova uma solicitação de prorrogação/trancamento pendente.
+
+        Recalcula o `prazo_final` do aluno para a `nova_data` solicitada,
+        escrevendo através do `StudentRepository` — o mesmo caminho de
+        atualização já usado pelo cadastro de aluno e pela transferência de
+        orientando — em vez de duplicar a lógica de escrita. Quando a
+        solicitação não traz `nova_data` (permitido para `trancamento`, ver
+        `ExtensionCreateRequest`), o `prazo_final` é **preservado** em vez de
+        ser sobrescrito com `None`, evitando apagar o prazo do aluno.
+
+        Args:
+            extension_id: Id do documento em `extensions/`.
+            user: Coordenação autenticada; `programa_id` delimita o escopo.
+
+        Returns:
+            A solicitação normalizada com `status="aprovada"`.
+
+        Raises:
+            HTTPException: 404 se não encontrada, 400 se não estiver
+                pendente, 403 se pertencer a outro programa.
+        """
+        extension = await self._get_pending_extension(extension_id, user)
+
+        now = datetime.now(timezone.utc)
+        student_id = extension.get("student_id")
+        nova_data = extension.get("nova_data") or extension.get("prazo_novo")
+        student_updates: dict[str, Any] = {}
+        if nova_data is not None:
+            student_updates["prazo_final"] = nova_data
+        situacao_atualizada: str | None = None
+        if extension.get("tipo") in PRORROGACAO_TYPES:
+            situacao_atualizada = "em_prorrogacao"
+            student_updates["situacao_registrada"] = situacao_atualizada
+        if student_updates:
+            await self._students.update(student_id, student_updates)
+        await self._repo.update(
+            extension_id,
+            {
+                "status": "aprovada",
+                "aprovado_por": user.uid,
+                "aprovado_em": now,
+            },
+        )
+
+        student = await self._find_student(student_id)
+        return self._normalize_response(
+            {
+                **extension,
+                "status": "aprovada",
+                "aprovado_por": user.uid,
+                "aprovado_em": now,
+                "situacao_registrada": situacao_atualizada,
+            },
+            student,
+        )
+
+    async def reject_extension(
+        self,
+        extension_id: str,
+        motivo: str,
+        user: CurrentUser,
+    ) -> dict[str, Any]:
+        """Rejeita uma solicitação de prorrogação/trancamento pendente.
+
+        Args:
+            extension_id: Id do documento em `extensions/`.
+            motivo: Justificativa da rejeição (obrigatória).
+            user: Coordenação autenticada; `programa_id` delimita o escopo.
+
+        Returns:
+            A solicitação normalizada com `status="rejeitada"`.
+
+        Raises:
+            HTTPException: 422 se `motivo` vier vazio, 404 se não encontrada,
+                400 se não estiver pendente, 403 se de outro programa.
+        """
+        if not motivo.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Motivo e obrigatorio para rejeitar a solicitacao",
+            )
+
+        extension = await self._get_pending_extension(extension_id, user)
+
+        now = datetime.now(timezone.utc)
+        await self._repo.update(
+            extension_id,
+            {
+                "status": "rejeitada",
+                "motivo_rejeicao": motivo,
+                "rejeitado_por": user.uid,
+                "rejeitado_em": now,
+            },
+        )
+
+        student = await self._find_student(extension.get("student_id"))
+        return self._normalize_response(
+            {
+                **extension,
+                "status": "rejeitada",
+                "motivo_rejeicao": motivo,
+                "rejeitado_por": user.uid,
+                "rejeitado_em": now,
+            },
+            student,
+        )
+
+    async def _get_pending_extension(
+        self,
+        extension_id: str,
+        user: CurrentUser,
+    ) -> dict[str, Any]:
+        extension = await self._repo.get(extension_id)
+        if extension is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Solicitacao de prorrogacao nao encontrada",
+            )
+        if extension.get("status") != STATUS_PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Solicitacao precisa estar pendente para esta decisao",
+            )
+        if user.programa_id and user.programa_id != extension.get("programa_id"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Coordenacao nao pode decidir solicitacao de outro programa",
+            )
+        return extension
+
+    async def _find_student(self, student_id: str | None) -> dict[str, Any] | None:
+        if not student_id:
+            return None
+        return await self._students.get(student_id)
+
     async def _visible_students(self, user: CurrentUser) -> list[dict[str, Any]]:
         students = await self._students.list_all()
 
@@ -196,6 +341,7 @@ class ExtensionService:
             {
                 "student_id": student_id,
                 "aluno_id": student_id,
+                "aluno_uid": student.get("uid") if student else result.get("aluno_uid"),
                 "aluno_nome": aluno_nome,
                 "aluno": aluno_nome,
                 "matricula": student.get("matricula") if student else result.get("matricula"),
