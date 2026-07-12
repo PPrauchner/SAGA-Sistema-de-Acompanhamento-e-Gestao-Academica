@@ -3,7 +3,7 @@ import { requestsApi, RequestItem } from "@/api/requestsApi";
 import { useApp } from "@/app/context/AppContext";
 
 export function usePendingRequests() {
-  const { token, profileUnavailable } = useApp();
+  const { token, profileUnavailable, currentPage } = useApp();
   const [count, setCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export function usePendingRequests() {
         setLoading(true);
         const data = await requestsApi.getRequests(token);
         if (mounted) {
-          setCount(data.length);
+          setCount(data.filter((r) => r.status !== "concluido").length);
           setError(null);
         }
       } catch (err) {
@@ -44,7 +44,7 @@ export function usePendingRequests() {
     return () => {
       mounted = false;
     };
-  }, [token, profileUnavailable]);
+  }, [token, profileUnavailable, currentPage]);
 
   return { count, loading, error };
 }

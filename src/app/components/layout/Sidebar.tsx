@@ -156,7 +156,7 @@ function SidebarContent({ collapsed, onNavigate }: { collapsed: boolean; onNavig
                       {notificationCount}
                     </span>
                   )}
-                  {item.id === "solicitacoes" && item.badge && item.badge > 0 && (
+                  {item.id === "solicitacoes" && item.badge !== undefined && item.badge > 0 && (
                     <span
                       className="rounded-full flex items-center justify-center"
                       style={{ background: "#e74c3c", color: "#fff", fontSize: "10px", fontWeight: 700, minWidth: 18, height: 18, padding: "0 4px" }}
