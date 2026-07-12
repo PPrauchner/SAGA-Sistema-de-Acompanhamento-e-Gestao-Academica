@@ -27,9 +27,9 @@ export function usePendingRequests() {
           setCount(data.length);
           setError(null);
         }
-      } catch (err: any) {
+      } catch (err) {
         if (mounted) {
-          setError(err.message || "Failed to fetch requests count");
+          setError(err instanceof Error ? err.message : "Failed to fetch requests count");
           setCount(0);
         }
       } finally {
