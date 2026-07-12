@@ -168,7 +168,7 @@ def test_get_students_bloqueia_aluno(client: TestClient) -> None:
     assert response.status_code == 403
 
 
-def test_post_students_permite_orientador(client: TestClient) -> None:
+def test_post_students_bloqueia_orientador(client: TestClient) -> None:
     fake_service = _FakeStudentService()
     original_service = students_router.service
     students_router.service = fake_service
@@ -191,10 +191,8 @@ def test_post_students_permite_orientador(client: TestClient) -> None:
     students_router.service = original_service
     app.dependency_overrides[get_current_user] = _coord
 
-    assert response.status_code == 201
-    assert response.json()["invite_token"] == "tok-aluno"
-    assert fake_service.user is not None
-    assert fake_service.user.role == "orientador"
+    assert response.status_code == 403
+    assert fake_service.user is None
 
 
 def test_post_students_sem_nivel_usa_default_mestrado(client: TestClient) -> None:
