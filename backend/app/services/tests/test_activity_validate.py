@@ -132,6 +132,34 @@ async def test_aprovar_com_creditos_concedidos_preserva_creditos_gerados(monkeyp
     assert "aprovado_por" not in update_data
 
 
+async def test_aprovar_copia_de_coautoria_atualiza_apenas_a_atividade_alvo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_repo = AsyncMock()
+    fake_repo.get_by_id.return_value = _activity(
+        id="act-b",
+        student_id="student-b",
+        activity_group_id="grupo-1",
+        origin_activity_id="act-a",
+    )
+    fake_students = AsyncMock()
+    fake_students.get.return_value = {"programa_id": "prog_default"}
+    monkeypatch.setattr(svc, "_repo", fake_repo)
+    monkeypatch.setattr(svc, "_student_repo", fake_students)
+    _patch_inference(monkeypatch)
+
+    resp = await svc.validate_activity(
+        "act-b", ValidateActivityRequest(acao=ValidateAction.aprovar), _coord()
+    )
+
+    assert resp.novo_status == ActivityStatus.aprovado
+    assert resp.creditos_contabilizados == 4.0
+    fake_repo.update_by_id.assert_awaited_once()
+    activity_id, update_data = fake_repo.update_by_id.call_args.args
+    assert activity_id == "act-b"
+    assert update_data["status"] == ActivityStatus.aprovado.value
+
+
 async def test_aprovar_producao_gera_fato_para_o_motor(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_repo = AsyncMock()
     fake_repo.get_by_id.return_value = _activity(producao_id="prod1")

@@ -35,6 +35,8 @@ class ActivityCreateRequest(BaseModel):
     data_realizacao: DataEventoRealizacao
     comprovante_url: str | None = None
     status: ActivityCreateStatus = "enviado"
+    coauthor_student_uids: list[str] = Field(default_factory=list)
+    external_authors: list[str] = Field(default_factory=list)
 
 
 class ActivityCreateByAdvisorRequest(BaseModel):
@@ -56,6 +58,8 @@ class ActivityCreateResponse(BaseModel):
     id: str
     elegibilidade_preliminar: bool
     notificacao_enviada: bool
+    created_activity_ids: list[str] = Field(default_factory=list)
+    activity_group_id: str | None = None
 
 
 class ActivityResponse(BaseModel):
@@ -77,6 +81,10 @@ class ActivityResponse(BaseModel):
     descricao: str | None = None
     data_realizacao: datetime | None = None
     comprovante_url: str | None = None
+    coauthor_student_uids: list[str] = Field(default_factory=list)
+    external_authors: list[str] = Field(default_factory=list)
+    activity_group_id: str | None = None
+    origin_activity_id: str | None = None
 
     creditos_gerados: float = 0.0
     creditos_concedidos: float | None = None

@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 # Mocks globais ANTES de qualquer import do projeto
 # ---------------------------------------------------------------------------
 
+_previous_firebase_module = sys.modules.get("backend.app.core.firebase")
+
 _firebase_mock = MagicMock()
 sys.modules.setdefault("firebase_admin", _firebase_mock)
 sys.modules.setdefault("firebase_admin.credentials", MagicMock())
@@ -36,6 +38,13 @@ for mod in ["backend", "backend.app", "backend.app.core"]:
 from fastapi import HTTPException
 
 from backend.app.core.auth import CurrentUser
+
+
+def teardown_module() -> None:
+    if _previous_firebase_module is None:
+        sys.modules.pop("backend.app.core.firebase", None)
+    else:
+        sys.modules["backend.app.core.firebase"] = _previous_firebase_module
 
 # ---------------------------------------------------------------------------
 # Fixtures

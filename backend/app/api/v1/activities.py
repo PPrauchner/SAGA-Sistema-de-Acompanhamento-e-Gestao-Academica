@@ -136,6 +136,8 @@ async def submit_activity(
         id=result["id"],
         elegibilidade_preliminar=result["elegibilidade_preliminar"],
         notificacao_enviada=result["notificacao_enviada"],
+        created_activity_ids=result.get("created_activity_ids", [result["id"]]),
+        activity_group_id=result.get("activity_group_id"),
     )
 
 

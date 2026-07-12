@@ -172,13 +172,18 @@
         "descricao": "string",
         "data_realizacao": "string (ISO8601)",
         "comprovante_url": "string | null (URL de download retornada por POST /api/v1/activities/{activity_id}/comprovante)",
-        "status": "string ('rascunho'|'enviado')"
+        "status": "string ('rascunho'|'enviado')",
+        "coauthor_student_uids": "array de users.uid de discentes cadastrados (opcional)",
+        "external_authors": "array de strings livres para autores externos (opcional)"
       },
       "response_201": {
         "id": "string",
         "elegibilidade_preliminar": "boolean (motor RL04 roda imediatamente)",
-        "notificacao_enviada": "boolean"
-      }
+        "notificacao_enviada": "boolean",
+        "created_activity_ids": "array com os ids das copias criadas",
+        "activity_group_id": "string | null para rastrear copias independentes"
+      },
+      "coautoria_standalone": "Cada coautor cadastrado recebe uma copia independente em students/{coautor}/activities com status enviado, ID proprio e credito cheio quando aprovada. Autores externos ficam apenas como texto. RL04 continua escopada por aluno; copias entre alunos diferentes nao sao duplicatas."
     },
     {
       "path": "/api/v1/activities/{activity_id}/comprovante",

@@ -85,7 +85,7 @@ class RequestService:
             if activity.get("status") == "enviado":
                 requests.append(
                     self._build_request(
-                        id=activity.get("id", ""),
+                        request_id=activity.get("id", ""),
                         tipo=self._activity_request_type(activity),
                         solicitante=student_name,
                         data=activity.get("criado_em")
@@ -100,7 +100,7 @@ class RequestService:
             if ext.get("status") == "pendente":
                 requests.append(
                     self._build_request(
-                        id=ext.get("id", ""),
+                        request_id=ext.get("id", ""),
                         tipo=self._extension_request_type(ext),
                         solicitante=student_name,
                         data=ext.get("created_at")
@@ -151,7 +151,7 @@ class RequestService:
             ):
                 requests.append(
                     self._build_request(
-                        id=activity.get("id", ""),
+                        request_id=activity.get("id", ""),
                         tipo=self._activity_request_type(activity),
                         solicitante=student_names.get(sid, "Desconhecido"),
                         data=activity.get("criado_em")
@@ -170,7 +170,7 @@ class RequestService:
                 sid = ext.get("student_id")
                 requests.append(
                     self._build_request(
-                        id=ext.get("id", ""),
+                        request_id=ext.get("id", ""),
                         tipo=self._extension_request_type(ext),
                         solicitante=student_names.get(
                             sid, ext.get("aluno_nome", "Desconhecido")
@@ -191,7 +191,7 @@ class RequestService:
         for ct, initiator_name in zip(coord_transfers, initiator_names):
             requests.append(
                 self._build_request(
-                    id=ct.get("id", ""),
+                    request_id=ct.get("id", ""),
                     tipo="transferencia_coordenacao",
                     solicitante=initiator_name,
                     data=ct.get("created_at") or datetime.now(timezone.utc),
@@ -249,7 +249,7 @@ class RequestService:
             ):
                 requests.append(
                     self._build_request(
-                        id=activity.get("id", ""),
+                        request_id=activity.get("id", ""),
                         tipo=self._activity_request_type(activity),
                         solicitante=student_names.get(sid, "Desconhecido"),
                         data=activity.get("criado_em")
@@ -268,7 +268,7 @@ class RequestService:
             ):
                 requests.append(
                     self._build_request(
-                        id=ext.get("id", ""),
+                        request_id=ext.get("id", ""),
                         tipo=self._extension_request_type(ext),
                         solicitante=student_names.get(
                             sid, ext.get("aluno_nome", "Desconhecido")
@@ -293,7 +293,7 @@ class RequestService:
             label = f"{requester_name} (sobre {student_name})"
             requests.append(
                 self._build_request(
-                    id=t.get("id", ""),
+                    request_id=t.get("id", ""),
                     tipo="transferencia",
                     solicitante=label,
                     data=t.get("created_at") or datetime.now(timezone.utc),
@@ -314,7 +314,7 @@ class RequestService:
         for ct, successor_name in zip(own_coord_transfers, successor_names):
             requests.append(
                 self._build_request(
-                    id=ct.get("id", ""),
+                    request_id=ct.get("id", ""),
                     tipo="transferencia_coordenacao",
                     solicitante=f"Para: {successor_name}",
                     data=ct.get("created_at") or datetime.now(timezone.utc),
@@ -344,7 +344,7 @@ class RequestService:
         for ct, initiator_name in zip(relevant, initiator_names):
             requests.append(
                 self._build_request(
-                    id=ct.get("id", ""),
+                    request_id=ct.get("id", ""),
                     tipo="transferencia_coordenacao",
                     solicitante=initiator_name,
                     data=ct.get("created_at") or datetime.now(timezone.utc),
@@ -424,7 +424,7 @@ class RequestService:
 
     def _build_request(
         self,
-        id: str,
+        request_id: str,
         tipo: Any,
         solicitante: str,
         data: Any,
@@ -435,7 +435,7 @@ class RequestService:
         Monta um objeto RequestItem com os dados da requisição.
 
         Args:
-            id: Id da requisição.
+            request_id: Id da requisição.
             tipo: Tipo da requisição.
             solicitante: Nome do solicitante.
             data: Data da requisição.
@@ -448,7 +448,7 @@ class RequestService:
         if not isinstance(data, datetime):
             data = datetime.now(timezone.utc)
         return RequestItem(
-            id=id,
+            id=request_id,
             tipo=tipo,
             origem=ORIGEM_POR_TIPO[tipo],
             solicitante_nome=solicitante,

@@ -74,7 +74,7 @@ async def get_student(
     "/students",
     status_code=status.HTTP_201_CREATED,
 )
-@requires_role("coordenacao", "orientador")
+@requires_role("coordenacao")
 @audit_operation
 async def create_student(
     body: StudentCreateRequest,

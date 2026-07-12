@@ -33,6 +33,9 @@ import {
   type ActivityType,
   type ValidateAction,
 } from "@/api/activitiesApi";
+import { getCoauthorCandidates, type CoauthorCandidate } from "@/api/studentsApi";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
+import type { ExportColumn } from "@/utils/exportData";
 
 // ─── Config de apresentação ─────────────────────────────────────────────────
 
@@ -76,6 +79,8 @@ interface FormState {
   data_realizacao: string;
   status: ActivityCreateStatus;
   file: File | null;
+  coautores: string[];
+  autoresExternos: string;
   // Usados apenas quando o orientador cria para um orientando (issue #263).
   aluno_id: string;
   parecer: string;
@@ -87,6 +92,8 @@ const EMPTY_FORM: FormState = {
   data_realizacao: "",
   status: "enviado",
   file: null,
+  coautores: [],
+  autoresExternos: "",
   aluno_id: "",
   parecer: "",
 };
@@ -99,6 +106,7 @@ export function ActivitiesPage() {
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [types, setTypes] = useState<ActivityType[]>([]);
+  const [coauthorCandidates, setCoauthorCandidates] = useState<CoauthorCandidate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -135,12 +143,14 @@ export function ActivitiesPage() {
     if (!background) setLoading(true);
     setError(null);
     try {
-      const [activityList, typeList] = await Promise.all([
+      const [activityList, typeList, coauthors] = await Promise.all([
         getActivities(authToken),
         getActivityTypes(authToken),
+        canRegister ? getCoauthorCandidates(authToken) : Promise.resolve([]),
       ]);
       setActivities(activityList);
       setTypes(typeList.filter((type) => type.ativo));
+      setCoauthorCandidates(coauthors);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Falha ao carregar atividades");
     } finally {
@@ -156,12 +166,53 @@ export function ActivitiesPage() {
     () => types.find((type) => type.id === form.tipo_id) ?? null,
     [types, form.tipo_id],
   );
+  const nameByUid = useMemo(
+    () => new Map(coauthorCandidates.map((candidate) => [candidate.uid, candidate.nome])),
+    [coauthorCandidates],
+  );
+  const pickableCoauthors = useMemo(
+    () => coauthorCandidates.filter((candidate) => candidate.uid !== currentUser?.id),
+    [coauthorCandidates, currentUser],
+  );
+  const activityExportColumns = useMemo<ExportColumn<Activity>[]>(
+    () => [
+      { key: "tipo_nome", label: "Tipo", value: (activity) => activity.tipo_nome ?? "Atividade" },
+      { key: "categoria", label: "Categoria", value: (activity) => activity.categoria ? CATEGORIA_LABEL[activity.categoria] ?? activity.categoria : "" },
+      { key: "status", label: "Status", value: (activity) => statusCfg(activity.status).label },
+      { key: "descricao", label: "Descricao" },
+      {
+        key: "coauthor_student_uids",
+        label: "Coautoria",
+        value: (activity) =>
+          [
+            ...(activity.coauthor_student_uids ?? []).map((uid) => nameByUid.get(uid) ?? uid),
+            ...(activity.external_authors ?? []),
+          ].join(", "),
+      },
+      { key: "data_realizacao", label: "Data", value: (activity) => formatDate(activity.data_realizacao) },
+      { key: "creditos_gerados", label: "Creditos" },
+      { key: "elegivel", label: "Elegivel RL04", value: (activity) => typeof activity.elegivel === "boolean" ? (activity.elegivel ? "Sim" : "Nao") : "" },
+      { key: "comprovante_url", label: "Comprovante" },
+      { key: "parecer_orientador", label: "Parecer do orientador" },
+      { key: "observacao_coordenacao", label: "Observacao da coordenacao" },
+    ],
+    [nameByUid],
+  );
 
   function openForm(): void {
     setForm(EMPTY_FORM);
     setFeedback(null);
     setDataError(null);
     setShowForm(true);
+  }
+
+  function toggleCoautor(uid: string): void {
+    setForm((current) => ({
+      ...current,
+      coautores: current.coautores.includes(uid)
+        ? current.coautores.filter((item) => item !== uid)
+        : [...current.coautores, uid],
+    }));
   }
 
   async function handleSubmit(event: FormEvent): Promise<void> {
@@ -224,6 +275,11 @@ export function ActivitiesPage() {
         data_realizacao: `${form.data_realizacao}T00:00:00Z`,
         comprovante_url: null,
         status: form.status,
+        coauthor_student_uids: form.coautores,
+        external_authors: form.autoresExternos
+          .split(",")
+          .map((name) => name.trim())
+          .filter(Boolean),
       });
 
       if (form.file) {
@@ -368,16 +424,19 @@ export function ActivitiesPage() {
             {currentUser?.name ? ` · ${currentUser.name}` : ""}
           </p>
         </div>
-        {canCreate && (
-          <button
-            onClick={openForm}
-            className="flex items-center gap-2 rounded-xl px-4 py-2.5"
-            style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}
-          >
-            <Plus size={16} />
-            {canCreateForOrientando ? "Nova atividade para orientando" : "Nova Atividade"}
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <TableExportMenu title="Atividades" fileName="atividades" rows={activities} columns={activityExportColumns} />
+          {canCreate && (
+            <button
+              onClick={openForm}
+              className="flex items-center gap-2 rounded-xl px-4 py-2.5"
+              style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}
+            >
+              <Plus size={16} />
+              {canCreateForOrientando ? "Nova atividade para orientando" : "Nova Atividade"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -469,6 +528,57 @@ export function ActivitiesPage() {
                 style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
               />
             </label>
+
+            {canRegister && (
+              <div className="flex flex-col gap-2 sm:col-span-2">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                  Coautores cadastrados (opcional)
+                </span>
+                {pickableCoauthors.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {pickableCoauthors.map((candidate) => {
+                      const selected = form.coautores.includes(candidate.uid);
+                      return (
+                        <button
+                          key={candidate.uid}
+                          type="button"
+                          onClick={() => toggleCoautor(candidate.uid)}
+                          className="rounded-lg px-2.5 py-1 transition-all"
+                          style={{
+                            background: selected ? "var(--tint-blue-bg)" : "var(--muted)",
+                            color: selected ? "var(--tint-blue-text)" : "var(--muted-foreground)",
+                            border: `1px solid ${selected ? "var(--tint-blue-border)" : "var(--border)"}`,
+                            fontSize: "11px",
+                            fontWeight: 700,
+                          }}
+                        >
+                          {candidate.nome}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
+                    Nenhum coautor cadastrado disponivel.
+                  </span>
+                )}
+              </div>
+            )}
+
+            {canRegister && (
+              <label className="flex flex-col gap-1 sm:col-span-2">
+                <span style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)" }}>
+                  Autores externos (separados por virgula)
+                </span>
+                <input
+                  value={form.autoresExternos}
+                  onChange={(e) => setForm((f) => ({ ...f, autoresExternos: e.target.value }))}
+                  placeholder="Ex.: Maria Souza, Joao Lima"
+                  className="rounded-xl px-3 py-2.5 outline-none"
+                  style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
+                />
+              </label>
+            )}
 
             {canCreateForOrientando && (
               <label className="flex flex-col gap-1 sm:col-span-2">
@@ -581,6 +691,11 @@ export function ActivitiesPage() {
                 </div>
 
                 <p style={{ fontSize: "13px", color: "var(--foreground)", marginBottom: "12px" }}>{activity.descricao}</p>
+                {(activity.coauthor_student_uids?.length > 0 || activity.external_authors?.length > 0) && (
+                  <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginBottom: "12px" }}>
+                    Coautoria: {[...(activity.coauthor_student_uids ?? []).map((uid) => nameByUid.get(uid) ?? uid), ...(activity.external_authors ?? [])].join(", ")}
+                  </p>
+                )}
 
                 <div className="space-y-1.5" style={{ fontSize: "12px" }}>
                   <div className="flex justify-between">

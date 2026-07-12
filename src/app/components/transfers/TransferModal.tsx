@@ -39,8 +39,8 @@ export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClos
            setStudents(studs);
         }
         setAdvisors(advs);
-      } catch (err: any) {
-        alert("Erro ao carregar dados: " + err.message);
+      } catch (err) {
+        alert("Erro ao carregar dados: " + (err instanceof Error ? err.message : String(err)));
       } finally {
         setFetching(false);
       }
@@ -65,8 +65,8 @@ export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClos
         await createTransferRequest(token, { student_id: studentId, orientador_destino_id: advisorId, motivo });
       }
       onSuccess();
-    } catch (err: any) {
-      alert("Erro ao solicitar transferência: " + err.message);
+    } catch (err) {
+      alert("Erro ao solicitar transferência: " + (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
     }
@@ -125,6 +125,7 @@ export function TransferModal({ onClose, onSuccess, initialStudentId }: { onClos
                 >
                   <option value="">Selecione...</option>
                   {advisors.map(a => {
+                    if (selectedStudent && a.programa_id !== selectedStudent.programa_id) return null;
                     const full = a.orientandos_ativos >= a.limite_orientandos;
                     return (
                       <option key={a.id} value={a.id} disabled={full || a.id === selectedStudent?.orientador_id}>

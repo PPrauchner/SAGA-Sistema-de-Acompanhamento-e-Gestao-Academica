@@ -17,9 +17,13 @@ from backend.app.models.dashboard import (
     ChecklistResumo,
     CoordDashboardResponse,
     CreditosResumo,
+    DashboardIndiceOrientadorResponse,
+    IndiceModalidade,
+    IndiceOrientadorResponse,
     OrientadorDashboardResponse,
     OrientandoResumo,
     OrientandosPorStatus,
+    PosicaoRelativaResponse,
     ProducoesResumo,
     TaskProxima,
 )
@@ -28,6 +32,7 @@ from backend.app.repositories.activity_type_repository import ActivityTypeReposi
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.production_repository import ProductionRepository
+from backend.app.repositories.dashboard_repository import DashboardRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.models.work_plan import STATUS_CONCLUIDO
@@ -143,6 +148,7 @@ class DashboardService:
         self._productions = FirebaseRepository("productions")
         self._production_reports = ProductionRepository()
         self._work_plan = WorkPlanRepository()
+        self._dashboard = DashboardRepository()
 
     async def get_meu_aluno_dashboard(self, user: CurrentUser) -> AlunoDashboardResponse:
         """Retorna o dashboard do aluno autenticado sem aceitar student_id do cliente."""
@@ -419,6 +425,60 @@ class DashboardService:
             total_concluidos=total_concluidos,
             tempo_medio_integralizacao_meses=tempo_medio,
             auditoria_recente=auditoria_recente,
+        )
+
+    async def get_dashboard_indice_orientador(
+        self,
+        advisor_id: str,
+        modalidade: IndiceModalidade,
+    ) -> DashboardIndiceOrientadorResponse:
+        """Calcula índice de produção do orientador e posição relativa anônima."""
+        advisor = await self._dashboard.get_advisor(advisor_id)
+        if advisor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Orientador não encontrado",
+            )
+
+        average = modalidade == IndiceModalidade.media_por_orientando
+        indice, total_orientandos, total_pontuacao = await self._dashboard.production_index_for_advisor(
+            advisor_id,
+            average=average,
+        )
+
+        advisors = await self._dashboard.list_advisors_by_program(advisor.get("programa_id"))
+        indices_programa: list[float] = []
+        for item in advisors:
+            item_id = item.get("id")
+            if not item_id:
+                continue
+            item_index, _, _ = await self._dashboard.production_index_for_advisor(
+                item_id,
+                average=average,
+            )
+            indices_programa.append(item_index)
+
+        if not indices_programa:
+            indices_programa = [indice]
+
+        media_programa = round(sum(indices_programa) / len(indices_programa), 2)
+        abaixo_ou_igual = sum(1 for value in indices_programa if value <= indice)
+        percentil = round((abaixo_ou_igual / len(indices_programa)) * 100, 2)
+
+        return DashboardIndiceOrientadorResponse(
+            indice=IndiceOrientadorResponse(
+                advisor_id=advisor_id,
+                modalidade=modalidade,
+                indice=indice,
+                total_orientandos=total_orientandos,
+                total_pontuacao=total_pontuacao,
+            ),
+            posicao_relativa=PosicaoRelativaResponse(
+                modalidade=modalidade,
+                media_programa=media_programa,
+                percentil=percentil,
+                total_orientadores=len(indices_programa),
+            ),
         )
 
 

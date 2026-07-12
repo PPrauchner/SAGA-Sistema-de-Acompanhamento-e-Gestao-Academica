@@ -13,6 +13,8 @@ import {
   type StatusPublicacao,
 } from "@/api/productionsApi";
 import { getCoauthorCandidates, type CoauthorCandidate } from "@/api/studentsApi";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
+import type { ExportColumn } from "@/utils/exportData";
 
 const TIPO_MAP: Record<TipoProducao, { label: string; icon: React.ReactNode; color: string; bg: string }> = {
   artigo: { label: "Artigo", icon: <FileText size={16} />, color: "var(--tint-blue-text)", bg: "var(--tint-blue-bg)" },
@@ -138,6 +140,25 @@ export function ProductionsPage() {
       }),
     [productions, filterTipo, filterNivel, filterAluno],
   );
+  const productionExportColumns = useMemo<ExportColumn<Production>[]>(
+    () => [
+      { key: "titulo", label: "Titulo" },
+      { key: "tipo_producao", label: "Tipo", value: (production) => TIPO_MAP[production.tipo_producao]?.label ?? production.tipo_producao },
+      { key: "status_publicacao", label: "Status", value: (production) => STATUS_MAP[production.status_publicacao]?.label ?? production.status_publicacao },
+      { key: "aluno_nome", label: "Aluno" },
+      { key: "veiculo_nome", label: "Veiculo" },
+      { key: "nivel_veiculo", label: "Nivel" },
+      {
+        key: "autores",
+        label: "Autores",
+        value: (production) => production.autores.map((autor) => nameByUid.get(autor) ?? autor).join(", "),
+      },
+      { key: "pontuacao_calculada", label: "Pontuacao" },
+      { key: "peso_aplicado", label: "Peso aplicado" },
+      { key: "doi", label: "DOI" },
+    ],
+    [nameByUid],
+  );
 
   const totalPublicados = productions.filter((p) => p.status_publicacao === "publicado").length;
   const nivelA1A2 = productions.filter((p) => p.nivel_veiculo === "A1" || p.nivel_veiculo === "A2").length;
@@ -192,11 +213,14 @@ export function ProductionsPage() {
           <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Produções Científicas</h1>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>{productions.length} produções registradas</p>
         </div>
-        {canRegisterProduction && (
-          <button onClick={() => { setDateError(null); setShowForm(true); }} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
-            <Plus size={16} /> Registrar Produção
-          </button>
-        )}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <TableExportMenu title="Producoes" fileName="producoes" rows={filtered} columns={productionExportColumns} />
+          {canRegisterProduction && (
+            <button onClick={() => { setDateError(null); setShowForm(true); }} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
+              <Plus size={16} /> Registrar Produção
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (

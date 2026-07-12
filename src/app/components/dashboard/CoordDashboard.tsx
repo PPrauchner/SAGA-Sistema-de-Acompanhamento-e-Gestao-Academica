@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useCoordDashboard } from "@/hooks/useDashboard";
 import { useEscapeClose } from "@/hooks/useEscapeClose";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,6 +10,7 @@ import {
 import { usePendingExtensions } from "@/hooks/usePendingExtensions";
 import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
 import type { Solicitacao } from "@/api/solicitacoesApi";
+import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
   BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
@@ -201,8 +202,8 @@ function ExportBar({ section }: { section: string }) {
   );
 }
 
-function SectionHeader({ title, sub, section, onReport }: {
-  title: string; sub?: string; section: string; onReport?: () => void;
+function SectionHeader({ title, sub, section, onReport, exportMenu }: {
+  title: string; sub?: string; section: string; onReport?: () => void; exportMenu?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 mb-5 sm:flex-row sm:items-center sm:justify-between">
@@ -215,7 +216,7 @@ function SectionHeader({ title, sub, section, onReport }: {
         </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-        <ExportBar section={section} />
+        {exportMenu}
         {onReport && (
           <button
             onClick={onReport}
@@ -437,12 +438,30 @@ function ReportModal({ type, onClose, statusData, advisorData, completionData, p
 
 
 function StatusDistribChart({ onReport, statusData }: { onReport: () => void; statusData: StatusDataProp[] }) {
+  const chartRef = useRef<HTMLDivElement>(null);
   const total = Math.max(1, statusData.reduce((s, d) => s + d.value, 0));
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Distribuição de Status" sub={`Situação acadêmica — ${total} alunos`} section="Status" onReport={onReport} />
+      <SectionHeader
+        title="Distribuição de Status"
+        sub={`Situação acadêmica — ${total} alunos`}
+        section="Status"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Distribuição de Status"
+            fileName="distribuicao-status"
+            chartRef={chartRef}
+            data={statusData}
+            columns={[
+              { key: "name", label: "Situação" },
+              { key: "value", label: "Alunos" },
+            ]}
+          />
+        }
+      />
       <div className="flex items-center gap-4">
-        <div style={{ flexShrink: 0 }}>
+        <div ref={chartRef} style={{ flexShrink: 0 }}>
           <PieChart width={160} height={160}>
             <Pie data={statusData} cx={75} cy={75} innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" isAnimationActive={false}>
               {statusData.map((d, i) => <Cell key={`status-cell-${i}`} fill={d.color} />)}
@@ -470,14 +489,34 @@ function StatusDistribChart({ onReport, statusData }: { onReport: () => void; st
 function OrientadorPerfChart({ onReport, data, loading, error }: {
   onReport: () => void; data: StudentsByAdvisorResponse | null; loading: boolean; error: string | null;
 }) {
+  const chartRef = useRef<HTMLDivElement>(null);
   const rows = data ? advisorRows(data) : [];
   const ready = !loading && !error && rows.length > 0;
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Desempenho dos Orientadores" sub="Orientandos, regulares e em risco" section="Orientadores" onReport={onReport} />
+      <SectionHeader
+        title="Desempenho dos Orientadores"
+        sub="Orientandos, regulares e em risco"
+        section="Orientadores"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Desempenho dos Orientadores"
+            fileName="desempenho-orientadores"
+            chartRef={chartRef}
+            data={rows}
+            columns={[
+              { key: "nomeCompleto", label: "Orientador" },
+              { key: "orientandos", label: "Orientandos" },
+              { key: "regulares", label: "Regulares" },
+              { key: "risco", label: "Em risco" },
+            ]}
+          />
+        }
+      />
       {ready ? (
       <div className="overflow-x-auto -mx-1">
-      <div style={{ minWidth: 320 }}>
+      <div ref={chartRef} style={{ minWidth: 320 }}>
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid key="op-grid" strokeDasharray="3 3" stroke="var(--border)" />
@@ -500,15 +539,33 @@ function OrientadorPerfChart({ onReport, data, loading, error }: {
 function ProducaoChart({ onReport, data, loading, error }: {
   onReport: () => void; data: ProductionsReportResponse | null; loading: boolean; error: string | null;
 }) {
+  const chartRef = useRef<HTMLDivElement>(null);
   const levels = data ? productionTotals(data) : [];
   const hasProductions = levels.some((l) => l.total > 0);
   const ready = !loading && !error && hasProductions;
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Produção por Nível" sub="Produções aprovadas por estrato Qualis" section="Produção por Nível" onReport={onReport} />
+      <SectionHeader
+        title="Produção por Nível"
+        sub="Produções aprovadas por estrato Qualis"
+        section="Produção por Nível"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Produção por Nível"
+            fileName="producao-por-nivel"
+            chartRef={chartRef}
+            data={levels}
+            columns={[
+              { key: "nivel", label: "Nível Qualis" },
+              { key: "total", label: "Produções" },
+            ]}
+          />
+        }
+      />
       {ready ? (
       <div className="overflow-x-auto -mx-1">
-      <div style={{ minWidth: 300 }}>
+      <div ref={chartRef} style={{ minWidth: 300 }}>
       <ResponsiveContainer width="100%" height={190}>
         <BarChart data={levels} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid key="pr-grid" strokeDasharray="3 3" stroke="var(--border)" />
@@ -530,14 +587,33 @@ function ProducaoChart({ onReport, data, loading, error }: {
 function IntegralizacaoChart({ onReport, data, loading, error }: {
   onReport: () => void; data: CompletionTimeResponse | null; loading: boolean; error: string | null;
 }) {
+  const chartRef = useRef<HTMLDivElement>(null);
   const years = data ? completionByYear(data) : [];
   const ready = !loading && !error && years.length > 0;
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Integralização por Ano" sub={`Média de meses vs. meta de ${META_INTEGRALIZACAO_MESES}m`} section="Integralização" onReport={onReport} />
+      <SectionHeader
+        title="Integralização por Ano"
+        sub={`Média de meses vs. meta de ${META_INTEGRALIZACAO_MESES}m`}
+        section="Integralização"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Integralização por Ano"
+            fileName="integralizacao-por-ano"
+            chartRef={chartRef}
+            data={years}
+            columns={[
+              { key: "ano", label: "Ano" },
+              { key: "meses", label: "Média em meses" },
+              { key: "concluidos", label: "Concluídos" },
+            ]}
+          />
+        }
+      />
       {ready ? (
       <div className="overflow-x-auto -mx-1">
-      <div style={{ minWidth: 280 }}>
+      <div ref={chartRef} style={{ minWidth: 280 }}>
       <ResponsiveContainer width="100%" height={190}>
         <BarChart data={years} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid key="in-grid" strokeDasharray="3 3" stroke="var(--border)" />

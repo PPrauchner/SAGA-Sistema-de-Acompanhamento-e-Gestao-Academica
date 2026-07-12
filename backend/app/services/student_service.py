@@ -33,10 +33,12 @@ from backend.app.models.student import (
 from backend.app.models.user import InviteRequest
 from backend.app.models.work_plan import STATUS_CONCLUIDO
 from backend.app.repositories.advisor_repository import AdvisorRepository
+from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.repositories.program_repository import ProgramRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.services.auth_service import AuthService
+from backend.app.services.inference_service import InferenceService
 
 DEFAULT_DURACAO_MESES = 24
 DEFAULT_STUDENT_STATUS = "regular"
@@ -69,11 +71,16 @@ def _progress_by_student(tasks: list[dict[str, Any]]) -> dict[str, float]:
 class StudentService:
     """Serviço de negócio para gestão de discentes."""
 
-    def __init__(self, auth_service: AuthService | None = None) -> None:
+    def __init__(
+        self,
+        auth_service: AuthService | None = None,
+        inference_service: InferenceService | None = None,
+    ) -> None:
         self._students = StudentRepository()
         self._programs = ProgramRepository()
         self._work_plan = WorkPlanRepository()
         self._auth = auth_service
+        self._inference = inference_service or InferenceService(InferenceRepository())
 
     @staticmethod
     def _add_months(date_value: datetime, months: int) -> datetime:
@@ -101,6 +108,10 @@ class StudentService:
             normalized["qualificacao_data"] = None
         if normalized.get("proficiencia_data") is None:
             normalized["proficiencia_data"] = None
+        if normalized.get("qualificacao_comprovante_url") is None:
+            normalized["qualificacao_comprovante_url"] = None
+        if normalized.get("proficiencia_comprovante_url") is None:
+            normalized["proficiencia_comprovante_url"] = None
         if normalized.get("prazo_final") is None:
             normalized["prazo_final"] = None
         return normalized
@@ -189,6 +200,8 @@ class StudentService:
                 "proficiencia_comprovada": False,
                 "qualificacao_data": None,
                 "proficiencia_data": None,
+                "qualificacao_comprovante_url": None,
+                "proficiencia_comprovante_url": None,
             },
         )
         auth = self._auth or AuthService()
@@ -245,17 +258,24 @@ class StudentService:
         data: QualificacaoRequest,
         user: CurrentUser,
     ) -> dict:
+        student = await self._students.get(student_id)
+        if student is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado")
+
         await self._students.update(
             student_id,
             {
                 "qualificacao_aprovada": data.aprovada,
                 "qualificacao_data": data.data_qualificacao,
+                "qualificacao_comprovante_url": data.comprovante_url,
             },
         )
+        result = await self._inference.run_inference(student_id, student.get("programa_id", ""))
 
         return {
-            "message": "Qualificação registrada",
-            "situacao_inferida_atualizada": False,
+            "message": "Qualificacao registrada",
+            "situacao_inferida": result.situacao_inferida,
+            "situacao_inferida_atualizada": True,
         }
 
     async def update_proficiencia(
@@ -264,16 +284,24 @@ class StudentService:
         data: ProficienciaRequest,
         user: CurrentUser,
     ) -> dict:
+        student = await self._students.get(student_id)
+        if student is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno nao encontrado")
+
         await self._students.update(
             student_id,
             {
                 "proficiencia_comprovada": data.comprovada,
                 "proficiencia_data": data.data_proficiencia,
+                "proficiencia_comprovante_url": data.comprovante_url,
             },
         )
+        result = await self._inference.run_inference(student_id, student.get("programa_id", ""))
 
         return {
-            "message": "Proficiência registrada",
+            "message": "Proficiencia registrada",
+            "situacao_inferida": result.situacao_inferida,
+            "situacao_inferida_atualizada": True,
         }
 
     async def update_situacao(

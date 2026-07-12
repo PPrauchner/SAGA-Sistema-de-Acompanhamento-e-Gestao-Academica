@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.app.models.dashboard import AlunoDashboardResponse
+from backend.app.models.dashboard import AlunoDashboardResponse, IndiceModalidade
 from fastapi import HTTPException
 
 
@@ -36,6 +36,32 @@ def _make_student(overrides: dict | None = None) -> dict:
     if overrides:
         base.update(overrides)
     return base
+
+
+_DEFAULT_ADVISOR = {"id": "adv_001", "nome": "Ada", "programa_id": "prog_default"}
+_MISSING = object()
+
+
+class _FakeDashboardRepository:
+    def __init__(
+        self,
+        *,
+        advisor: dict | None | object = _MISSING,
+        advisors: list[dict] | None = None,
+        indices: dict[str, tuple[float, int, float]] | None = None,
+    ) -> None:
+        self.advisor = _DEFAULT_ADVISOR if advisor is _MISSING else advisor
+        self.advisors = advisors or [{"id": "adv_001", "programa_id": "prog_default"}]
+        self.indices = indices or {"adv_001": (0.0, 0, 0.0)}
+
+    async def get_advisor(self, advisor_id: str) -> dict | None:
+        return self.advisor if self.advisor and self.advisor.get("id") == advisor_id else None
+
+    async def list_advisors_by_program(self, programa_id: str | None) -> list[dict]:
+        return self.advisors
+
+    async def production_index_for_advisor(self, advisor_id: str, *, average: bool) -> tuple[float, int, float]:
+        return self.indices.get(advisor_id, (0.0, 0, 0.0))
 
 
 
@@ -275,6 +301,79 @@ async def test_meu_aluno_dashboard_blocks_non_student_role():
         )
 
     assert exc_info.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_dashboard_indice_orientador_calcula_posicao_relativa():
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    service._dashboard = _FakeDashboardRepository(
+        advisor={"id": "adv_001", "nome": "Ada", "programa_id": "prog_default"},
+        advisors=[
+            {"id": "adv_001", "programa_id": "prog_default"},
+            {"id": "adv_002", "programa_id": "prog_default"},
+            {"id": "adv_003", "programa_id": "prog_default"},
+        ],
+        indices={
+            "adv_001": (10.0, 2, 10.0),
+            "adv_002": (5.0, 1, 5.0),
+            "adv_003": (15.0, 3, 15.0),
+        },
+    )
+
+    result = await service.get_dashboard_indice_orientador(
+        "adv_001",
+        IndiceModalidade.soma_total,
+    )
+
+    assert result.indice.advisor_id == "adv_001"
+    assert result.indice.indice == 10.0
+    assert result.indice.total_orientandos == 2
+    assert result.indice.total_pontuacao == 10.0
+    assert result.posicao_relativa.media_programa == 10.0
+    assert result.posicao_relativa.percentil == 66.67
+    assert result.posicao_relativa.total_orientadores == 3
+
+
+@pytest.mark.asyncio
+async def test_dashboard_indice_orientador_sem_orientandos_nao_divide_por_zero():
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    service._dashboard = _FakeDashboardRepository(
+        indices={"adv_001": (0.0, 0, 0.0)},
+    )
+
+    result = await service.get_dashboard_indice_orientador(
+        "adv_001",
+        IndiceModalidade.media_por_orientando,
+    )
+
+    assert result.indice.indice == 0.0
+    assert result.indice.total_orientandos == 0
+    assert result.posicao_relativa.media_programa == 0.0
+    assert result.posicao_relativa.percentil == 100.0
+
+
+@pytest.mark.asyncio
+async def test_dashboard_indice_orientador_retorna_404_para_orientador_inexistente():
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    service._dashboard = _FakeDashboardRepository(advisor=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_dashboard_indice_orientador(
+            "adv_inexistente",
+            IndiceModalidade.soma_total,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+def test_import_backend_app_main_sem_erro():
+    import backend.app.main  # noqa: F401
 
 
 
