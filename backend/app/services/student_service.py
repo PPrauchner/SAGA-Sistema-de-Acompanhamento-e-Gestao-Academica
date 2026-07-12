@@ -273,7 +273,7 @@ class StudentService:
         result = await self._inference.run_inference(student_id, student.get("programa_id", ""))
 
         return {
-            "message": "Qualificacao registrada",
+            "message": "Qualificação registrada",
             "situacao_inferida": result.situacao_inferida,
             "situacao_inferida_atualizada": True,
         }
@@ -299,7 +299,7 @@ class StudentService:
         result = await self._inference.run_inference(student_id, student.get("programa_id", ""))
 
         return {
-            "message": "Proficiencia registrada",
+            "message": "Proficiência registrada",
             "situacao_inferida": result.situacao_inferida,
             "situacao_inferida_atualizada": True,
         }

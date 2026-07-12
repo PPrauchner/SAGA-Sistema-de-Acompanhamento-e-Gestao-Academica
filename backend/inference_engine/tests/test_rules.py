@@ -234,6 +234,16 @@ class TestActivityEligibility:
         goal = Compound("atividade_elegivel", [Atom("atv1"), Atom("a1")])
         assert engine._query_bool(goal) is False
 
+    def test_nao_deduplica_para_alunos_distintos(self):
+        engine = make_engine(
+            *self._fatos_elegivel("atv1", "a1"),
+            *self._fatos_elegivel("atv1", "a2"),
+        )
+        goal_a1 = Compound("atividade_elegivel", [Atom("atv1"), Atom("a1")])
+        goal_a2 = Compound("atividade_elegivel", [Atom("atv1"), Atom("a2")])
+        assert engine._query_bool(goal_a1) is True
+        assert engine._query_bool(goal_a2) is True
+
 
 # ===========================================================================
 # RL05 — Pontuação Ponderada de Produção
