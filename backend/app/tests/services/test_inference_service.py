@@ -9,7 +9,8 @@ Responsabilidades:
 from typing import Any
 
 import pytest
-from unittest.mock import patch
+
+from backend.app.models.program_config import DEFAULT_PROGRAM_CREDIT_CONFIG
 from backend.app.services.inference_service import InferenceService
 from backend.app.repositories.fixtures import FixtureRepository, _PROGRAM
 from backend.app.repositories.inference_repository import InferenceRepository
@@ -17,6 +18,15 @@ from backend.app.repositories.inference_repository import InferenceRepository
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
+
+
+class _ProgramOverrideRepository(FixtureRepository):
+    def __init__(self, program: dict[str, Any]) -> None:
+        super().__init__()
+        self._program_override = program
+
+    async def get_program(self, programa_id: str) -> dict[str, Any] | None:
+        return {"id": programa_id, **self._program_override}
 
 
 class _StubProgramsCollection:
@@ -75,6 +85,31 @@ async def test_inference_reflects_program_config_change(monkeypatch):
     assert result_after.creditos_validos is False
     assert result_after.em_risco is True
     assert any("Créditos insuficientes (25/100)" in msg for msg in result_after.riscos_detectados)
+
+
+@pytest.mark.anyio
+async def test_defaults_canonicos_alimentam_fatos_checklist_e_riscos(monkeypatch):
+    monkeypatch.setitem(DEFAULT_PROGRAM_CREDIT_CONFIG, "creditos_total_min", 80)
+    repo = _ProgramOverrideRepository({})
+    service = InferenceService(data_source=repo)
+
+    result = await service.run_inference(student_id="aluno_regular", programa_id="prog_default")
+
+    assert result.checklist.creditos_minimos.minimo == 80
+    assert any("Créditos insuficientes (25/80)" in msg for msg in result.riscos_detectados)
+    assert any("min_creditos_total" in fact and "80" in fact for fact in result.fatos_usados)
+
+
+@pytest.mark.anyio
+async def test_configuracao_do_programa_sobrepoe_default_canonico(monkeypatch):
+    monkeypatch.setitem(DEFAULT_PROGRAM_CREDIT_CONFIG, "creditos_total_min", 40)
+    repo = _ProgramOverrideRepository({"creditos_total_min": 100})
+    service = InferenceService(data_source=repo)
+
+    result = await service.run_inference(student_id="aluno_regular", programa_id="prog_default")
+
+    assert result.checklist.creditos_minimos.minimo == 100
+    assert any("Créditos insuficientes (25/100)" in msg for msg in result.riscos_detectados)
 
 @pytest.mark.anyio
 async def test_aptidao_defesa_aluno_apto():

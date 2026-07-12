@@ -18,6 +18,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from backend.app.models.program_config import DEFAULT_PROGRAM_CREDIT_CONFIG
 from backend.app.repositories.activity_repository import ActivityRepository
 from backend.app.repositories.activity_type_repository import ActivityTypeRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
@@ -102,19 +103,36 @@ class InferenceRepository:
         if data is None:
             return {
                 "id": programa_id,
-                "creditos_grupo_basico_min": 12,
-                "creditos_grupo_especifico_min": 8,
-                "creditos_grupo_tecnologico_max": 4,
-                "creditos_total_min": 24,
+                **DEFAULT_PROGRAM_CREDIT_CONFIG,
                 "max_prorrogacoes": 1,
                 "meses_ate_qualificacao": 12,
             }
         return {
             "id": programa_id,
-            "creditos_grupo_basico_min": int(data.get("creditos_grupo_basico_min", 12)),
-            "creditos_grupo_especifico_min": int(data.get("creditos_grupo_especifico_min", 8)),
-            "creditos_grupo_tecnologico_max": int(data.get("creditos_grupo_tecnologico_max", 4)),
-            "creditos_total_min": int(data.get("creditos_total_min", 24)),
+            "creditos_grupo_basico_min": int(
+                data.get(
+                    "creditos_grupo_basico_min",
+                    DEFAULT_PROGRAM_CREDIT_CONFIG["creditos_grupo_basico_min"],
+                )
+            ),
+            "creditos_grupo_especifico_min": int(
+                data.get(
+                    "creditos_grupo_especifico_min",
+                    DEFAULT_PROGRAM_CREDIT_CONFIG["creditos_grupo_especifico_min"],
+                )
+            ),
+            "creditos_grupo_tecnologico_max": int(
+                data.get(
+                    "creditos_grupo_tecnologico_max",
+                    DEFAULT_PROGRAM_CREDIT_CONFIG["creditos_grupo_tecnologico_max"],
+                )
+            ),
+            "creditos_total_min": int(
+                data.get(
+                    "creditos_total_min",
+                    DEFAULT_PROGRAM_CREDIT_CONFIG["creditos_total_min"],
+                )
+            ),
             "max_prorrogacoes": int(data.get("max_prorrogacoes", 1)),
             "meses_ate_qualificacao": int(data.get("meses_ate_qualificacao", 12)),
         }

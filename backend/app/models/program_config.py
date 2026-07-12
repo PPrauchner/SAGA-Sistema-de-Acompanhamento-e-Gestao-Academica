@@ -20,6 +20,13 @@ CREDIT_FIELDS = {
     "creditos_total_min",
 }
 
+DEFAULT_PROGRAM_CREDIT_CONFIG: dict[str, int] = {
+    "creditos_grupo_basico_min": 12,
+    "creditos_grupo_especifico_min": 8,
+    "creditos_grupo_tecnologico_max": 4,
+    "creditos_total_min": 24,
+}
+
 
 def _validate_required_int(value: Any, *, min_value: int, message: str) -> int:
     if value is None or value == "":
