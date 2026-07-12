@@ -252,7 +252,7 @@ def test_work_plan_mutations_require_orientador_role(fake_db) -> None:
     assert response.status_code == 403
 
 
-def test_work_plan_mutations_allow_coordenacao_role(fake_db) -> None:
+def test_work_plan_mutations_block_coordenacao_without_advisor_ownership(fake_db) -> None:
     response = _client("coordenacao").post(
         "/api/v1/work-plan/aluno_coord",
         json={
@@ -262,8 +262,7 @@ def test_work_plan_mutations_allow_coordenacao_role(fake_db) -> None:
         },
     )
 
-    assert response.status_code == 201
-    assert response.json()["plan_id"].startswith("aluno_coord~")
+    assert response.status_code == 403
 
 
 def test_plan_concluded_fact_available_when_non_defense_tasks_done(fake_db) -> None:
