@@ -20,6 +20,8 @@ import {
   updateStudent,
 } from "@/api/studentsApi";
 import { useApp } from "../../context/AppContext";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
+import type { ExportColumn } from "@/utils/exportData";
 
 const STATUS_MAP: Record<
   StudentStatus,
@@ -185,6 +187,27 @@ export function StudentsPage() {
     currentUser?.role === "orientador"
       ? programs.filter((program) => program.id === currentUser.programa_id)
       : programs;
+  const studentExportColumns = useMemo<ExportColumn<Student>[]>(
+    () =>
+      viewMode === "table"
+        ? [
+            { key: "nome", label: "Aluno" },
+            { key: "matricula", label: "Matricula" },
+            { key: "orientador_id", label: "Orientador", value: (student) => advisorById.get(student.orientador_id)?.nome ?? student.orientador_id },
+            { key: "programa_id", label: "Programa" },
+            { key: "id", label: "Progresso", value: (student) => progressFor(student) },
+            { key: "situacao_registrada", label: "Status", value: (student) => STATUS_MAP[student.situacao_registrada]?.label ?? student.situacao_registrada },
+          ]
+        : [
+            { key: "nome", label: "Nome" },
+            { key: "matricula", label: "Matricula" },
+            { key: "programa_id", label: "Programa" },
+            { key: "prazo_final", label: "Prazo", value: (student) => formatDate(student.prazo_final) },
+            { key: "id", label: "Progresso", value: (student) => progressFor(student) },
+            { key: "situacao_registrada", label: "Status", value: (student) => STATUS_MAP[student.situacao_registrada]?.label ?? student.situacao_registrada },
+          ],
+    [advisorById, viewMode],
+  );
 
   return (
     <div>
@@ -236,6 +259,7 @@ export function StudentsPage() {
             </button>
           ))}
         </div>
+        <TableExportMenu title="Alunos" fileName="alunos" rows={filtered} columns={studentExportColumns} />
       </div>
 
       {loading ? (

@@ -58,11 +58,13 @@ class StudentUpdateRequest(BaseModel):
 class QualificacaoRequest(BaseModel):
     aprovada: bool
     data_qualificacao: datetime
+    comprovante_url: str | None = None
 
 
 class ProficienciaRequest(BaseModel):
     comprovada: bool
     data_proficiencia: datetime | None = None
+    comprovante_url: str | None = None
 
 
 class SituacaoRequest(BaseModel):
@@ -94,6 +96,8 @@ class StudentResponse(BaseModel):
 
     qualificacao_data: datetime | None = None
     proficiencia_data: datetime | None = None
+    qualificacao_comprovante_url: str | None = None
+    proficiencia_comprovante_url: str | None = None
 
 
 class CoauthorCandidate(BaseModel):

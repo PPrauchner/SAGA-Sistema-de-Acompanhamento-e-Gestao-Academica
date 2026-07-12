@@ -78,6 +78,29 @@ class ActivityRepository(FirebaseRepository):
 
         return await asyncio.to_thread(_update)
 
+    async def update_group_comprovante(
+        self,
+        activity_group_id: str,
+        comprovante_url: str,
+        atualizado_em: Any,
+    ) -> list[str]:
+        def _update_group() -> list[str]:
+            updated_ids: list[str] = []
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                data = snapshot.to_dict()
+                if data.get("activity_group_id") != activity_group_id:
+                    continue
+                snapshot.reference.update(
+                    {
+                        "comprovante_url": comprovante_url,
+                        "atualizado_em": atualizado_em,
+                    }
+                )
+                updated_ids.append(snapshot.id)
+            return updated_ids
+
+        return await asyncio.to_thread(_update_group)
+
     async def get_activity_type(self, tipo_id: str) -> dict[str, Any] | None:
         def _read() -> dict[str, Any] | None:
             doc = get_firestore_client().collection("activity_types").document(tipo_id).get()

@@ -11,6 +11,8 @@ from unittest.mock import MagicMock, patch
 # Mocks globais ANTES de qualquer import do projeto
 # ---------------------------------------------------------------------------
 
+_previous_firebase_module = sys.modules.get("backend.app.core.firebase")
+
 _firebase_mock = MagicMock()
 sys.modules.setdefault("firebase_admin", _firebase_mock)
 sys.modules.setdefault("firebase_admin.credentials", MagicMock())
@@ -22,20 +24,20 @@ _pydantic_settings.BaseSettings = object
 _pydantic_settings.SettingsConfigDict = dict
 sys.modules.setdefault("pydantic_settings", _pydantic_settings)
 
-_settings_mock = MagicMock()
-_settings_mock.deadline_alert_days = 30
-_settings_mock.max_extensions = 2
-_config_mock = MagicMock()
-_config_mock.settings = _settings_mock
-
 for mod in ["backend", "backend.app", "backend.app.core"]:
     sys.modules.setdefault(mod, MagicMock())
-sys.modules["backend.app.core.config"] = _config_mock
 sys.modules["backend.app.core.firebase"] = MagicMock()
 
 from fastapi import HTTPException
 
 from backend.app.core.auth import CurrentUser
+
+
+def teardown_module() -> None:
+    if _previous_firebase_module is None:
+        sys.modules.pop("backend.app.core.firebase", None)
+    else:
+        sys.modules["backend.app.core.firebase"] = _previous_firebase_module
 
 # ---------------------------------------------------------------------------
 # Fixtures

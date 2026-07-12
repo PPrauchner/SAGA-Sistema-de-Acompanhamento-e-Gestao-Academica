@@ -9,7 +9,12 @@ from fastapi import HTTPException
 from backend.app.aspects import aspect_config
 from backend.app.core.auth import CurrentUser
 from backend.app.models.advisor import AdvisorCreateRequest, AdvisorUpdateRequest
-from backend.app.models.student import SituacaoRequest, StudentCreateRequest
+from backend.app.models.student import (
+    ProficienciaRequest,
+    QualificacaoRequest,
+    SituacaoRequest,
+    StudentCreateRequest,
+)
 from backend.app.models.user import InviteRequest
 from backend.app.services import advisor_service as advisor_module
 from backend.app.services import student_service as student_module
@@ -112,6 +117,14 @@ class _FakeAuthService:
         return type("Invite", (), {"token": f"tok-{data.role}", "expira_em": "x"})()
 
 
+class _FakeInferenceService:
+    calls: list[tuple[str, str]] = []
+
+    async def run_inference(self, student_id: str, programa_id: str):
+        type(self).calls.append((student_id, programa_id))
+        return type("InferenceResult", (), {"situacao_inferida": "qualificado"})()
+
+
 def _coord() -> CurrentUser:
     return CurrentUser(uid="coord1", role="coordenacao", programa_id="prog", email="c@x.com")
 
@@ -132,6 +145,7 @@ def _setup(monkeypatch: pytest.MonkeyPatch) -> None:
     _FakeAdvisorRepository.counter = 0
     _FakeProgramRepository.store = {}
     _FakeProgramRepository.counter = 0
+    _FakeInferenceService.calls = []
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
     monkeypatch.setattr(student_module, "StudentRepository", _FakeStudentRepository)
     monkeypatch.setattr(student_module, "AdvisorRepository", _FakeAdvisorRepository)
@@ -331,6 +345,60 @@ async def test_update_situacao_nao_grava_observacao_no_documento() -> None:
 
     assert _FakeStudentRepository.store["student1"]["situacao_registrada"] == "em_risco"
     assert "situacao_observacao" not in _FakeStudentRepository.store["student1"]
+
+
+async def test_update_proficiencia_persiste_comprovante_e_recalcula_inferencia() -> None:
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Aluno", "programa_id": "prog"},
+    }
+    service = StudentService(
+        auth_service=_FakeAuthService(),
+        inference_service=_FakeInferenceService(),
+    )
+
+    result = await service.update_proficiencia(
+        "student1",
+        ProficienciaRequest(
+            comprovada=True,
+            data_proficiencia=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            comprovante_url="https://example.com/prof.pdf",
+        ),
+        _coord(),
+    )
+
+    student = _FakeStudentRepository.store["student1"]
+    assert student["proficiencia_comprovada"] is True
+    assert student["proficiencia_data"] == datetime(2026, 4, 1, tzinfo=timezone.utc)
+    assert student["proficiencia_comprovante_url"] == "https://example.com/prof.pdf"
+    assert _FakeInferenceService.calls == [("student1", "prog")]
+    assert result["situacao_inferida_atualizada"] is True
+
+
+async def test_update_qualificacao_persiste_comprovante_e_recalcula_inferencia() -> None:
+    _FakeStudentRepository.store = {
+        "student1": {"nome": "Aluno", "programa_id": "prog"},
+    }
+    service = StudentService(
+        auth_service=_FakeAuthService(),
+        inference_service=_FakeInferenceService(),
+    )
+
+    result = await service.update_qualificacao(
+        "student1",
+        QualificacaoRequest(
+            aprovada=True,
+            data_qualificacao=datetime(2026, 5, 1, tzinfo=timezone.utc),
+            comprovante_url="https://example.com/qual.pdf",
+        ),
+        _coord(),
+    )
+
+    student = _FakeStudentRepository.store["student1"]
+    assert student["qualificacao_aprovada"] is True
+    assert student["qualificacao_data"] == datetime(2026, 5, 1, tzinfo=timezone.utc)
+    assert student["qualificacao_comprovante_url"] == "https://example.com/qual.pdf"
+    assert _FakeInferenceService.calls == [("student1", "prog")]
+    assert result["situacao_inferida_atualizada"] is True
 
 
 async def test_create_advisor_usa_auto_id_e_retorna_invite_token() -> None:

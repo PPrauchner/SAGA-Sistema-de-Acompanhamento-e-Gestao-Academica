@@ -34,6 +34,9 @@ class _FakeStudentRepository:
     async def list_all(self) -> list[dict[str, Any]]:
         return [dict(item) for item in type(self).store]
 
+    async def list_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        return [dict(item) for item in type(self).store if item.get("programa_id") == programa_id]
+
     async def get(self, doc_id: str) -> dict[str, Any] | None:
         return next((dict(item) for item in type(self).store if item.get("id") == doc_id), None)
 
@@ -161,6 +164,116 @@ async def test_submit_enviado_cria_atividade_e_notifica_orientador() -> None:
     stored = _FakeActivityRepository.store["student1"][0]
     assert stored["creditos_gerados"] == 4.0
     assert stored["status"] == "enviado"
+    assert result["created_activity_ids"] == ["act1"]
+
+
+async def test_submit_sem_coautor_cria_unica_atividade() -> None:
+    service = _service()
+
+    result = await service.submit_activity(
+        ActivityCreateRequest(
+            tipo_id="t1",
+            descricao="Curso individual",
+            data_realizacao=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            status="enviado",
+        ),
+        _aluno(),
+    )
+
+    assert result["created_activity_ids"] == ["act1"]
+    assert list(_FakeActivityRepository.store) == ["student1"]
+    assert len(_FakeActivityRepository.store["student1"]) == 1
+
+
+async def test_submit_com_dois_coautores_cria_copias_independentes() -> None:
+    _FakeStudentRepository.store.extend(
+        [
+            {
+                "id": "student2",
+                "uid": "uid-coautor-1",
+                "nome": "Joao",
+                "programa_id": "prog_default",
+                "orientador_id": "advisor1",
+                "data_ingresso": datetime(2024, 3, 1, tzinfo=timezone.utc),
+            },
+            {
+                "id": "student3",
+                "uid": "uid-coautor-2",
+                "nome": "Ana",
+                "programa_id": "prog_default",
+                "orientador_id": "advisor1",
+                "data_ingresso": datetime(2024, 3, 1, tzinfo=timezone.utc),
+            },
+        ]
+    )
+    service = _service()
+
+    result = await service.submit_activity(
+        ActivityCreateRequest(
+            tipo_id="t1",
+            descricao="Atividade em coautoria",
+            data_realizacao=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            status="rascunho",
+            coauthor_student_uids=["uid-coautor-1", "uid-aluno", "uid-coautor-1", "uid-coautor-2"],
+            external_authors=["Maria Externa"],
+        ),
+        _aluno(),
+    )
+
+    assert result["created_activity_ids"] == ["act1", "act2", "act3"]
+    assert result["activity_group_id"]
+    assert set(_FakeActivityRepository.store) == {"student1", "student2", "student3"}
+
+    principal = _FakeActivityRepository.store["student1"][0]
+    copia_1 = _FakeActivityRepository.store["student2"][0]
+    copia_2 = _FakeActivityRepository.store["student3"][0]
+
+    assert principal["id"] != copia_1["id"] != copia_2["id"]
+    assert {principal["status"], copia_1["status"], copia_2["status"]} == {"enviado"}
+    assert principal["origin_activity_id"] is None
+    assert copia_1["origin_activity_id"] == "act1"
+    assert copia_2["origin_activity_id"] == "act1"
+    assert principal["activity_group_id"] == copia_1["activity_group_id"] == copia_2["activity_group_id"]
+    assert principal["coauthor_student_uids"] == ["uid-coautor-1", "uid-coautor-2"]
+    assert copia_1["external_authors"] == ["Maria Externa"]
+    assert copia_2["creditos_gerados"] == 4.0
+
+
+async def test_submit_autor_externo_nao_gera_copia() -> None:
+    service = _service()
+
+    result = await service.submit_activity(
+        ActivityCreateRequest(
+            tipo_id="t1",
+            descricao="Atividade com autor externo",
+            data_realizacao=datetime(2024, 6, 1, tzinfo=timezone.utc),
+            external_authors=["Maria Externa", "Maria Externa", " "],
+        ),
+        _aluno(),
+    )
+
+    assert result["created_activity_ids"] == ["act1"]
+    assert _FakeActivityRepository.store["student1"][0]["external_authors"] == ["Maria Externa"]
+    assert _FakeActivityRepository.store["student1"][0]["activity_group_id"] is None
+
+
+async def test_submit_coautor_inexistente_gera_erro_claro() -> None:
+    service = _service()
+
+    with pytest.raises(HTTPException) as exc:
+        await service.submit_activity(
+            ActivityCreateRequest(
+                tipo_id="t1",
+                descricao="Atividade em coautoria",
+                data_realizacao=datetime(2024, 6, 1, tzinfo=timezone.utc),
+                coauthor_student_uids=["uid-fantasma"],
+            ),
+            _aluno(),
+        )
+
+    assert exc.value.status_code == 404
+    assert "Coautor" in exc.value.detail
+    assert _FakeActivityRepository.store == {}
 
 
 async def test_submit_passa_fatos_rl04_corretos_ao_motor() -> None:

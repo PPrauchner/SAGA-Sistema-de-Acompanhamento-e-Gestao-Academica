@@ -38,3 +38,21 @@ precisa enxergá-los todos.
   alternativa é resolver co-autores por outra chave (ex.: e-mail/matrícula digitada) em vez
   de listar — o que troca conveniência de UX por privacidade. Não é o caso no MVP
   (single-tenant, `prog_default`).
+
+## Atividades standalone (issue #311)
+
+O mesmo diretorio alimenta o seletor de coautores de atividades creditaveis nao
+bibliograficas. Nesse fluxo nao ha entidade raiz compartilhada: o registro cria uma copia
+independente em `students/{id}/activities` para o autor principal e para cada coautor
+cadastrado selecionado.
+
+As copias compartilham apenas `activity_group_id` para rastreabilidade. Cada copia tem ID
+proprio, `student_id` proprio, status/parecer/validacao independentes e credito cheio quando
+aprovada. Nas copias de coautores, `origin_activity_id` aponta para a copia original.
+
+Autores externos informados em texto livre ficam em `external_authors`: nao geram copia,
+validacao ou credito. Nao ha consentimento do coautor; o gate de credito continua sendo a
+validacao do orientador do aluno dono da copia.
+
+A RL04 `nao_duplicata` permanece escopada ao aluno/subcolecao. Copias equivalentes em alunos
+diferentes nao devem ser consideradas duplicatas entre si.

@@ -9,6 +9,7 @@ Serviço de negócio para atividades creditáveis.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import date, datetime, timezone
 from typing import Any
 
@@ -72,6 +73,10 @@ class ActivityService:
         comprovante_url: str | None,
         status_inicial: str,
         parecer: str | None,
+        coauthor_student_uids: list[str] | None = None,
+        external_authors: list[str] | None = None,
+        activity_group_id: str | None = None,
+        origin_activity_id: str | None = None,
     ) -> tuple[str, bool]:
         """Persiste a atividade e roda a elegibilidade preliminar (RL04).
 
@@ -119,6 +124,10 @@ class ActivityService:
                 "descricao": descricao,
                 "data_realizacao": data_realizacao,
                 "comprovante_url": comprovante_url,
+                "coauthor_student_uids": coauthor_student_uids or [],
+                "external_authors": external_authors or [],
+                "activity_group_id": activity_group_id,
+                "origin_activity_id": origin_activity_id,
                 "creditos_gerados": pontuacao_base,
                 "creditos_concedidos": None,
                 "status": status_inicial,
@@ -146,6 +155,15 @@ class ActivityService:
 
     async def submit_activity(self, data: ActivityCreateRequest, user: CurrentUser) -> dict:
         student = await self._resolve_student(user)
+        coauthor_students = await self._resolve_coauthor_students(
+            user=user,
+            author_student=student,
+            coauthor_uids=data.coauthor_student_uids,
+        )
+        coauthor_uids = [item["uid"] for item in coauthor_students if item.get("uid")]
+        external_authors = self._normalize_external_authors(data.external_authors)
+        activity_group_id = uuid.uuid4().hex if coauthor_students else None
+        status_inicial = ActivityStatus.enviado.value if coauthor_students else data.status
 
         activity_id, elegibilidade = await self._register_activity(
             student,
@@ -153,19 +171,49 @@ class ActivityService:
             descricao=data.descricao,
             data_realizacao=data.data_realizacao,
             comprovante_url=data.comprovante_url,
-            status_inicial=data.status,
+            status_inicial=status_inicial,
             parecer=None,
+            coauthor_student_uids=coauthor_uids,
+            external_authors=external_authors,
+            activity_group_id=activity_group_id,
         )
 
+        created_activity_ids = [activity_id]
+        for coauthor in coauthor_students:
+            copy_id, _ = await self._register_activity(
+                coauthor,
+                tipo_id=data.tipo_id,
+                descricao=data.descricao,
+                data_realizacao=data.data_realizacao,
+                comprovante_url=data.comprovante_url,
+                status_inicial=ActivityStatus.enviado.value,
+                parecer=None,
+                coauthor_student_uids=coauthor_uids,
+                external_authors=external_authors,
+                activity_group_id=activity_group_id,
+                origin_activity_id=activity_id,
+            )
+            created_activity_ids.append(copy_id)
+
         orientador_uid = await self._resolve_orientador_uid(student.get("orientador_id"))
-        notificacao_enviada = data.status == "enviado" and orientador_uid is not None
+        orientador_uids: list[str] = []
+        for uid in [orientador_uid]:
+            if uid and uid not in orientador_uids:
+                orientador_uids.append(uid)
+        for coauthor in coauthor_students:
+            uid = await self._resolve_orientador_uid(coauthor.get("orientador_id"))
+            if uid and uid not in orientador_uids:
+                orientador_uids.append(uid)
 
         return {
             "id": activity_id,
+            "created_activity_ids": created_activity_ids,
+            "activity_group_id": activity_group_id,
             "elegibilidade_preliminar": elegibilidade,
-            "notificacao_enviada": notificacao_enviada,
+            "notificacao_enviada": status_inicial == "enviado" and len(orientador_uids) > 0,
             "aluno_nome": student.get("nome", ""),
             "orientador_uid": orientador_uid,
+            "orientador_uids": orientador_uids,
             "programa_id": student.get("programa_id"),
         }
 
@@ -287,6 +335,46 @@ class ActivityService:
         if student is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado")
         return student
+
+    @staticmethod
+    def _normalize_external_authors(external_authors: list[str]) -> list[str]:
+        result: list[str] = []
+        for author in external_authors:
+            normalized = author.strip()
+            if normalized and normalized not in result:
+                result.append(normalized)
+        return result
+
+    async def _resolve_coauthor_students(
+        self,
+        *,
+        user: CurrentUser,
+        author_student: dict,
+        coauthor_uids: list[str],
+    ) -> list[dict]:
+        normalized_uids: list[str] = []
+        for uid in coauthor_uids:
+            cleaned = uid.strip()
+            if cleaned and cleaned != user.uid and cleaned not in normalized_uids:
+                normalized_uids.append(cleaned)
+        if not normalized_uids:
+            return []
+
+        students = await self._students.list_by_program(user.programa_id)
+        student_by_uid = {item["uid"]: item for item in students if item.get("uid")}
+        missing = [uid for uid in normalized_uids if uid not in student_by_uid]
+        if missing:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Coautor cadastrado não encontrado",
+            )
+
+        author_id = author_student.get("id")
+        return [
+            student_by_uid[uid]
+            for uid in normalized_uids
+            if student_by_uid[uid].get("id") != author_id
+        ]
 
     async def _resolve_orientador_uid(self, orientador_id: str | None) -> str | None:
         if not orientador_id:

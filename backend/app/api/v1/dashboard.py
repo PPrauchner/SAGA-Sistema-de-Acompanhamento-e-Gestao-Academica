@@ -18,7 +18,7 @@ Nota de segurança:
 - Dashboard endpoints NÃO levam @audit_operation (somente @requires_role).
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from backend.app.aspects.authorization import requires_role
 from backend.app.aspects.ownership import check_dashboard_ownership
@@ -26,6 +26,8 @@ from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.dashboard import (
     AlunoDashboardResponse,
     CoordDashboardResponse,
+    DashboardIndiceOrientadorResponse,
+    IndiceModalidade,
     OrientadorDashboardResponse,
 )
 from backend.app.services.dashboard_service import DashboardService
@@ -90,3 +92,22 @@ async def get_coordenacao_dashboard(
 ) -> CoordDashboardResponse:
     """Dashboard da coordenação: visão macro do programa."""
     return await service.get_coordenacao_dashboard()
+
+
+@router.get(
+    "/dashboard/orientador/{advisor_id}/indice",
+    response_model=DashboardIndiceOrientadorResponse,
+)
+@requires_role("orientador")
+@check_dashboard_ownership()
+async def get_dashboard_indice_orientador(
+    advisor_id: str,
+    modalidade: IndiceModalidade = Query(
+        ...,
+        description="Modalidade de calculo: soma_total ou media_por_orientando",
+    ),
+    user: CurrentUser = Depends(get_current_user),
+    service: DashboardService = Depends(get_dashboard_service),
+) -> DashboardIndiceOrientadorResponse:
+    """Indice de producao do orientador e posicao relativa anonima no programa."""
+    return await service.get_dashboard_indice_orientador(advisor_id, modalidade)
