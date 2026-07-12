@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.app.models.dashboard import AlunoDashboardResponse
+from backend.app.models.dashboard import AlunoDashboardResponse, IndiceModalidade
 from fastapi import HTTPException
 
 
@@ -36,6 +36,32 @@ def _make_student(overrides: dict | None = None) -> dict:
     if overrides:
         base.update(overrides)
     return base
+
+
+_DEFAULT_ADVISOR = {"id": "adv_001", "nome": "Ada", "programa_id": "prog_default"}
+_MISSING = object()
+
+
+class _FakeDashboardRepository:
+    def __init__(
+        self,
+        *,
+        advisor: dict | None | object = _MISSING,
+        advisors: list[dict] | None = None,
+        indices: dict[str, tuple[float, int, float]] | None = None,
+    ) -> None:
+        self.advisor = _DEFAULT_ADVISOR if advisor is _MISSING else advisor
+        self.advisors = advisors or [{"id": "adv_001", "programa_id": "prog_default"}]
+        self.indices = indices or {"adv_001": (0.0, 0, 0.0)}
+
+    async def get_advisor(self, advisor_id: str) -> dict | None:
+        return self.advisor if self.advisor and self.advisor.get("id") == advisor_id else None
+
+    async def list_advisors_by_program(self, programa_id: str | None) -> list[dict]:
+        return self.advisors
+
+    async def production_index_for_advisor(self, advisor_id: str, *, average: bool) -> tuple[float, int, float]:
+        return self.indices.get(advisor_id, (0.0, 0, 0.0))
 
 
 
@@ -277,6 +303,79 @@ async def test_meu_aluno_dashboard_blocks_non_student_role():
     assert exc_info.value.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_dashboard_indice_orientador_calcula_posicao_relativa():
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    service._dashboard = _FakeDashboardRepository(
+        advisor={"id": "adv_001", "nome": "Ada", "programa_id": "prog_default"},
+        advisors=[
+            {"id": "adv_001", "programa_id": "prog_default"},
+            {"id": "adv_002", "programa_id": "prog_default"},
+            {"id": "adv_003", "programa_id": "prog_default"},
+        ],
+        indices={
+            "adv_001": (10.0, 2, 10.0),
+            "adv_002": (5.0, 1, 5.0),
+            "adv_003": (15.0, 3, 15.0),
+        },
+    )
+
+    result = await service.get_dashboard_indice_orientador(
+        "adv_001",
+        IndiceModalidade.soma_total,
+    )
+
+    assert result.indice.advisor_id == "adv_001"
+    assert result.indice.indice == 10.0
+    assert result.indice.total_orientandos == 2
+    assert result.indice.total_pontuacao == 10.0
+    assert result.posicao_relativa.media_programa == 10.0
+    assert result.posicao_relativa.percentil == 66.67
+    assert result.posicao_relativa.total_orientadores == 3
+
+
+@pytest.mark.asyncio
+async def test_dashboard_indice_orientador_sem_orientandos_nao_divide_por_zero():
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    service._dashboard = _FakeDashboardRepository(
+        indices={"adv_001": (0.0, 0, 0.0)},
+    )
+
+    result = await service.get_dashboard_indice_orientador(
+        "adv_001",
+        IndiceModalidade.media_por_orientando,
+    )
+
+    assert result.indice.indice == 0.0
+    assert result.indice.total_orientandos == 0
+    assert result.posicao_relativa.media_programa == 0.0
+    assert result.posicao_relativa.percentil == 100.0
+
+
+@pytest.mark.asyncio
+async def test_dashboard_indice_orientador_retorna_404_para_orientador_inexistente():
+    from backend.app.services.dashboard_service import DashboardService
+
+    service = DashboardService()
+    service._dashboard = _FakeDashboardRepository(advisor=None)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await service.get_dashboard_indice_orientador(
+            "adv_inexistente",
+            IndiceModalidade.soma_total,
+        )
+
+    assert exc_info.value.status_code == 404
+
+
+def test_import_backend_app_main_sem_erro():
+    import backend.app.main  # noqa: F401
+
+
 
 @pytest.mark.asyncio
 async def test_aluno_dashboard_raises_404_if_student_not_found():
@@ -338,7 +437,7 @@ async def test_orientador_dashboard_returns_basic_data():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -351,7 +450,7 @@ async def test_orientador_dashboard_returns_basic_data():
 
     MockAdvR.return_value.get.assert_called_once_with("adv_001")
     MockSR.return_value.list_all.assert_called_once()
-    assert MockAR.return_value.list_by_student.call_count == 2
+    MockAR.return_value.list_all_grouped.assert_called_once()
 
 
 
@@ -381,7 +480,7 @@ async def test_orientador_dashboard_counts_by_status():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -407,9 +506,11 @@ async def test_orientador_dashboard_counts_pending_activities():
         _make_student({"id": "s1", "orientador_id": "adv_001"}),
     ]
     activities = [
-        {"id": "a1", "status": "enviado"},
-        {"id": "a2", "status": "enviado"},
-        {"id": "a3", "status": "aprovado"},
+        {"id": "a1", "status": "enviado", "student_id": "s1"},
+        {"id": "a2", "status": "enviado", "student_id": "s1"},
+        {"id": "a3", "status": "aprovado", "student_id": "s1"},
+        # Atividade de aluno de outro orientador não deve contar.
+        {"id": "a4", "status": "enviado", "student_id": "s_outro"},
     ]
 
     with (
@@ -421,7 +522,7 @@ async def test_orientador_dashboard_counts_pending_activities():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=activities)
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=activities)
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -429,7 +530,7 @@ async def test_orientador_dashboard_counts_pending_activities():
 
     assert result.atividades_aguardando_parecer == 2
     MockAdvR.return_value.get.assert_called_once_with("adv_001")
-    MockAR.return_value.list_by_student.assert_called_once_with("s1")
+    MockAR.return_value.list_all_grouped.assert_called_once()
 
 
 
@@ -477,8 +578,9 @@ async def test_coord_dashboard_returns_basic_totals():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -491,7 +593,7 @@ async def test_coord_dashboard_returns_basic_totals():
     assert result.alunos_por_status.em_risco == 1
 
     MockSR.return_value.list_all.assert_called_once()
-    assert MockAR.return_value.list_by_student.call_count == 3
+    MockAR.return_value.list_all_grouped.assert_called_once()
 
 
 
@@ -513,8 +615,9 @@ async def test_coord_dashboard_tempo_medio_none_when_no_completed():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -534,13 +637,12 @@ async def test_coord_dashboard_counts_global_pending_activities():
         _make_student({"id": "s2"}),
     ]
 
-    call_count = 0
-    async def mock_list_by_student(student_id: str) -> list[dict]:
-        nonlocal call_count
-        call_count += 1
-        if student_id == "s1":
-            return [{"id": "a1", "status": "enviado"}, {"id": "a2", "status": "aprovado"}]
-        return [{"id": "a3", "status": "enviado"}, {"id": "a4", "status": "enviado"}]
+    activities = [
+        {"id": "a1", "status": "enviado", "student_id": "s1"},
+        {"id": "a2", "status": "aprovado", "student_id": "s1"},
+        {"id": "a3", "status": "enviado", "student_id": "s2"},
+        {"id": "a4", "status": "enviado", "student_id": "s2"},
+    ]
 
     with (
         patch("backend.app.services.dashboard_service.StudentRepository") as MockSR,
@@ -551,8 +653,9 @@ async def test_coord_dashboard_counts_global_pending_activities():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(side_effect=mock_list_by_student)
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=activities)
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -583,8 +686,9 @@ async def test_coord_dashboard_includes_recent_audit():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=[])
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
-        MockFBR.return_value.list_all = AsyncMock(return_value=audit_logs)
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
+        MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=audit_logs)
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -592,6 +696,9 @@ async def test_coord_dashboard_includes_recent_audit():
 
     assert len(result.auditoria_recente) == 2
     assert result.auditoria_recente[0].operacao == "update_student"  # mais recente primeiro
+    MockFBR.return_value.query.assert_called_once_with(
+        order_by="timestamp", descending=True, limit=5
+    )
 
 
 # ─── Cycle 14: total concluidos ──────────────────────────────────────────────
@@ -616,8 +723,9 @@ async def test_coord_dashboard_counts_total_concluidos():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -643,8 +751,9 @@ async def test_coord_dashboard_counts_total_concluidos_zero():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -675,8 +784,9 @@ async def test_coord_dashboard_counts_total_alunos_vs_ativos():
         patch("backend.app.services.dashboard_service.FirebaseRepository") as MockFBR,
     ):
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockFBR.return_value.list_all = AsyncMock(return_value=[])
+        MockFBR.return_value.query = AsyncMock(return_value=[])
 
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(return_value=[])
         service = DashboardService()
@@ -774,7 +884,7 @@ async def test_orientador_dashboard_shows_orientando_progress():
     ):
         MockAdvR.return_value.get = AsyncMock(return_value=advisor)
         MockSR.return_value.list_all = AsyncMock(return_value=students)
-        MockAR.return_value.list_by_student = AsyncMock(return_value=[])
+        MockAR.return_value.list_all_grouped = AsyncMock(return_value=[])
         MockWPR.return_value.get_all_tasks_for_student = AsyncMock(side_effect=mock_get_all_tasks)
 
         service = DashboardService()

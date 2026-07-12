@@ -27,10 +27,13 @@ def mock_repos():
          patch("backend.app.services.request_service.AdvisorRepository") as mock_adv, \
          patch("backend.app.services.request_service.FirebaseRepository") as mock_fb:
         
-        mock_adv.return_value.list_all = AsyncMock()
+        mock_adv.return_value.query = AsyncMock()
+        mock_stud.return_value.query = AsyncMock()
         mock_stud.return_value.list_all = AsyncMock()
+        mock_act.return_value.list_all_grouped = AsyncMock(return_value=[])
+        mock_ext.return_value.list_by_student_ids = AsyncMock(return_value=[])
         mock_coord_tr.return_value.query = AsyncMock()
-        mock_fb.return_value.list_all = AsyncMock()
+        mock_fb.return_value.get = AsyncMock()
         mock_ext.return_value.list_all = AsyncMock()
         mock_tr.return_value.list_by_program = AsyncMock()
         mock_coord_tr.return_value.list_by_program = AsyncMock()
@@ -48,9 +51,9 @@ def mock_repos():
 async def test_request_service_visibility_for_successor(mock_repos):
     service = RequestService()
     
-    mock_repos["adv"].list_all.return_value = [{"uid": "adv", "id": "advisor-adv"}]
-    mock_repos["stud"].list_all.return_value = []
-    
+    mock_repos["adv"].query.return_value = [{"uid": "adv", "id": "advisor-adv"}]
+    mock_repos["stud"].query.return_value = []
+
     mock_repos["coord_tr"].query.return_value = [
         {
             "id": "ct1",
@@ -60,10 +63,8 @@ async def test_request_service_visibility_for_successor(mock_repos):
             "created_at": datetime.now(timezone.utc)
         }
     ]
-    
-    mock_repos["fb"].list_all.return_value = [
-        {"uid": "coord", "nome": "O Coordenador"}
-    ]
+
+    mock_repos["fb"].get.return_value = {"uid": "coord", "nome": "O Coordenador"}
     
     requests = await service.get_requests(_advisor())
     
@@ -76,9 +77,9 @@ async def test_request_service_visibility_for_successor(mock_repos):
 async def test_request_service_visibility_for_initiator(mock_repos):
     service = RequestService()
     
-    mock_repos["stud"].list_all.return_value = []
-    mock_repos["adv"].list_all.return_value = [{"uid": "coord", "id": "advisor-coord"}]
-    
+    mock_repos["stud"].query.return_value = []
+    mock_repos["adv"].query.return_value = [{"uid": "coord", "id": "advisor-coord"}]
+
     async def mock_query(filters=None):
         if filters and filters[0][0] == "initiator_uid" and filters[0][2] == "coord":
             return [
@@ -93,10 +94,8 @@ async def test_request_service_visibility_for_initiator(mock_repos):
         return []
 
     mock_repos["coord_tr"].query.side_effect = mock_query
-    
-    mock_repos["fb"].list_all.return_value = [
-        {"uid": "coord", "nome": "O Ex-Coordenador"}
-    ]
+
+    mock_repos["fb"].get.return_value = {"uid": "coord", "nome": "O Ex-Coordenador"}
     
     user_ex_coord = CurrentUser(uid="coord", role="orientador", programa_id="prog1", email="c@x.com")
     requests = await service.get_requests(user_ex_coord)

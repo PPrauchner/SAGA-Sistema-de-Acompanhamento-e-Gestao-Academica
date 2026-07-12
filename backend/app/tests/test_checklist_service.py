@@ -7,6 +7,13 @@ situacao_inferida.
 
 import pytest
 
+from backend.app.models.inference import (
+    CreditoMaximoItem,
+    CreditoMinimoItem,
+    InferenceChecklist,
+    InferenceResult,
+    StatusItem,
+)
 from backend.app.repositories.fixtures import FixtureRepository
 from backend.app.services.checklist_service import ChecklistService
 from backend.app.services.inference_service import InferenceService
@@ -102,3 +109,62 @@ async def test_aluno_prazo_expirado_todos_pendentes_em_risco(checklist_service: 
     assert response.requisitos.proficiencia.status == "em_risco"
     assert response.requisitos.producao_validada.status == "em_risco"
     assert response.requisitos.creditos_minimos.status == "em_risco"
+
+
+class _FakeInference:
+    async def run_inference(self, student_id: str, programa_id: str) -> InferenceResult:
+        return InferenceResult(
+            student_id=student_id,
+            programa_id=programa_id,
+            timestamp="2026-07-10T00:00:00Z",
+            situacao_inferida="qualificado",
+            apto_defesa=False,
+            creditos_validos=True,
+            em_risco=False,
+            checklist=InferenceChecklist(
+                creditos_minimos=CreditoMinimoItem(status="cumprido", obtidos=24, minimo=24),
+                creditos_grupo_basico=CreditoMinimoItem(status="cumprido", obtidos=12, minimo=12),
+                creditos_grupo_especifico=CreditoMinimoItem(status="cumprido", obtidos=8, minimo=8),
+                creditos_grupo_tecnologico=CreditoMaximoItem(status="cumprido", obtidos=4, maximo=4),
+                proficiencia=StatusItem(status="cumprido"),
+                qualificacao=StatusItem(status="cumprido"),
+                producao_validada=StatusItem(status="pendente"),
+                plano_concluido=StatusItem(status="pendente"),
+            ),
+            atividades_elegiveis=[],
+            pontuacoes_producoes=[],
+            fatos_usados=[],
+            snapshot_id="snap1",
+        )
+
+
+class _FakeChecklistData:
+    async def get_student(self, student_id: str):
+        return {
+            "id": student_id,
+            "nome": "Aluno",
+            "programa_id": "prog",
+            "situacao_registrada": "qualificado",
+            "proficiencia_data": "2026-04-01T00:00:00Z",
+            "proficiencia_comprovante_url": "https://example.com/prof.pdf",
+            "qualificacao_data": "2026-05-01T00:00:00Z",
+            "qualificacao_comprovante_url": "https://example.com/qual.pdf",
+        }
+
+    async def get_approved_productions(self, student_id: str):
+        return []
+
+    async def get_plan_tasks(self, student_id: str):
+        return []
+
+
+@pytest.mark.anyio
+async def test_checklist_inclui_comprovantes_de_proficiencia_e_qualificacao() -> None:
+    service = ChecklistService(_FakeInference(), _FakeChecklistData())
+
+    response = await service.get_checklist("student1")
+
+    assert response.requisitos.proficiencia.data_comprovacao == "2026-04-01T00:00:00Z"
+    assert response.requisitos.proficiencia.comprovante_url == "https://example.com/prof.pdf"
+    assert response.requisitos.qualificacao.data_aprovacao == "2026-05-01T00:00:00Z"
+    assert response.requisitos.qualificacao.comprovante_url == "https://example.com/qual.pdf"

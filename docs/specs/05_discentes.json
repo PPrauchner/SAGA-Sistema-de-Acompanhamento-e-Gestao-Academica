@@ -87,7 +87,7 @@
     "Transferencias usam transfer_requests, bloqueiam aluno terminal, respeitam limite_orientandos e registram A02/A03/A05",
     "Coordenação cria e mantém alunos e orientadores — papel obrigatório para mutations",
     "Associação orientador-aluno registrada no documento do aluno (orientador_id)",
-    "Qualificação e proficiência são fatos booleanos registrados manualmente pela coordenação",
+    "Qualificação e proficiência são fatos booleanos registrados manualmente pela coordenação, com data e comprovante_url opcional",
     "Quando qualificacao_aprovada ou proficiencia_comprovada mudam: aspecto A03 (histórico) registra snapshot",
     "Quando situacaoRegistrada muda: aspecto A03 registra snapshot e aspecto A02 audita",
     "situacaoInferida é atualizada pelo InferenceService — não editável manualmente",
@@ -171,7 +171,7 @@
       "descricao": "Detalhe de um aluno. Aluno vê apenas o próprio.",
       "papeis_autorizados": ["coordenacao", "orientador (orientandos)", "aluno (próprio)"],
       "aspectos_aplicados": ["@requires_role('coordenacao','orientador','aluno')"],
-      "response_200": "Mesmo schema de item acima, acrescido de: programa_id, coorientador_id, qualificacao_data, proficiencia_data"
+      "response_200": "Mesmo schema de item acima, acrescido de: programa_id, coorientador_id, qualificacao_data, proficiencia_data, qualificacao_comprovante_url, proficiencia_comprovante_url"
     },
     {
       "path": "/api/v1/students",
@@ -217,7 +217,8 @@
       "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history"],
       "request_body": {
         "aprovada": "boolean",
-        "data_qualificacao": "string (ISO8601)"
+        "data_qualificacao": "string (ISO8601)",
+        "comprovante_url": "string | null (opcional)"
       },
       "response_200": {"message": "Qualificação registrada", "situacao_inferida_atualizada": "boolean"}
     },
@@ -229,7 +230,8 @@
       "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history"],
       "request_body": {
         "comprovada": "boolean",
-        "data_proficiencia": "string (ISO8601) | null"
+        "data_proficiencia": "string (ISO8601) | null",
+        "comprovante_url": "string | null (opcional)"
       },
       "response_200": {"message": "Proficiência registrada"}
     },

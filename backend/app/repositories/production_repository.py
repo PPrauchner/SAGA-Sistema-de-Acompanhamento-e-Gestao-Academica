@@ -21,6 +21,7 @@ InferenceRepository.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from backend.app.repositories.firebase_repository import FirebaseRepository
@@ -99,11 +100,11 @@ class ProductionRepository(FirebaseRepository):
         if not production_ids:
             return []
 
-        productions = []
-        for production_id in production_ids:
-            production = await self.get(production_id)
-            if production is not None:
-                productions.append(production)
+        # Busca os documentos em paralelo — os gets são independentes (issue #319).
+        fetched = await asyncio.gather(
+            *(self.get(production_id) for production_id in production_ids)
+        )
+        productions = [production for production in fetched if production is not None]
 
         program_ids = {
             production["programa_id"]

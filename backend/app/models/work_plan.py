@@ -18,7 +18,7 @@ TaskPriority = Literal["baixa", "media", "alta"]
 _LEGACY_STATUS = {"concluida": "concluido", "atrasada": "atrasado"}
 
 
-def _normalize_status(value: str | None) -> str | None:
+def normalize_status(value: str | None) -> str | None:
     return _LEGACY_STATUS.get(value, value)
 
 
@@ -52,7 +52,7 @@ class StageUpdate(BaseModel):
     @field_validator("status", mode="before")
     @classmethod
     def _normalize_stage_status(cls, value: str | None) -> str | None:
-        return _normalize_status(value)
+        return normalize_status(value)
 
 
 class TaskCreate(BaseModel):
@@ -72,7 +72,7 @@ class TaskUpdate(BaseModel):
     @field_validator("status", mode="before")
     @classmethod
     def _normalize_task_status(cls, value: str | None) -> str | None:
-        return _normalize_status(value)
+        return normalize_status(value)
 
 
 class TaskStatusPatch(BaseModel):
@@ -81,7 +81,7 @@ class TaskStatusPatch(BaseModel):
     @field_validator("status", mode="before")
     @classmethod
     def _normalize_patch_status(cls, value: str | None) -> str | None:
-        return _normalize_status(value)
+        return normalize_status(value)
 
 
 class ProgressUpdateCreate(BaseModel):
@@ -124,7 +124,7 @@ class TaskResponse(BaseModel):
     @field_validator("status", mode="before")
     @classmethod
     def _normalize_response_status(cls, value: str | None) -> str | None:
-        return _normalize_status(value)
+        return normalize_status(value)
 
 
 class StageResponse(BaseModel):
@@ -140,7 +140,7 @@ class StageResponse(BaseModel):
     @field_validator("status", mode="before")
     @classmethod
     def _normalize_response_status(cls, value: str | None) -> str | None:
-        return _normalize_status(value)
+        return normalize_status(value)
 
 
 class WorkPlanFull(BaseModel):
@@ -159,7 +159,7 @@ class WorkPlanFull(BaseModel):
     @field_validator("status_geral", mode="before")
     @classmethod
     def _normalize_response_status(cls, value: str | None) -> str | None:
-        return _normalize_status(value)
+        return normalize_status(value)
 
 
 class MutationMessage(BaseModel):

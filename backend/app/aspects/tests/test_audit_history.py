@@ -44,8 +44,8 @@ def _reject_raw_models(value: Any) -> None:
     `valor_entrada` passava aqui e falhava só em produção — silenciosamente, porque
     `FirebaseRepository.create` engole a exceção.
     """
-    if isinstance(value, BaseModel):
-        raise TypeError("objeto Pydantic cru não é serializável no Firestore")
+    if value is None or isinstance(value, _FIRESTORE_SAFE):
+        return
     if isinstance(value, dict):
         for item in value.values():
             _reject_raw_models(item)

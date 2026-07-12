@@ -7,9 +7,9 @@ Responsabilidades:
   Firestore. Rejeita e-mail que já possui conta ativa (409). Provisiona o
   documento advisors/ do novo coordenador (issue #309), já que coordenação é
   superset de orientador (ADR-0002).
-- update_profile: usuário autenticado edita o próprio perfil (nome para todos
-  os papéis; departamento apenas para orientador, gravado no documento
-  advisors vinculado). Remove o campo telefone do documento se existir.
+- update_profile: usuário autenticado edita o próprio perfil (apenas `nome`;
+  `departamento` não é mais editável aqui — é derivado de `programa_id`,
+  ADR-0004 / issue #249). Remove o campo telefone do documento se existir.
 
 Referência: docs/specs/04_autenticacao.json; issues #162 (US-PA05), #195.
 """
@@ -119,32 +119,24 @@ class UserService:
         """Atualiza o próprio perfil do usuário autenticado.
 
         Grava `nome` em users/{uid} para qualquer papel e remove o campo
-        `telefone` do documento caso exista. `departamento` é aceito apenas
-        para orientador e gravado no documento advisors vinculado.
+        `telefone` do documento caso exista. `departamento` não é mais editável
+        aqui — é sempre derivado de `programa_id` (ADR-0004 / issue #249).
 
         Args:
-            data: Campos editáveis do perfil (nome e, opcionalmente, departamento).
+            data: Campos editáveis do perfil (nome).
             user: Identidade autenticada extraída do JWT.
 
         Returns:
-            ProfileUpdateResponse com uid, nome e departamento atualizados.
+            ProfileUpdateResponse com uid e nome atualizados.
 
         Raises:
-            HTTPException: 404 se o perfil não existir; 422 se um papel não
-                orientador tentar editar departamento; 404 se o orientador não
-                possuir documento advisors vinculado.
+            HTTPException: 404 se o perfil não existir.
         """
         doc = await self._users.get(user.uid)
         if doc is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Perfil de usuário não encontrado",
-            )
-
-        if data.departamento is not None and user.role != "orientador":
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Campo departamento editável apenas por orientador",
             )
 
         agora = datetime.now(timezone.utc)
@@ -157,49 +149,12 @@ class UserService:
             update_data["telefone"] = firestore.DELETE_FIELD
         await self._users.update(user.uid, update_data)
 
-        departamento: str | None = None
-        if user.role == "orientador" and data.departamento is not None:
-            departamento = await self._atualizar_departamento(
-                doc, user.uid, data.departamento, agora
-            )
-
         return ProfileUpdateResponse(
             uid=user.uid,
             nome=data.nome or doc["nome"],
-            departamento=departamento,
             notification_preferences=data.notification_preferences
             or NotificationPreferences(**doc.get("notification_preferences", {})),
         )
-
-    async def _atualizar_departamento(
-        self,
-        user_doc: dict[str, Any],
-        uid: str,
-        departamento: str,
-        agora: datetime,
-    ) -> str:
-        """Grava o departamento no documento advisors vinculado ao orientador.
-
-        O advisors é localizado por `users.advisor_id` quando presente; caso
-        contrário, por consulta na coleção advisors filtrando por uid.
-        """
-        advisor_id = user_doc.get("advisor_id")
-        if advisor_id is None:
-            matches = await self._advisors.query(
-                filters=[("uid", "==", uid)], limit=1
-            )
-            if matches:
-                advisor_id = matches[0]["id"]
-        if advisor_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Registro de orientador não encontrado",
-            )
-
-        await self._advisors.update(
-            advisor_id, {"departamento": departamento, "atualizado_em": agora}
-        )
-        return departamento
 
     def _email_ja_tem_conta(self, email: str) -> bool:
         """Verifica no Firebase Auth se já existe conta para o e-mail."""

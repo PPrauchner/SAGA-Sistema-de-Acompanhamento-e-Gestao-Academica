@@ -6,6 +6,8 @@ export interface RequestItem {
     | "atividade"
     | "producao"
     | "prorrogacao"
+    | "prazo_defesa"
+    | "prazo_qualificacao"
     | "trancamento"
     | "transferencia"
     | "transferencia_coordenacao";
@@ -13,7 +15,7 @@ export interface RequestItem {
   solicitante_nome: string;
   data_solicitacao: string;
   status: string;
-  payload_original: Record<string, any>;
+  payload_original: Record<string, unknown>;
 }
 
 export const requestsApi = {

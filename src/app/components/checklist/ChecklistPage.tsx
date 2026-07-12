@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CheckCircle2, Circle, AlertTriangle, Loader2, Search, ChevronDown } from "lucide-react";
+import { CheckCircle2, Circle, AlertTriangle, Loader2, Search, ChevronDown, FileDown } from "lucide-react";
 import { useChecklistStudent } from "@/hooks/useChecklistStudent";
 import { useAuth } from "@/hooks/useAuth";
 import {
@@ -7,6 +7,8 @@ import {
   type ChecklistResponse,
   type RequisitoStatus,
 } from "@/api/checklistApi";
+import { updateProficiencia, updateQualificacao } from "@/api/studentsApi";
+import { exportChecklistPdf } from "@/utils/exportChecklistPdf";
 import {
   Accordion,
   AccordionContent,
@@ -20,6 +22,21 @@ const STATUS_CFG: Record<RequisitoStatus, { label: string; color: string; bg: st
   pendente: { label: "Pendente", color: "#D4A017", bg: "#fef9c3" },
   em_risco: { label: "Em risco", color: "#dc2626", bg: "#fee2e2" },
 };
+
+// Ciclo de vida do discente (issue #255). Mesmo enum de situacao_registrada/situacao_inferida.
+const SITUACAO_CFG: Record<string, { label: string; color: string; bg: string }> = {
+  regular: { label: "Regular", color: "#123C7A", bg: "#eef3fc" },
+  em_prorrogacao: { label: "Em Prorrogação", color: "#D4A017", bg: "#fef9c3" },
+  em_risco: { label: "Em Risco", color: "#dc2626", bg: "#fee2e2" },
+  qualificado: { label: "Qualificado", color: "#1F8A70", bg: "#dcfce7" },
+  em_fase_de_defesa: { label: "Fase de Defesa", color: "#7c3aed", bg: "#ede9fe" },
+  concluido: { label: "Concluído", color: "#0891b2", bg: "#e0f2fe" },
+  desligado: { label: "Desligado", color: "#64748b", bg: "#f1f5f9" },
+};
+
+function situacaoMeta(situacao: string) {
+  return SITUACAO_CFG[situacao] ?? { label: situacao || "—", color: "#64748b", bg: "var(--muted)" };
+}
 
 interface RequisitoView {
   key: string;
@@ -61,14 +78,53 @@ function buildRequisitos(data: ChecklistResponse): RequisitoView[] {
   ];
 }
 
+function toDateInput(value: string | null | undefined): string {
+  if (!value) return "";
+  return value.slice(0, 10);
+}
+
+function toIsoDate(value: string): string {
+  return `${value}T00:00:00Z`;
+}
+
 export function ChecklistPage() {
   const { studentId, students, setStudentId } = useChecklistStudent();
-  const { token } = useAuth();
+  const { token, role } = useAuth();
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [selectorSearch, setSelectorSearch] = useState("");
   const [data, setData] = useState<ChecklistResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [savingAcademicFact, setSavingAcademicFact] = useState<"proficiencia" | "qualificacao" | null>(null);
+  const [academicForm, setAcademicForm] = useState({
+    proficienciaComprovada: false,
+    proficienciaData: "",
+    proficienciaComprovanteUrl: "",
+    qualificacaoAprovada: false,
+    qualificacaoData: "",
+    qualificacaoComprovanteUrl: "",
+  });
+  const canEditAcademicFacts = role === "coordenacao";
+
+  function applyChecklist(response: ChecklistResponse): void {
+    setData(response);
+    setAcademicForm({
+      proficienciaComprovada: response.requisitos.proficiencia.status === "cumprido",
+      proficienciaData: toDateInput(response.requisitos.proficiencia.data_comprovacao),
+      proficienciaComprovanteUrl: response.requisitos.proficiencia.comprovante_url ?? "",
+      qualificacaoAprovada: response.requisitos.qualificacao.status === "cumprido",
+      qualificacaoData: toDateInput(response.requisitos.qualificacao.data_aprovacao),
+      qualificacaoComprovanteUrl: response.requisitos.qualificacao.comprovante_url ?? "",
+    });
+  }
+
+  async function reloadChecklist(): Promise<void> {
+    if (!studentId || !token) return;
+    const response = await getChecklist(studentId, token);
+    applyChecklist(response);
+  }
 
   useEffect(() => {
     if (!studentId || !token) return;
@@ -76,7 +132,7 @@ export function ChecklistPage() {
     setLoading(true);
     setError(null);
     getChecklist(studentId, token)
-      .then((res) => { if (active) setData(res); })
+      .then((res) => { if (active) applyChecklist(res); })
       .catch(() => { if (active) setError("Não foi possível carregar o checklist."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -94,18 +150,102 @@ export function ChecklistPage() {
     s.label.toLowerCase().includes(selectorSearch.toLowerCase())
   ) ?? [];
 
+  async function handleSaveProficiencia(): Promise<void> {
+    if (!token || !studentId) return;
+    if (academicForm.proficienciaComprovada && !academicForm.proficienciaData) {
+      setError("Informe a data da proficiência.");
+      return;
+    }
+    setSavingAcademicFact("proficiencia");
+    setError(null);
+    setFeedback(null);
+    try {
+      await updateProficiencia(token, studentId, {
+        comprovada: academicForm.proficienciaComprovada,
+        data_proficiencia: academicForm.proficienciaData ? toIsoDate(academicForm.proficienciaData) : null,
+        comprovante_url: academicForm.proficienciaComprovanteUrl.trim() || null,
+      });
+      await reloadChecklist();
+      setFeedback("Proficiência atualizada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao atualizar proficiência.");
+    } finally {
+      setSavingAcademicFact(null);
+    }
+  }
+
+  async function handleSaveQualificacao(): Promise<void> {
+    if (!token || !studentId) return;
+    if (!academicForm.qualificacaoData) {
+      setError("Informe a data da qualificação.");
+      return;
+    }
+    setSavingAcademicFact("qualificacao");
+    setError(null);
+    setFeedback(null);
+    try {
+      await updateQualificacao(token, studentId, {
+        aprovada: academicForm.qualificacaoAprovada,
+        data_qualificacao: toIsoDate(academicForm.qualificacaoData),
+        comprovante_url: academicForm.qualificacaoComprovanteUrl.trim() || null,
+      });
+      await reloadChecklist();
+      setFeedback("Qualificação atualizada.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao atualizar qualificação.");
+    } finally {
+      setSavingAcademicFact(null);
+    }
+  }
+
+  function handleExportPdf(): void {
+    if (!data) return;
+    setExportingPdf(true);
+    setError(null);
+    try {
+      exportChecklistPdf(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao exportar checklist em PDF.");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   return (
     <div>
       {/* Header */}
       <div className="mb-4 md:mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Checklist de Integralização</h1>
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <h1 style={{ color: "var(--foreground)" }}>Checklist de Integralização</h1>
+            {data && !loading && (
+              <span
+                className="rounded-lg px-2.5 py-1"
+                title="Situação inferida pelo motor a partir dos requisitos"
+                style={{ background: situacaoMeta(data.situacao_inferida).bg, color: situacaoMeta(data.situacao_inferida).color, fontSize: "12px", fontWeight: 700 }}
+              >
+                {situacaoMeta(data.situacao_inferida).label}
+              </span>
+            )}
+          </div>
           <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>
             Acompanhe todos os requisitos para a conclusão do curso
           </p>
         </div>
 
         {/* Seletor de aluno — orientador e coordenação apenas */}
+        <button
+          type="button"
+          onClick={handleExportPdf}
+          disabled={!data || loading || exportingPdf}
+          className="flex items-center gap-2 rounded-xl px-4 py-2 transition-opacity disabled:opacity-60"
+          style={{ background: "#eef3fc", border: "1px solid #c7d9f5", color: "#123C7A", fontSize: "13px", fontWeight: 700 }}
+          aria-label="Exportar checklist em PDF"
+        >
+          {exportingPdf ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+          Exportar checklist em PDF
+        </button>
+
         {students && (
           <div className="relative">
             <button
@@ -194,6 +334,12 @@ export function ChecklistPage() {
         </div>
       )}
 
+      {feedback && !loading && (
+        <div className="rounded-xl p-4 mb-4" style={{ background: "#dcfce7", color: "#166534", fontSize: "14px" }}>
+          {feedback}
+        </div>
+      )}
+
       {data && !loading && (
         <>
           {/* Cards de resumo */}
@@ -243,11 +389,27 @@ export function ChecklistPage() {
             </div>
           </div>
 
-          {/* Conflito de situação */}
+          {/* Conflito de situação: registrada (manual/coordenação) x inferida (motor) lado a lado */}
           {data.conflito_situacao && (
-            <div className="flex items-center gap-2 rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", border: "1px solid #fca5a5" }}>
-              <AlertTriangle size={16} style={{ color: "#dc2626", flexShrink: 0 }} />
-              <span style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626" }}>Conflito de situação detectado</span>
+            <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", border: "1px solid #fca5a5" }}>
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={16} style={{ color: "#dc2626", flexShrink: 0 }} />
+                <span style={{ fontSize: "13px", fontWeight: 700, color: "#dc2626" }}>Conflito de situação detectado</span>
+              </div>
+              <div className="flex items-center gap-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span style={{ fontSize: "11px", color: "#991b1b" }}>Registrada:</span>
+                  <span className="rounded-lg px-2 py-0.5" style={{ background: situacaoMeta(data.situacao_registrada).bg, color: situacaoMeta(data.situacao_registrada).color, fontSize: "11px", fontWeight: 700 }}>
+                    {situacaoMeta(data.situacao_registrada).label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span style={{ fontSize: "11px", color: "#991b1b" }}>Inferida:</span>
+                  <span className="rounded-lg px-2 py-0.5" style={{ background: situacaoMeta(data.situacao_inferida).bg, color: situacaoMeta(data.situacao_inferida).color, fontSize: "11px", fontWeight: 700 }}>
+                    {situacaoMeta(data.situacao_inferida).label}
+                  </span>
+                </div>
+              </div>
             </div>
           )}
 
@@ -320,6 +482,54 @@ export function ChecklistPage() {
                                 </div>
                                 <p style={{ fontSize: "12px", color: "var(--muted-foreground)", marginTop: "2px" }}>{req.descricao}</p>
                                 <p style={{ fontSize: "13px", color: "var(--foreground)", marginTop: "6px", fontWeight: 600 }}>{req.detalhe}</p>
+                                {req.key === "proficiencia" && data.requisitos.proficiencia.comprovante_url && (
+                                  <a
+                                    href={data.requisitos.proficiencia.comprovante_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ display: "inline-block", marginTop: "6px", fontSize: "12px", color: "#123C7A", fontWeight: 700 }}
+                                  >
+                                    Ver comprovante
+                                  </a>
+                                )}
+                                {req.key === "qualificacao" && data.requisitos.qualificacao.comprovante_url && (
+                                  <a
+                                    href={data.requisitos.qualificacao.comprovante_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    style={{ display: "inline-block", marginTop: "6px", fontSize: "12px", color: "#123C7A", fontWeight: 700 }}
+                                  >
+                                    Ver comprovante
+                                  </a>
+                                )}
+                                {canEditAcademicFacts && req.key === "proficiencia" && (
+                                  <AcademicFactEditor
+                                    checked={academicForm.proficienciaComprovada}
+                                    date={academicForm.proficienciaData}
+                                    comprovanteUrl={academicForm.proficienciaComprovanteUrl}
+                                    checkedLabel="Proficiência comprovada"
+                                    dateLabel="Data da proficiência"
+                                    saving={savingAcademicFact === "proficiencia"}
+                                    onCheckedChange={(value) => setAcademicForm((f) => ({ ...f, proficienciaComprovada: value }))}
+                                    onDateChange={(value) => setAcademicForm((f) => ({ ...f, proficienciaData: value }))}
+                                    onComprovanteChange={(value) => setAcademicForm((f) => ({ ...f, proficienciaComprovanteUrl: value }))}
+                                    onSave={handleSaveProficiencia}
+                                  />
+                                )}
+                                {canEditAcademicFacts && req.key === "qualificacao" && (
+                                  <AcademicFactEditor
+                                    checked={academicForm.qualificacaoAprovada}
+                                    date={academicForm.qualificacaoData}
+                                    comprovanteUrl={academicForm.qualificacaoComprovanteUrl}
+                                    checkedLabel="Qualificação aprovada"
+                                    dateLabel="Data da qualificação"
+                                    saving={savingAcademicFact === "qualificacao"}
+                                    onCheckedChange={(value) => setAcademicForm((f) => ({ ...f, qualificacaoAprovada: value }))}
+                                    onDateChange={(value) => setAcademicForm((f) => ({ ...f, qualificacaoData: value }))}
+                                    onComprovanteChange={(value) => setAcademicForm((f) => ({ ...f, qualificacaoComprovanteUrl: value }))}
+                                    onSave={handleSaveQualificacao}
+                                  />
+                                )}
                               </div>
                             </div>
                           );
@@ -333,6 +543,73 @@ export function ChecklistPage() {
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function AcademicFactEditor({
+  checked,
+  date,
+  comprovanteUrl,
+  checkedLabel,
+  dateLabel,
+  saving,
+  onCheckedChange,
+  onDateChange,
+  onComprovanteChange,
+  onSave,
+}: {
+  checked: boolean;
+  date: string;
+  comprovanteUrl: string;
+  checkedLabel: string;
+  dateLabel: string;
+  saving: boolean;
+  onCheckedChange: (value: boolean) => void;
+  onDateChange: (value: string) => void;
+  onComprovanteChange: (value: string) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="mt-3 rounded-xl p-3 space-y-2" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+      <label className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--foreground)", fontWeight: 700 }}>
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onCheckedChange(event.target.checked)}
+        />
+        {checkedLabel}
+      </label>
+      <label className="flex flex-col gap-1">
+        <span style={{ fontSize: "11px", color: "var(--muted-foreground)", fontWeight: 700 }}>{dateLabel}</span>
+        <input
+          type="date"
+          value={date}
+          onChange={(event) => onDateChange(event.target.value)}
+          className="rounded-lg px-2 py-1.5 outline-none"
+          style={{ background: "var(--muted)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "12px" }}
+        />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span style={{ fontSize: "11px", color: "var(--muted-foreground)", fontWeight: 700 }}>URL do comprovante (opcional)</span>
+        <input
+          type="url"
+          value={comprovanteUrl}
+          onChange={(event) => onComprovanteChange(event.target.value)}
+          placeholder="https://..."
+          className="rounded-lg px-2 py-1.5 outline-none"
+          style={{ background: "var(--muted)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "12px" }}
+        />
+      </label>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saving}
+        className="rounded-lg px-3 py-1.5"
+        style={{ background: "#123C7A", color: "#fff", fontSize: "12px", fontWeight: 700, opacity: saving ? 0.6 : 1 }}
+      >
+        {saving ? "Salvando..." : "Salvar"}
+      </button>
     </div>
   );
 }

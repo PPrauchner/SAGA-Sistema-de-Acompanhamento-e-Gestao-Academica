@@ -82,6 +82,13 @@ class _FakeActivityRepository:
     async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
         return [dict(activity) for activity in self._by_student.get(student_id, [])]
 
+    async def list_all_grouped(self) -> list[dict[str, Any]]:
+        return [
+            {**activity, "student_id": student_id}
+            for student_id, activities in self._by_student.items()
+            for activity in activities
+        ]
+
 
 def _build_service(
     students: list[dict[str, Any]],

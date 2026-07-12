@@ -36,6 +36,16 @@ class _FakeStudentRepository:
         ]
 
 
+class _FakeWorkPlanRepository:
+    """Fake sem tasks: progresso_plano calculado é 0.0 para todos os alunos."""
+
+    async def list_all_tasks_grouped(self) -> list[dict[str, Any]]:
+        return []
+
+    async def get_all_tasks_for_student(self, student_id: str) -> list[dict[str, Any]]:
+        return []
+
+
 class _FakeStudentService:
     def __init__(self) -> None:
         self.user: CurrentUser | None = None
@@ -45,6 +55,16 @@ class _FakeStudentService:
         self.body = body
         self.user = user
         return {"id": "student1", "nome": body.nome, "invite_token": "tok-aluno"}
+
+    async def update_proficiencia(self, student_id: str, body: Any, user: CurrentUser) -> dict[str, Any]:
+        self.body = body
+        self.user = user
+        return {"message": "ok", "student_id": student_id}
+
+    async def update_qualificacao(self, student_id: str, body: Any, user: CurrentUser) -> dict[str, Any]:
+        self.body = body
+        self.user = user
+        return {"message": "ok", "student_id": student_id}
 
 
 def _coord() -> CurrentUser:
@@ -70,10 +90,13 @@ def _legacy_student() -> dict[str, Any]:
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     original_students = students_router.service._students
+    original_work_plan = students_router.service._work_plan
     monkeypatch.setattr(aspect_config, "AUDIT_ENABLED", False)
+    students_router.service._work_plan = _FakeWorkPlanRepository()
     app.dependency_overrides[get_current_user] = _coord
     yield TestClient(app)
     students_router.service._students = original_students
+    students_router.service._work_plan = original_work_plan
     app.dependency_overrides.clear()
 
 
@@ -102,6 +125,9 @@ def test_get_students_response_model_normaliza_documento_legado(client: TestClie
             "proficiencia_comprovada": False,
             "qualificacao_data": None,
             "proficiencia_data": None,
+            "qualificacao_comprovante_url": None,
+            "proficiencia_comprovante_url": None,
+            "progresso_plano": 0.0,
         },
     ]
 
@@ -123,6 +149,10 @@ def test_get_student_response_model_normaliza_documento_legado(client: TestClien
 
 def _aluno() -> CurrentUser:
     return CurrentUser(uid="uid-aluno1", role="aluno", programa_id="prog", email="aluno@saga.edu")
+
+
+def _orientador() -> CurrentUser:
+    return CurrentUser(uid="uid-orientador", role="orientador", programa_id="prog", email="orientador@saga.edu")
 
 
 def test_get_students_coauthors_acessivel_a_aluno(client: TestClient) -> None:
@@ -152,7 +182,7 @@ def test_get_students_bloqueia_aluno(client: TestClient) -> None:
     assert response.status_code == 403
 
 
-def test_post_students_permite_orientador(client: TestClient) -> None:
+def test_post_students_bloqueia_orientador(client: TestClient) -> None:
     fake_service = _FakeStudentService()
     original_service = students_router.service
     students_router.service = fake_service
@@ -175,10 +205,8 @@ def test_post_students_permite_orientador(client: TestClient) -> None:
     students_router.service = original_service
     app.dependency_overrides[get_current_user] = _coord
 
-    assert response.status_code == 201
-    assert response.json()["invite_token"] == "tok-aluno"
-    assert fake_service.user is not None
-    assert fake_service.user.role == "orientador"
+    assert response.status_code == 403
+    assert fake_service.user is None
 
 
 def test_post_students_sem_nivel_usa_default_mestrado(client: TestClient) -> None:
@@ -204,3 +232,69 @@ def test_post_students_sem_nivel_usa_default_mestrado(client: TestClient) -> Non
     assert response.status_code == 201
     assert fake_service.body is not None
     assert fake_service.body.nivel == "mestrado"
+
+
+def test_patch_proficiencia_coordena_com_comprovante(client: TestClient) -> None:
+    fake_service = _FakeStudentService()
+    original_service = students_router.service
+    students_router.service = fake_service
+
+    response = client.patch(
+        "/api/v1/students/student1/proficiencia",
+        json={
+            "comprovada": True,
+            "data_proficiencia": "2026-04-01T00:00:00Z",
+            "comprovante_url": "https://example.com/prof.pdf",
+        },
+    )
+
+    students_router.service = original_service
+
+    assert response.status_code == 200
+    assert fake_service.body.comprovante_url == "https://example.com/prof.pdf"
+    assert fake_service.user is not None
+    assert fake_service.user.role == "coordenacao"
+
+
+def test_patch_qualificacao_coordena_com_comprovante(client: TestClient) -> None:
+    fake_service = _FakeStudentService()
+    original_service = students_router.service
+    students_router.service = fake_service
+
+    response = client.patch(
+        "/api/v1/students/student1/qualificacao",
+        json={
+            "aprovada": True,
+            "data_qualificacao": "2026-05-01T00:00:00Z",
+            "comprovante_url": "https://example.com/qual.pdf",
+        },
+    )
+
+    students_router.service = original_service
+
+    assert response.status_code == 200
+    assert fake_service.body.comprovante_url == "https://example.com/qual.pdf"
+
+
+@pytest.mark.parametrize("override", [_aluno, _orientador])
+def test_patch_proficiencia_bloqueia_nao_coordenacao(client: TestClient, override) -> None:
+    app.dependency_overrides[get_current_user] = override
+
+    response = client.patch(
+        "/api/v1/students/student1/proficiencia",
+        json={"comprovada": True, "data_proficiencia": "2026-04-01T00:00:00Z"},
+    )
+
+    assert response.status_code == 403
+
+
+@pytest.mark.parametrize("override", [_aluno, _orientador])
+def test_patch_qualificacao_bloqueia_nao_coordenacao(client: TestClient, override) -> None:
+    app.dependency_overrides[get_current_user] = override
+
+    response = client.patch(
+        "/api/v1/students/student1/qualificacao",
+        json={"aprovada": True, "data_qualificacao": "2026-05-01T00:00:00Z"},
+    )
+
+    assert response.status_code == 403

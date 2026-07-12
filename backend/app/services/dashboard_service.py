@@ -4,6 +4,7 @@ Serviço de agregação de dados dos dashboards dos três perfis.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
@@ -16,9 +17,13 @@ from backend.app.models.dashboard import (
     ChecklistResumo,
     CoordDashboardResponse,
     CreditosResumo,
+    DashboardIndiceOrientadorResponse,
+    IndiceModalidade,
+    IndiceOrientadorResponse,
     OrientadorDashboardResponse,
     OrientandoResumo,
     OrientandosPorStatus,
+    PosicaoRelativaResponse,
     ProducoesResumo,
     TaskProxima,
 )
@@ -27,6 +32,7 @@ from backend.app.repositories.activity_type_repository import ActivityTypeReposi
 from backend.app.repositories.advisor_repository import AdvisorRepository
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.production_repository import ProductionRepository
+from backend.app.repositories.dashboard_repository import DashboardRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.work_plan_repository import WorkPlanRepository
 from backend.app.models.work_plan import STATUS_CONCLUIDO
@@ -142,6 +148,7 @@ class DashboardService:
         self._productions = FirebaseRepository("productions")
         self._production_reports = ProductionRepository()
         self._work_plan = WorkPlanRepository()
+        self._dashboard = DashboardRepository()
 
     async def get_meu_aluno_dashboard(self, user: CurrentUser) -> AlunoDashboardResponse:
         """Retorna o dashboard do aluno autenticado sem aceitar student_id do cliente."""
@@ -212,9 +219,14 @@ class DashboardService:
         situacao_reg = student.get("situacao_registrada", "")
         situacao_inf = student.get("situacao_inferida", "")
 
-        activities = await self._activities.list_by_student(student_id)
+        # Leituras independentes em paralelo — antes eram 4 round-trips em série (issue #319).
+        activities, types_list, tasks, snapshots = await asyncio.gather(
+            self._activities.list_by_student(student_id),
+            self._activity_types.list_all(),
+            self._work_plan.get_all_tasks_for_student(student_id),
+            self._students.list_subcollection(student_id, "inferred_status"),
+        )
 
-        types_list = await self._activity_types.list_all()
         types_map = {t.get("id"): t.get("categoria", "") for t in types_list}
         creditos = _aggregate_credits(activities, types_map)
 
@@ -228,7 +240,6 @@ class DashboardService:
             1 for a in activities if a.get("status") == "enviado"
         )
 
-        tasks = await self._work_plan.get_all_tasks_for_student(student_id)
         total_tasks = len(tasks)
         concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
         progresso = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
@@ -247,8 +258,6 @@ class DashboardService:
                 prazo=str(t.get("prazo") or "Sem prazo"),
                 status="Pendente"
             ))
-
-        snapshots = await self._students.list_subcollection(student_id, "inferred_status")
 
         cumpridos = 0
         pend_chk = 8
@@ -325,29 +334,33 @@ class DashboardService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Orientador não encontrado",
             )
-        all_students = await self._students.list_all()
+        # Alunos e atividades agregadas em paralelo; antes havia dois loops N+1
+        # sequenciais (atividades e tasks por orientando) — issue #319.
+        all_students, all_activities = await asyncio.gather(
+            self._students.list_all(),
+            self._activities.list_all_grouped(),
+        )
         orientandos = [
             s for s in all_students if s.get("orientador_id") == advisor_id
         ]
         status_counts = _count_by_status(orientandos)
 
-        total_pending = 0
-        for s in orientandos:
-            activities = await self._activities.list_by_student(s.get("id", ""))
-            total_pending += sum(
-                1 for a in activities if a.get("status") == "enviado"
-            )
+        orientando_ids = {s.get("id", "") for s in orientandos}
+        total_pending = sum(
+            1
+            for a in all_activities
+            if a.get("student_id") in orientando_ids and a.get("status") == "enviado"
+        )
 
+        tasks_por_orientando = await asyncio.gather(
+            *(self._work_plan.get_all_tasks_for_student(s.get("id", "")) for s in orientandos)
+        )
         orientandos_resumo = []
-        for s in orientandos:
-            student_id = s.get("id", "")
+        for s, tasks in zip(orientandos, tasks_por_orientando):
             resumo = _build_orientando_resumo(s)
-
-            tasks = await self._work_plan.get_all_tasks_for_student(student_id)
             total_tasks = len(tasks)
             concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
             resumo.progresso_plano = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
-
             orientandos_resumo.append(resumo)
 
         return OrientadorDashboardResponse(
@@ -368,27 +381,29 @@ class DashboardService:
         Returns:
             CoordDashboardResponse com dados agregados.
         """
-        all_students = await self._students.list_all()
+        # Todas as leituras são independentes: uma rodada paralela substitui o loop
+        # N+1 de atividades por aluno e o list_all() de audit_logs (coleção que só
+        # cresce) — a auditoria recente é limitada e ordenada no servidor (issue #319).
+        (all_students, all_activities, recent_audit_logs, all_exts, all_prods) = await asyncio.gather(
+            self._students.list_all(),
+            self._activities.list_all_grouped(),
+            self._audit_logs.query(order_by="timestamp", descending=True, limit=5),
+            self._extensions.list_all(),
+            self._productions.list_all(),
+        )
 
         status_counts = _count_by_status(all_students)
 
-        total_pending = 0
-        for s in all_students:
-            activities = await self._activities.list_by_student(s.get("id", ""))
-            total_pending += sum(
-                1 for a in activities if a.get("status") == "enviado"
-            )
+        total_pending = sum(
+            1 for a in all_activities if a.get("status") == "enviado"
+        )
 
         tempo_medio = _compute_avg_completion_time(all_students)
         total_concluidos = sum(1 for s in all_students if s.get("situacao_registrada") == "concluido")
         total_alunos_ativos = sum(1 for s in all_students if s.get("situacao_registrada") not in ("concluido", "desligado"))
-        audit_logs = await self._audit_logs.list_all()
-        auditoria_recente = _build_recent_audit(audit_logs, limit=5)
+        auditoria_recente = _build_recent_audit(recent_audit_logs, limit=5)
 
-        all_exts = await self._extensions.list_all()
         prorrogacoes_pendentes = sum(1 for e in all_exts if e.get("status") == "pendente")
-
-        all_prods = await self._productions.list_all()
         thirty_days_ago = date.today() - timedelta(days=30)
         producoes_ultimo_mes = 0
         for p in all_prods:
@@ -410,6 +425,60 @@ class DashboardService:
             total_concluidos=total_concluidos,
             tempo_medio_integralizacao_meses=tempo_medio,
             auditoria_recente=auditoria_recente,
+        )
+
+    async def get_dashboard_indice_orientador(
+        self,
+        advisor_id: str,
+        modalidade: IndiceModalidade,
+    ) -> DashboardIndiceOrientadorResponse:
+        """Calcula índice de produção do orientador e posição relativa anônima."""
+        advisor = await self._dashboard.get_advisor(advisor_id)
+        if advisor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Orientador não encontrado",
+            )
+
+        average = modalidade == IndiceModalidade.media_por_orientando
+        indice, total_orientandos, total_pontuacao = await self._dashboard.production_index_for_advisor(
+            advisor_id,
+            average=average,
+        )
+
+        advisors = await self._dashboard.list_advisors_by_program(advisor.get("programa_id"))
+        indices_programa: list[float] = []
+        for item in advisors:
+            item_id = item.get("id")
+            if not item_id:
+                continue
+            item_index, _, _ = await self._dashboard.production_index_for_advisor(
+                item_id,
+                average=average,
+            )
+            indices_programa.append(item_index)
+
+        if not indices_programa:
+            indices_programa = [indice]
+
+        media_programa = round(sum(indices_programa) / len(indices_programa), 2)
+        abaixo_ou_igual = sum(1 for value in indices_programa if value <= indice)
+        percentil = round((abaixo_ou_igual / len(indices_programa)) * 100, 2)
+
+        return DashboardIndiceOrientadorResponse(
+            indice=IndiceOrientadorResponse(
+                advisor_id=advisor_id,
+                modalidade=modalidade,
+                indice=indice,
+                total_orientandos=total_orientandos,
+                total_pontuacao=total_pontuacao,
+            ),
+            posicao_relativa=PosicaoRelativaResponse(
+                modalidade=modalidade,
+                media_programa=media_programa,
+                percentil=percentil,
+                total_orientadores=len(indices_programa),
+            ),
         )
 
 

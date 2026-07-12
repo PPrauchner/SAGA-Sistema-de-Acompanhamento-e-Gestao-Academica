@@ -46,7 +46,6 @@ _SITUACAO = {"situacao_registrada": "regular"}
 _ADVISOR_CREATE = {
     "nome": "Orientador",
     "email": "o@x.com",
-    "departamento": "DC",
     "programa_id": "prog",
 }
 _ACTIVITY_CREATE = {
@@ -81,6 +80,18 @@ _ACTIVITY_TYPE_CREATE = {"nome": "N", "categoria": "basico", "pontuacao_base": 1
 _ACTIVITY_TYPE_TOGGLE = {"ativo": False}
 _VEHICLE_CREATE = {"nome": "V", "tipo": "revista", "nivel": "A1"}
 _VEHICLE_LEVEL_UPDATE = {"nivel": "A2"}
+_DEPARTMENT_CREATE = {"nome": "Departamento de Computação"}
+_DEPARTMENT_UPDATE = {"nome": "Novo Nome"}
+_PROGRAM_CREATE = {
+    "departamento_id": "dept1",
+    "creditos_grupo_basico_min": 8,
+    "creditos_grupo_especifico_min": 4,
+    "creditos_grupo_tecnologico_max": 4,
+    "creditos_total_min": 12,
+    "max_prorrogacoes": 1,
+    "duracao_prorrogacao_meses": 6,
+    "meses_ate_qualificacao": 24,
+}
 _TRANSFER_CROSS_CREATE = {
     "student_id": "s1",
     "orientador_destino_id": "adv2",
@@ -95,7 +106,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     # students
     ("students.list", "GET", "/api/v1/students", None, ("coordenacao", "orientador")),
     ("students.get", "GET", "/api/v1/students/x", None, ("aluno", "orientador", "coordenacao")),
-    ("students.create", "POST", "/api/v1/students", _STUDENT_CREATE, ("coordenacao",)),
+    ("students.create", "POST", "/api/v1/students", _STUDENT_CREATE, ("coordenacao", "orientador")),
     ("students.update", "PUT", "/api/v1/students/x", {"nome": "A"}, ("coordenacao",)),
     ("students.delete", "DELETE", "/api/v1/students/x", None, ("coordenacao",)),
     ("students.qualificacao", "PATCH", "/api/v1/students/x/qualificacao", _QUALIFICACAO, ("coordenacao",)),
@@ -107,11 +118,18 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     ("advisors.create", "POST", "/api/v1/advisors", _ADVISOR_CREATE, ("coordenacao",)),
     ("advisors.update", "PUT", "/api/v1/advisors/x", {"nome": "O"}, ("coordenacao",)),
     ("advisors.delete", "DELETE", "/api/v1/advisors/x", None, ("coordenacao",)),
+    # departments (ADR-0004) — entidade global à instituição, restrita a adm
+    ("departments.list", "GET", "/api/v1/departments", None, ("adm",)),
+    ("departments.get", "GET", "/api/v1/departments/x", None, ("adm",)),
+    ("departments.create", "POST", "/api/v1/departments", _DEPARTMENT_CREATE, ("adm",)),
+    ("departments.update", "PUT", "/api/v1/departments/x", _DEPARTMENT_UPDATE, ("adm",)),
+    ("departments.delete", "DELETE", "/api/v1/departments/x", None, ("adm",)),
     # activities
     ("activities.list", "GET", "/api/v1/activities", None, ("aluno", "orientador", "coordenacao")),
     ("activities.create", "POST", "/api/v1/activities", _ACTIVITY_CREATE, ("aluno",)),
     ("activities.parecer", "PATCH", "/api/v1/activities/x/parecer", _PARECER, ("orientador",)),
     ("activities.validate", "PATCH", "/api/v1/activities/x/validate", _VALIDATE, ("coordenacao",)),
+    ("activities.delete", "DELETE", "/api/v1/activities/x", None, ("aluno", "coordenacao")),
     # productions
     ("productions.list", "GET", "/api/v1/productions", None, ("aluno", "orientador", "coordenacao")),
     ("productions.create", "POST", "/api/v1/productions", _PRODUCTION_CREATE, ("aluno",)),
@@ -135,6 +153,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     # programs
     ("programs.get_config", "GET", "/api/v1/programs/config", None, ("aluno", "orientador", "coordenacao")),
     ("programs.update_config", "PUT", "/api/v1/programs/config", {}, ("coordenacao",)),
+    ("programs.create", "POST", "/api/v1/programs", _PROGRAM_CREATE, ("adm",)),
     # vehicles
     ("vehicles.list", "GET", "/api/v1/vehicles", None, ("aluno", "orientador", "coordenacao")),
     ("vehicles.create", "POST", "/api/v1/vehicles", _VEHICLE_CREATE, ("coordenacao",)),
@@ -149,7 +168,7 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     ("reports.by_status", "GET", "/api/v1/reports/students-by-status", None, ("coordenacao",)),
     ("reports.by_advisor", "GET", "/api/v1/reports/students-by-advisor", None, ("coordenacao",)),
     ("reports.completion", "GET", "/api/v1/reports/completion-time", None, ("coordenacao",)),
-    ("reports.productions", "GET", "/api/v1/reports/productions", None, ("coordenacao",)),
+    ("reports.productions", "GET", "/api/v1/reports/productions", None, ("aluno", "orientador", "coordenacao")),
     # checklist / inference (rotas corrigidas nesta issue)
     ("checklist.get", "GET", "/api/v1/checklist/x", None, ("aluno", "orientador", "coordenacao")),
     ("inference.get", "GET", "/api/v1/inference/x", None, ("aluno", "orientador", "coordenacao")),
@@ -215,7 +234,7 @@ def test_comprovante_upload_papel_incorreto_403(client: TestClient, role: str) -
 
     response = client.post(
         "/api/v1/activities/x/comprovante",
-        files={"file": ("comprovante.pdf", b"%PDF-1.4 dummy", "application/pdf")},
+        files={"arquivo": ("comprovante.pdf", b"%PDF-1.4 dummy", "application/pdf")},
     )
 
     assert response.status_code == 403

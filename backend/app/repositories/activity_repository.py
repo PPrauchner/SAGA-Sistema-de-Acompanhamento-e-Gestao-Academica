@@ -48,6 +48,28 @@ class ActivityRepository(FirebaseRepository):
     async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
         return await self.list_subcollection(student_id, "activities")
 
+    async def list_all_grouped(self) -> list[dict[str, Any]]:
+        """Lista as atividades de todos os alunos em uma única consulta.
+
+        Um único stream de collection_group("activities") substitui os loops
+        N×list_by_student dos services (padrão N+1 — issue #319). O student_id
+        de cada atividade é extraído do path do documento.
+
+        Returns:
+            Lista de atividades com 'id' e 'student_id' injetados.
+        """
+
+        def _list() -> list[dict[str, Any]]:
+            result: list[dict[str, Any]] = []
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                item = snapshot.to_dict() or {}
+                item["id"] = snapshot.id
+                item["student_id"] = snapshot.reference.parent.parent.id
+                result.append(item)
+            return result
+
+        return await asyncio.to_thread(_list)
+
     # -- usado pelos fluxos de validação (PATCH /parecer e /validate), que só têm --
     # activity_id na URL: localiza o documento via collection_group, sem o student_id.
     # O scan roda em thread separada (asyncio.to_thread) para não bloquear o event loop.
@@ -77,6 +99,45 @@ class ActivityRepository(FirebaseRepository):
             raise ValueError(f"Atividade {activity_id} não encontrada.")
 
         return await asyncio.to_thread(_update)
+
+    async def delete_by_id(self, activity_id: str) -> None:
+        """Exclui (hard delete) a atividade localizada por collection_group scan.
+
+        Usado pelo DELETE /activities/{activity_id} (issue #305), que só tem o
+        activity_id na URL — igual padrão de get_by_id/update_by_id.
+        """
+
+        def _delete() -> None:
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                if snapshot.id == activity_id:
+                    snapshot.reference.delete()
+                    return
+            raise ValueError(f"Atividade {activity_id} não encontrada.")
+
+        await asyncio.to_thread(_delete)
+
+    async def update_group_comprovante(
+        self,
+        activity_group_id: str,
+        comprovante_url: str,
+        atualizado_em: Any,
+    ) -> list[str]:
+        def _update_group() -> list[str]:
+            updated_ids: list[str] = []
+            for snapshot in get_firestore_client().collection_group("activities").stream():
+                data = snapshot.to_dict()
+                if data.get("activity_group_id") != activity_group_id:
+                    continue
+                snapshot.reference.update(
+                    {
+                        "comprovante_url": comprovante_url,
+                        "atualizado_em": atualizado_em,
+                    }
+                )
+                updated_ids.append(snapshot.id)
+            return updated_ids
+
+        return await asyncio.to_thread(_update_group)
 
     async def get_activity_type(self, tipo_id: str) -> dict[str, Any] | None:
         def _read() -> dict[str, Any] | None:

@@ -26,12 +26,13 @@ class RegistrationRequestRepository(FirebaseRepository):
         return matches[0] if matches else None
 
     async def list_pending_by_program(self, programa_id: str) -> list[dict[str, Any]]:
+        # Apenas filtros de igualdade: order_by aqui exigiria índice composto
+        # no Firestore (FailedPrecondition/500). Ordenação fica no service.
         return await self.query(
             filters=[
                 ("programa_id", "==", programa_id),
                 ("status", "==", STATUS_PENDING),
             ],
-            order_by="created_at",
         )
 
     async def approve(self, request_id: str, data: dict[str, Any]) -> bool:

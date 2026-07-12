@@ -20,6 +20,9 @@ import {
   updateStudent,
 } from "@/api/studentsApi";
 import { useApp } from "../../context/AppContext";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
+import type { ExportColumn } from "@/utils/exportData";
 
 const STATUS_MAP: Record<
   StudentStatus,
@@ -50,14 +53,21 @@ function formatDate(value?: string | null): string {
   return new Intl.DateTimeFormat("pt-BR", { month: "2-digit", year: "numeric" }).format(new Date(value));
 }
 
+/** Progresso real do plano de trabalho calculado pelo backend (0-100). */
 function progressFor(student: Student): number {
-  const checks = [
-    Boolean(student.qualificacao_aprovada),
-    Boolean(student.proficiencia_comprovada),
-    student.situacao_registrada === "qualificado" || student.situacao_registrada === "em_fase_de_defesa" || student.situacao_registrada === "concluido",
-    student.situacao_registrada === "concluido",
-  ];
-  return 20 + checks.filter(Boolean).length * 20;
+  return Math.round(student.progresso_plano ?? 0);
+}
+
+/** Config de exibição do status com fallback seguro para valores fora do enum. */
+function statusMeta(status: string) {
+  return (
+    STATUS_MAP[status as StudentStatus] ?? {
+      label: status || "—",
+      color: "#64748b",
+      bg: "var(--muted)",
+      icon: <AlertTriangle size={12} />,
+    }
+  );
 }
 
 export function StudentsPage() {
@@ -75,6 +85,9 @@ export function StudentsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteToken, setInviteToken] = useState<string | null>(null);
+
+  // ESC fecha o modal de cadastro/edicao (issue #316).
+  useEscapeClose(showForm, () => { setShowForm(false); setEditingStudent(null); });
 
   async function loadData(authToken: string): Promise<void> {
     setLoading(true);
@@ -185,6 +198,27 @@ export function StudentsPage() {
     currentUser?.role === "orientador"
       ? programs.filter((program) => program.id === currentUser.programa_id)
       : programs;
+  const studentExportColumns = useMemo<ExportColumn<Student>[]>(
+    () =>
+      viewMode === "table"
+        ? [
+            { key: "nome", label: "Aluno" },
+            { key: "matricula", label: "Matricula" },
+            { key: "orientador_id", label: "Orientador", value: (student) => advisorById.get(student.orientador_id)?.nome ?? student.orientador_id },
+            { key: "programa_id", label: "Programa" },
+            { key: "id", label: "Progresso", value: (student) => progressFor(student) },
+            { key: "situacao_registrada", label: "Status", value: (student) => STATUS_MAP[student.situacao_registrada]?.label ?? student.situacao_registrada },
+          ]
+        : [
+            { key: "nome", label: "Nome" },
+            { key: "matricula", label: "Matricula" },
+            { key: "programa_id", label: "Programa" },
+            { key: "prazo_final", label: "Prazo", value: (student) => formatDate(student.prazo_final) },
+            { key: "id", label: "Progresso", value: (student) => progressFor(student) },
+            { key: "situacao_registrada", label: "Status", value: (student) => STATUS_MAP[student.situacao_registrada]?.label ?? student.situacao_registrada },
+          ],
+    [advisorById, viewMode],
+  );
 
   return (
     <div>
@@ -236,6 +270,7 @@ export function StudentsPage() {
             </button>
           ))}
         </div>
+        <TableExportMenu title="Alunos" fileName="alunos" rows={filtered} columns={studentExportColumns} />
       </div>
 
       {loading ? (
@@ -252,23 +287,37 @@ export function StudentsPage() {
             </thead>
             <tbody>
               {filtered.map((student, i) => {
-                const st = STATUS_MAP[student.situacao_registrada];
+                const st = statusMeta(student.situacao_registrada);
+                const sti = statusMeta(student.situacao_inferida);
+                const divergente = student.situacao_inferida !== student.situacao_registrada;
                 const progress = progressFor(student);
                 const advisor = advisorById.get(student.orientador_id);
                 return (
                   <tr key={student.id} style={{ borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none" }}>
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }}
+                        className="flex items-center gap-3 text-left"
+                        title="Ver detalhes do aluno"
+                      >
                         <div className="rounded-full flex items-center justify-center" style={{ width: 34, height: 34, background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 700, flexShrink: 0 }}>{student.nome.charAt(0)}</div>
                         <div>
                           <p style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>{student.nome}</p>
                           <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Mat. {student.matricula}</p>
                         </div>
-                      </div>
+                      </button>
                     </td>
                     <td className="px-4 py-3"><p style={{ fontSize: "12px", color: "var(--foreground)" }}>{advisor?.nome ?? student.orientador_id}</p><p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{student.programa_id}</p></td>
                     <td className="px-4 py-3"><div className="flex items-center gap-2"><div className="rounded-full overflow-hidden" style={{ width: 60, height: 6, background: "var(--muted)" }}><div className="h-full rounded-full" style={{ width: `${progress}%`, background: progress > 70 ? "#1F8A70" : progress > 40 ? "#D4A017" : "#dc2626" }} /></div><span style={{ fontSize: "11px", fontWeight: 600, color: "var(--muted-foreground)" }}>{progress}%</span></div></td>
-                    <td className="px-4 py-3"><span className="flex items-center gap-1 px-2 py-1 rounded-lg w-fit" style={{ background: st.bg, color: st.color, fontSize: "11px", fontWeight: 600 }}>{st.icon} {st.label}</span></td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="flex items-center gap-1 px-2 py-1 rounded-lg w-fit" style={{ background: st.bg, color: st.color, fontSize: "11px", fontWeight: 600 }}>{st.icon} {st.label}</span>
+                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-lg w-fit" title="Situação inferida pelo motor" style={{ border: `1px solid ${sti.color}50`, color: sti.color, fontSize: "10px", fontWeight: 600 }}>
+                          {divergente && <AlertTriangle size={10} />} inferida: {sti.label}
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-4 py-3"><div className="flex items-center gap-1"><button onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }} className="p-1.5 rounded-lg" style={{ color: "#123C7A" }} title="Ver detalhes"><Eye size={15} /></button>{canEdit && <button onClick={() => openEditForm(student)} className="p-1.5 rounded-lg" style={{ color: "#1F8A70" }} title="Editar"><Edit3 size={15} /></button>}</div></td>
                   </tr>
                 );
@@ -280,7 +329,9 @@ export function StudentsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((student) => {
-            const st = STATUS_MAP[student.situacao_registrada];
+            const st = statusMeta(student.situacao_registrada);
+            const sti = statusMeta(student.situacao_inferida);
+            const divergente = student.situacao_inferida !== student.situacao_registrada;
             const progress = progressFor(student);
             return (
               <div key={student.id} className="rounded-2xl p-5 transition-all cursor-pointer" style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }} onClick={() => { setSelectedStudentId(student.id); setCurrentPage("aluno-detail"); }}>
@@ -291,6 +342,7 @@ export function StudentsPage() {
                 <div className="space-y-2 text-sm mb-4">
                   <div className="flex justify-between"><span style={{ color: "var(--muted-foreground)" }}>Programa</span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{student.programa_id}</span></div>
                   <div className="flex justify-between"><span style={{ color: "var(--muted-foreground)" }}>Prazo</span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{formatDate(student.prazo_final)}</span></div>
+                  <div className="flex justify-between items-center"><span style={{ color: "var(--muted-foreground)" }}>Inferida</span><span className="flex items-center gap-1" title="Situação inferida pelo motor" style={{ fontWeight: 600, color: sti.color }}>{divergente && <AlertTriangle size={11} />}{sti.label}</span></div>
                 </div>
                 <div className="mb-2 flex justify-between"><span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Progresso</span><span style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>{progress}%</span></div>
                 <div className="rounded-full overflow-hidden" style={{ height: 6, background: "var(--muted)" }}><div className="h-full rounded-full" style={{ width: `${progress}%`, background: progress > 70 ? "#1F8A70" : progress > 40 ? "#D4A017" : "#dc2626" }} /></div>

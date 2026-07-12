@@ -20,6 +20,8 @@ const DEEP_LINK_PAGE: Partial<Record<RequestItem["tipo"], PageId>> = {
 const TYPE_LABELS: Record<string, string> = {
   atividade: "Validação de atividade",
   prorrogacao: "Prorrogação",
+  prazo_defesa: "Prorrogação de Prazo de Defesa",
+  prazo_qualificacao: "Prorrogação de Qualificação",
   trancamento: "Trancamento de Matrícula",
   transferencia: "Transferência de Orientando",
   transferencia_coordenacao: "Transferência de Coordenação",
@@ -41,7 +43,7 @@ const STATUS_MAP: Record<string, { label: string; bg: string; color: string; ico
 };
 
 export function RequestsPage() {
-  const { token, setCurrentPage } = useApp();
+  const { token, currentUser, setCurrentPage } = useApp();
   const [requests, setRequests] = useState<RequestItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,14 +53,16 @@ export function RequestsPage() {
   const [filterPeriodo, setFilterPeriodo] = useState<string>("");
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
 
-  const loadData = async () => {
+  // background=true refaz o fetch sem acionar o estado de loading — evita desmontar a
+  // página inteira ("Carregando…") ao despachar uma solicitação (issue #325).
+  const loadData = async (background = false) => {
     if (!token) return;
     try {
-      setLoading(true);
+      if (!background) setLoading(true);
       const data = await requestsApi.getRequests(token);
       setRequests(data);
-    } catch (err: any) {
-      setError(err.message || "Erro ao carregar solicitações");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao carregar solicitações");
     } finally {
       setLoading(false);
     }
@@ -68,39 +72,52 @@ export function RequestsPage() {
     loadData();
   }, [token]);
 
-  // Decisão em-linha: só para os subtipos de formulário (prorrogação, trancamento,
-  // transferência de orientando). Reusa os services existentes de cada subtipo —
-  // sem duplicar a regra de negócio aqui.
-  const handleDecide = async (req: RequestItem, action: "approve" | "reject") => {
-    if (!token) return;
+  const [rejectingReq, setRejectingReq] = useState<RequestItem | null>(null);
+  const [rejectMotivo, setRejectMotivo] = useState("");
+  const [detailsReq, setDetailsReq] = useState<RequestItem | null>(null);
+
+  const confirmReject = async () => {
+    if (!token || !rejectingReq || !rejectMotivo) return;
+    setLoading(true);
     try {
-      if (req.tipo === "transferencia") {
-        if (action === "approve") {
-          await approveTransferRequest(token, req.id);
-        } else {
-          const motivo = prompt("Motivo da rejeição:");
-          if (motivo === null) return;
-          await rejectTransferRequest(token, req.id, motivo);
-        }
-      } else if (req.tipo === "prorrogacao" || req.tipo === "trancamento") {
-        if (action === "approve") {
-          await solicitacoesApi.approve(token, req.id);
-        } else {
-          const motivo = prompt("Motivo da rejeição:");
-          if (motivo === null) return;
-          await solicitacoesApi.reject(token, req.id, motivo);
-        }
-      } else {
-        return;
+      if (rejectingReq.tipo === "transferencia") {
+        await rejectTransferRequest(token, rejectingReq.id, rejectMotivo);
+      } else if (rejectingReq.tipo === "prorrogacao" || rejectingReq.tipo === "trancamento") {
+        await solicitacoesApi.reject(token, rejectingReq.id, rejectMotivo);
+      } else if (rejectingReq.tipo === "transferencia_coordenacao") {
+        alert("Rejeição de transferência de coordenação será enviada.");
       }
-      await loadData();
-    } catch (err: any) {
-      alert("Erro na ação: " + err.message);
+      setRejectingReq(null);
+      setRejectMotivo("");
+      await loadData(true);
+    } catch (err) {
+      alert("Erro ao rejeitar: " + (err instanceof Error ? err.message : String(err)));
+      setLoading(false);
     }
   };
 
-  // Subtipos de efeito pesado (validação de atividade/produção, transferência de
-  // coordenação) apenas deep-linkam para a tela existente — não decidem em-linha.
+  const handleDecide = async (req: RequestItem, action: "approve" | "reject") => {
+    if (!token) return;
+    if (action === "reject") {
+      setRejectingReq(req);
+      return;
+    }
+
+    try {
+      if (req.tipo === "transferencia") {
+        await approveTransferRequest(token, req.id);
+      } else if (req.tipo === "prorrogacao" || req.tipo === "trancamento") {
+        await solicitacoesApi.approve(token, req.id);
+      } else if (req.tipo === "transferencia_coordenacao") {
+        alert("Aprovação não implementada diretamente aqui.");
+      }
+      await loadData(true);
+    } catch (err) {
+      alert("Erro na ação: " + (err instanceof Error ? err.message : String(err)));
+      setLoading(false);
+    }
+  };
+
   const handleDeepLink = (req: RequestItem) => {
     const page = DEEP_LINK_PAGE[req.tipo];
     if (page) setCurrentPage(page);
@@ -150,13 +167,15 @@ export function RequestsPage() {
             Acompanhe e despache as solicitações pendentes sob sua responsabilidade.
           </p>
         </div>
-        <button
-          onClick={() => setIsTransferModalOpen(true)}
-          className="px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
-          style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
-        >
-          Nova Transferência
-        </button>
+        {currentUser?.role !== "aluno" && (
+          <button
+            onClick={() => setIsTransferModalOpen(true)}
+            className="px-4 py-2 rounded-xl flex items-center gap-2 transition-colors"
+            style={{ background: "#123C7A", color: "#fff", fontSize: "13px", fontWeight: 600 }}
+          >
+            Nova Transferência
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -253,7 +272,7 @@ export function RequestsPage() {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm flex gap-2 justify-center">
-                  {req.status !== "concluido" && (
+                  {req.status !== "concluido" && currentUser?.role !== "aluno" && (
                     req.origem === "formulario" ? (
                       <>
                         <button
@@ -282,7 +301,7 @@ export function RequestsPage() {
                     )
                   )}
                   <button
-                    onClick={() => alert(`Detalhes da solicitação ${req.id}:\n\n` + JSON.stringify(req.payload_original, null, 2))}
+                    onClick={() => setDetailsReq(req)}
                     className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
                     title="Ver Detalhes"
                   >
@@ -303,6 +322,63 @@ export function RequestsPage() {
 
       {isTransferModalOpen && (
         <TransferModal onClose={() => setIsTransferModalOpen(false)} onSuccess={() => { setIsTransferModalOpen(false); loadData(); }} />
+      )}
+
+      {rejectingReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+            <h2 className="text-lg font-bold mb-4" style={{ color: "var(--foreground)" }}>Motivo da Rejeição</h2>
+            <textarea
+              value={rejectMotivo}
+              onChange={(e) => setRejectMotivo(e.target.value)}
+              placeholder="Digite o motivo da rejeição..."
+              className="w-full rounded-lg px-3 py-2 outline-none resize-none mb-4"
+              rows={4}
+              style={{ background: "var(--input-background)", border: "1px solid var(--border)", color: "var(--foreground)", fontSize: "14px" }}
+            />
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setRejectingReq(null)}
+                className="px-4 py-2 rounded-lg"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={confirmReject}
+                disabled={!rejectMotivo.trim()}
+                className="px-4 py-2 rounded-lg bg-red-600 text-white disabled:opacity-50"
+              >
+                Confirmar Rejeição
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailsReq && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+            <h2 className="text-lg font-bold mb-4" style={{ color: "var(--foreground)" }}>Detalhes da Solicitação</h2>
+            <div className="mb-4 text-sm max-h-[60vh] overflow-y-auto" style={{ color: "var(--foreground)" }}>
+              {Object.entries(detailsReq.payload_original)
+                .filter(([k]) => !['uid', 'student_id', 'solicitante_id', 'orientador_id', 'created_at', 'updated_at', 'criado_em', 'atualizado_em'].includes(k))
+                .map(([k, v]) => (
+                <div key={k} className="mb-2">
+                  <strong>{k}:</strong> {String(v)}
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <button
+                onClick={() => setDetailsReq(null)}
+                className="px-4 py-2 rounded-lg bg-blue-600 text-white"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, status
 from backend.app.aspects.alerts import trigger_alerts, build_extension_alert
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
+from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.extension import (
     DecisionRequest,
@@ -46,6 +47,7 @@ Service = Annotated[ExtensionService, Depends(get_extension_service)]
 )
 @requires_role("aluno")
 @audit_operation
+@check_deadlines
 async def create_extension(
     payload: ExtensionCreateRequest,
     current_user: AuthUser,
