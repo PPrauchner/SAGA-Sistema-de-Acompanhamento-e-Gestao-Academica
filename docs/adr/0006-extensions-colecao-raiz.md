@@ -14,7 +14,8 @@ Decidimos pela raiz porque as três fontes autoritativas convergem para ela:
   raiz `extensions/`", `documento_id: auto-id`, com `student_id` como campo de referência.
 - **Data-model** — `docs/data-model.md §4` rotula a entidade explicitamente como "coleção raiz".
 - **Contrato de API (Spec 08)** — `GET /extensions`, `POST /extensions`,
-  `PATCH /extensions/{extension_id}/review|approve` **não** carregam `student_id` no path; o
+  `PATCH /extensions/{extension_id}/review`, `POST /extensions/{extension_id}/approve` e
+  `POST /extensions/{extension_id}/reject` **não** carregam `student_id` no path; o
   `extension_id` (auto-id) identifica o documento sozinho, o que só é limpo numa coleção raiz.
 
 A "composição (1:N)" da Q12 é apenas a **notação lógica** dos diagramas Mermaid (aninhamento
