@@ -14,9 +14,10 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+
+from backend.app.models.validators import DataFutura
 
 
 # ---------------------------------------------------------------------------
@@ -61,8 +62,11 @@ class ExtensionDocument(BaseModel):
         nova_data: Novo prazo pretendido, informado pelo aluno.
         data_atual: `prazo_final` vigente do aluno no momento da solicitação.
         prazo_novo: Snapshot do prazo concedido (preenchido na aprovação).
-        aprovado_por: uid da coordenação que deliberou.
-        aprovado_em: Momento da deliberação.
+        aprovado_por: uid da coordenação que aprovou.
+        aprovado_em: Momento da aprovação.
+        motivo_rejeicao: Justificativa obrigatória da coordenação ao rejeitar.
+        rejeitado_por: uid da coordenação que rejeitou.
+        rejeitado_em: Momento da rejeição.
         created_at: Momento da criação da solicitação.
     """
 
@@ -80,6 +84,9 @@ class ExtensionDocument(BaseModel):
     prazo_novo:             datetime | None = None
     aprovado_por:           str | None = None
     aprovado_em:            datetime | None = None
+    motivo_rejeicao:        str | None = None
+    rejeitado_por:          str | None = None
+    rejeitado_em:           datetime | None = None
     created_at:             datetime
 
 
@@ -102,11 +109,20 @@ class ReviewRequest(BaseModel):
     parecer_orientador: str = Field(..., min_length=10, description="Parecer técnico do orientador.")
 
 
-class DecisionRequest(BaseModel):
-    """Payload enviado pela coordenação ao deliberar (Spec 08)."""
+class ApproveRequest(BaseModel):
+    """Payload enviado pela coordenação ao aprovar (Spec 08 — POST /approve).
 
-    acao:       Literal["aprovar", "rejeitar"] = Field(..., description="Decisão da coordenação.")
+    A Spec 08 não exige corpo na aprovação; `observacao` é opcional para que a
+    coordenação possa registrar a justificativa do deferimento.
+    """
+
     observacao: str | None = Field(None, description="Observação opcional da coordenação.")
+
+
+class RejectRequest(BaseModel):
+    """Payload enviado pela coordenação ao rejeitar (Spec 08 — POST /reject)."""
+
+    motivo: str = Field(..., min_length=1, description="Justificativa da rejeição (obrigatória).")
 
 
 # ---------------------------------------------------------------------------
@@ -131,6 +147,9 @@ class ExtensionResponse(BaseModel):
     prazo_novo:             datetime | None = None
     aprovado_por:           str | None = None
     aprovado_em:            datetime | None = None
+    motivo_rejeicao:        str | None = None
+    rejeitado_por:          str | None = None
+    rejeitado_em:           datetime | None = None
     created_at:             datetime
     # Enriquecidos pelo service nas listagens, a partir do aluno referenciado por
     # student_id. Ausentes na resposta de criação (não há listagem a enriquecer).
