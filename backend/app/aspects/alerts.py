@@ -225,7 +225,8 @@ def _format_extension_date(value: Any) -> str:
 def build_extension_alert(result: Any, args: tuple, kwargs: dict) -> dict | None:
     """Builder A05 para a decisão de prorrogação (extensions).
 
-    Join Point: PATCH /api/v1/extensions/{extension_id}/approve (decide_extension).
+    Join Point: POST /api/v1/extensions/{extension_id}/approve (approve_extension)
+        e POST /api/v1/extensions/{extension_id}/reject (reject_extension).
     Advice: After — notifica o aluno com o resultado e, na aprovação, o novo prazo.
 
     Args:
@@ -261,6 +262,7 @@ def build_extension_alert(result: Any, args: tuple, kwargs: dict) -> dict | None
         "titulo": "Decisão sobre sua prorrogação",
         "mensagem": mensagem,
         "destinatario_id": destinatario_id,
+        "programa_id": getattr(result, "programa_id", None),
         "entidade_tipo": "extensions",
         "entidade_id": getattr(result, "id", ""),
     }

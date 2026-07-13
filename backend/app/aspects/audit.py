@@ -130,9 +130,6 @@ def _serializar_modelos(value: Any) -> Any:
     return repr(value)
 
 
-_ESCALARES_FIRESTORE = (str, int, float, bool, bytes, datetime)
-
-
 def _e_dado_de_entrada(valor: Any) -> bool:
     """Indica se o argumento é um dado de entrada que o Firestore aceita.
 
@@ -148,7 +145,7 @@ def _e_dado_de_entrada(valor: Any) -> bool:
         True se o valor for serializável pelo Firestore, direta ou
         recursivamente (modelos Pydantic são convertidos por `_serializar_modelos`).
     """
-    if valor is None or isinstance(valor, _ESCALARES_FIRESTORE):
+    if valor is None or isinstance(valor, _FIRESTORE_SAFE_SCALARS):
         return True
     if isinstance(valor, BaseModel):
         return True
