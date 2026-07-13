@@ -5,8 +5,7 @@ Responsabilidades:
 - Herdar FirebaseRepository e especializar operações para a coleção raiz
   `extensions/` (ADR-0006 — não é sub-coleção de students).
 - create_extension / get_extension / update_extension: CRUD do documento.
-- list_by_student / list_by_status / list_pending_by_students: consultas de
-  leitura para as telas de aluno, orientador e coordenação.
+- list_by_student: consulta de leitura para a tela do aluno.
 - has_pending / count_approved: gates de negócio consumidos pelo service.
 - sort_by_created_desc: ordenação em memória, compartilhada com o service.
 
@@ -65,29 +64,6 @@ class ExtensionRepository(FirebaseRepository):
         """Lista as prorrogações de um aluno, mais recentes primeiro."""
         items = await self.query(filters=[("student_id", "==", student_id)])
         return sort_by_created_desc(items)
-
-    async def list_by_status(self, status: str) -> list[dict[str, Any]]:
-        """Lista todas as prorrogações com um dado status, mais recentes primeiro."""
-        items = await self.query(filters=[("status", "==", status)])
-        return sort_by_created_desc(items)
-
-    async def list_pending_by_students(
-        self,
-        student_ids: list[str],
-    ) -> list[dict[str, Any]]:
-        """Lista prorrogações pendentes restritas a um conjunto de alunos.
-
-        Args:
-            student_ids: Doc ids dos alunos (ex.: orientandos de um orientador).
-
-        Returns:
-            Prorrogações pendentes desses alunos, mais recentes primeiro.
-        """
-        if not student_ids:
-            return []
-        allowed = set(student_ids)
-        pending = await self.list_by_status(_STATUS_PENDENTE)
-        return [ext for ext in pending if ext.get("student_id") in allowed]
 
     async def has_pending(self, student_id: str) -> bool:
         """Indica se o aluno já possui uma solicitação pendente."""
