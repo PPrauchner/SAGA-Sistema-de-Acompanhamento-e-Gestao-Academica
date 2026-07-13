@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 
+from backend.app.repositories.advisor_repository import AdvisorCapacityExceededError
 from backend.app.services.transfer_cross import CrossProgramTransferService
 
 
@@ -19,8 +20,9 @@ from backend.app.services.transfer_cross import CrossProgramTransferService
 # ------------------------------------------------------------------
 
 class _FakeAdvisorRepo:
-    def __init__(self, capacity: bool = True) -> None:
+    def __init__(self, capacity: bool = True, student_repo: "_FakeStudentRepo | None" = None) -> None:
         self._capacity = capacity
+        self._student_repo = student_repo
         self._store: dict[str, dict] = {
             "ori-origem": {
                 "id": "ori-origem",
@@ -47,6 +49,19 @@ class _FakeAdvisorRepo:
 
     async def check_advisor_capacity(self, advisor_id: str) -> bool:
         return self._capacity
+
+    async def transfer_student_atomic(
+        self,
+        advisor_id: str,
+        student_id: str,
+        update_data: dict,
+    ) -> None:
+        if not self._capacity:
+            raise AdvisorCapacityExceededError(
+                "Orientador destino atingiu o limite de orientandos"
+            )
+        if self._student_repo is not None:
+            await self._student_repo.update(student_id, update_data)
 
 
 class _FakeStudentRepo:
@@ -131,7 +146,7 @@ def _setup(
 ) -> tuple[CrossProgramTransferService, _FakeStudentRepo, _FakeTransferRepo, _FakeInferenceService]:
     s_repo = _FakeStudentRepo(situacao=situacao)
     t_repo = _FakeTransferRepo()
-    a_repo = _FakeAdvisorRepo(capacity=capacity)
+    a_repo = _FakeAdvisorRepo(capacity=capacity, student_repo=s_repo)
     inf = _FakeInferenceService()
 
     svc = CrossProgramTransferService()
