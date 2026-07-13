@@ -977,6 +977,7 @@ const NOTIF_SEVERITY: Record<string, AlertSeverity> = {
   prazo_critico: "critico",
   atividade_submetida: "atencao",
   prorrogacao_aprovada: "atencao",
+  prorrogacao_rejeitada: "atencao",
   transferencia_orientador: "atencao",
   transferencia_coordenacao: "atencao",
   atividade_validada: "info",

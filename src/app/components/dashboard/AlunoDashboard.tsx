@@ -988,6 +988,7 @@ const NOTIF_TIPO_MAP: Record<string, Notif["type"]> = {
   prazo_critico: "alerta",
   atividade_validada: "sucesso",
   prorrogacao_aprovada: "sucesso",
+  prorrogacao_rejeitada: "alerta",
   atividade_submetida: "info",
   progresso_task: "orientacao",
   transferencia_orientador: "orientacao",
