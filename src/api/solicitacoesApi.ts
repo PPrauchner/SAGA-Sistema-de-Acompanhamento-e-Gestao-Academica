@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "@/api/http";
+import { apiPost } from "@/api/http";
 
 export type SolicitacaoStatus =
   | "pendente"
@@ -32,28 +32,7 @@ export interface Solicitacao {
   parecer?: string | null;
 }
 
-export interface CreateSolicitacaoPayload {
-  tipo: string;
-  nova_data?: string;
-  motivo: string;
-  student_id?: string;
-}
-
 export const solicitacoesApi = {
-  list(token: string): Promise<Solicitacao[]> {
-    return apiGet<Solicitacao[]>("/extensions", token);
-  },
-
-  // Fila de prorrogações do programa para a coordenação (default: status pendente).
-  listPending(token: string, status?: string): Promise<Solicitacao[]> {
-    const query = status ? `?status=${encodeURIComponent(status)}` : "";
-    return apiGet<Solicitacao[]>(`/extensions/pending${query}`, token);
-  },
-
-  create(token: string, payload: CreateSolicitacaoPayload): Promise<Solicitacao> {
-    return apiPost<Solicitacao>("/extensions", payload, token);
-  },
-
   // Decisao em-linha da coordenacao para prorrogacao/trancamento (issue #308):
   // aprovar recalcula o prazo do aluno no backend; rejeitar exige motivo.
   approve(token: string, extensionId: string): Promise<Solicitacao> {

@@ -33,12 +33,16 @@ export interface Extension {
   motivo: string;
   plano_atualizado: string;
   parecer_orientador: string | null;
+  observacao_coordenacao?: string | null;
   status: ExtensionStatus;
   nova_data: string;
   data_atual?: string | null;
   prazo_novo?: string | null;
   aprovado_por?: string | null;
   aprovado_em?: string | null;
+  motivo_rejeicao?: string | null;
+  rejeitado_por?: string | null;
+  rejeitado_em?: string | null;
   created_at: string;
 }
 
@@ -66,8 +70,13 @@ export const extensionsApi = {
     );
   },
 
-  decide(token: string, extensionId: string, acao: "aprovar" | "rejeitar"): Promise<Extension> {
-    return apiPatch<Extension>(`/extensions/${extensionId}/approve`, { acao }, token);
+  approve(token: string, extensionId: string, observacao?: string): Promise<Extension> {
+    return apiPost<Extension>(`/extensions/${extensionId}/approve`, { observacao }, token);
+  },
+
+  // Spec 08: o indeferimento exige motivo; o backend o persiste em motivo_rejeicao.
+  reject(token: string, extensionId: string, motivo: string): Promise<Extension> {
+    return apiPost<Extension>(`/extensions/${extensionId}/reject`, { motivo }, token);
   },
 };
 
@@ -78,7 +87,8 @@ interface UseExtensionsApiResult {
   role: UserRole | null;
   createRequest: (data: CreateExtensionInput) => Promise<Extension>;
   submitReview: (extensionId: string, parecer: string) => Promise<Extension>;
-  submitDecision: (extensionId: string, acao: "aprovar" | "rejeitar") => Promise<Extension>;
+  submitApproval: (extensionId: string, observacao?: string) => Promise<Extension>;
+  submitRejection: (extensionId: string, motivo: string) => Promise<Extension>;
   refresh: () => Promise<void>;
 }
 
@@ -120,13 +130,16 @@ export function useExtensionsApi(): UseExtensionsApiResult {
     return reviewed;
   };
 
-  const submitDecision = async (
-    extensionId: string,
-    acao: "aprovar" | "rejeitar",
-  ): Promise<Extension> => {
-    const decided = await extensionsApi.decide(token!, extensionId, acao);
+  const submitApproval = async (extensionId: string, observacao?: string): Promise<Extension> => {
+    const approved = await extensionsApi.approve(token!, extensionId, observacao);
     await loadExtensions();
-    return decided;
+    return approved;
+  };
+
+  const submitRejection = async (extensionId: string, motivo: string): Promise<Extension> => {
+    const rejected = await extensionsApi.reject(token!, extensionId, motivo);
+    await loadExtensions();
+    return rejected;
   };
 
   return {
@@ -136,7 +149,8 @@ export function useExtensionsApi(): UseExtensionsApiResult {
     role,
     createRequest,
     submitReview,
-    submitDecision,
+    submitApproval,
+    submitRejection,
     refresh: loadExtensions,
   };
 }
