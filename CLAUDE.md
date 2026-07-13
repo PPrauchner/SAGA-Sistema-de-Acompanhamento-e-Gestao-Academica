@@ -1,0 +1,182 @@
+# CLAUDE.md — SAGA
+
+Instruções de desenvolvimento para o SAGA — Sistema de Acompanhamento e Gestão Acadêmica.
+
+> Para entender o **domínio do problema** (entidades, ciclo de vida do discente, regras acadêmicas, papéis), ver [`CONTEXT.md`](./CONTEXT.md).
+
+---
+
+## Skills e Regras de Comportamento
+
+@.claude/rules/karpathy-principles.md
+
+> As regras específicas de backend e frontend são carregadas automaticamente
+> via .claude/rules/backend.md e .claude/rules/frontend.md quando o Claude
+> abre arquivos em backend/ ou src/.
+
+## Arquitetura
+
+Ver [`.claude/rules/architecture.md`](./.claude/rules/architecture.md) para a árvore completa de arquivos e camadas do backend.
+
+---
+
+## Comandos
+
+### Frontend
+```bash
+# Instalar dependências
+pnpm install
+
+# Desenvolvimento
+pnpm dev          # Vite dev server em http://localhost:5173
+
+# Build
+pnpm build
+```
+
+### Backend
+
+Gerenciado com **uv** (ver `uv.lock`); requer **Python ≥ 3.12**.
+
+```bash
+# Instalar dependências (cria .venv automaticamente)
+uv sync
+
+# Rodar o servidor FastAPI
+uv run uvicorn backend.app.main:app --reload --port 8000
+
+# Rodar testes do motor de inferência
+uv run pytest backend/inference_engine/tests/ -v
+
+# Lint e format (ruff — configurado em [tool.ruff.lint] no pyproject.toml)
+uv run ruff check .
+uv run ruff format .
+
+# Seed do Firestore (executar uma vez)
+uv run python backend/scripts/seed_firestore.py
+```
+
+> Alternativa sem uv: `python -m venv .venv` + ativar (`source .venv/bin/activate`
+> no Linux/Mac, `.venv\Scripts\activate` no Windows) + `pip install -e ".[dev]"`.
+
+### Variáveis de ambiente
+Criar `.env` na raiz com:
+```
+# Backend
+FIREBASE_PROJECT_ID=
+FIREBASE_PRIVATE_KEY=
+FIREBASE_CLIENT_EMAIL=
+
+# Frontend (Vite)
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_PROJECT_ID=
+VITE_AUTH_DOMAIN=
+VITE_FIRESTORE_DB=
+VITE_API_URL=        # base da API do backend; default http://localhost:8000 se ausente
+```
+
+---
+
+## Motor de Inferência — Regras de Isolamento
+
+O `inference_engine/` é **completamente isolado**:
+- Sem imports de FastAPI, Firebase, pydantic ou qualquer ORM
+- Único ponto de entrada externo: `InferenceEngine.query(goal: Term) -> list[dict]`
+- `InferenceService` (em `services/`) é o único responsável por popular a
+  `FactBase` com dados do Firestore antes de cada consulta
+- Para adicionar/alterar uma regra de negócio: editar apenas o arquivo
+  correspondente em `rules/` (RL01–RL05), não a lógica de controle
+
+### Regras implementadas
+
+Ver descrições de domínio em [`CONTEXT.md → Regras Acadêmicas`](./CONTEXT.md#regras-acadêmicas-motor-de-inferência).
+
+| ID   | Arquivo                    |
+|------|----------------------------|
+| RL01 | `defense_eligibility.py`   |
+| RL02 | `credit_validation.py`     |
+| RL03 | `academic_status.py`       |
+| RL04 | `activity_eligibility.py`  |
+| RL05 | `production_scoring.py`    |
+
+---
+
+## Aspectos AOP
+
+Implementados com mecanismos nativos do Python — sem bibliotecas externas.
+
+| ID  | Arquivo                  | Tipo         | Mecanismo Python          |
+|-----|--------------------------|--------------|---------------------------|
+| A01 | `authorization.py`       | Before       | Decorador `@requires_role`|
+| A02 | `audit.py`               | Around       | Decorador + `inspect`     |
+| A03 | `history.py`             | Before+After | Metaclasse `HistoryMeta`  |
+| A04 | `deadline_validation.py` | Before+After | Decorador `@check_deadlines`|
+| A05 | `alerts.py`              | After        | Decorador `@trigger_alerts`|
+
+Ordem canônica de decoradores nos endpoints:
+```python
+@requires_role(...)
+@audit_operation
+@check_deadlines
+@trigger_alerts
+async def endpoint_func(...):
+```
+
+Flags para desabilitar aspectos em teste: `aspect_config.py`.
+
+---
+
+## Firebase / Firestore
+
+Ver coleções e entidades em [`CONTEXT.md → Modelo de Dados`](./CONTEXT.md#modelo-de-dados-coleções-firestore).
+
+Regras de acesso:
+- **Auth**: custom claims `{ role, programa_id }` em cada token JWT
+- **Escrita**: exclusivamente via Admin SDK no backend
+- **Leitura direta no frontend**: apenas `notifications/` (onSnapshot)
+
+---
+
+---
+
+## Convenções de Código
+
+- **Python**: docstrings em todos os módulos; tipagem explícita; sem lógica
+  nos arquivos de rota (delegar para services)
+- **TypeScript**: um arquivo de API por domínio em `src/api/`; hooks em
+  `src/hooks/`; alias `@` aponta para `src/`
+- **Commits**: atômicos, seguir template em `guidelines/CommitConventions.md`
+- **Testes**: pytest para o motor de inferência; cobertura obrigatória de
+  todos os cenários apto/risco/inapto das 5 regras
+
+Resumo das regras críticas:
+- **inference_engine/**: isolado, sem imports externos, ponto de entrada único `InferenceEngine.query()`
+- **Aspectos**: sem bibliotecas externas; documentar Join Point, Advice e Weaving em cada docstring
+- **Routers**: apenas receber request → chamar service → retornar response; sem lógica de negócio
+- **Commits**: menor mudança funcional possível — progredir camada a camada (model → repository → service → router), nunca agrupar arquivos de etapas distintas; testes **sempre** em commit separado (`feat`/`fix` primeiro, `test` depois); ver `guidelines/CommitConventions.md`
+- **Testes**: pytest, cobrir todos os cenários apto/risco/inapto das 5 regras
+---
+
+## Especificações Técnicas
+
+Documentação detalhada de cada módulo em `docs/specs/`:
+
+| Arquivo                         | Conteúdo                              |
+|---------------------------------|---------------------------------------|
+| `01_motor_inferencia.json`      | Motor lógico completo + casos de teste|
+| `02_aspectos_aop.json`          | 5 aspectos com join points e advice   |
+| `03_firebase_schema.json`       | Schema Firestore + mapeamento páginas |
+| `04_autenticacao.json`          | Firebase Auth + fluxo de convite      |
+| `05_discentes.json`             | CRUD alunos e orientadores            |
+| `06_plano_trabalho.json`        | Plano, etapas, tasks e progresso      |
+| `07_atividades_producoes.json`  | Fluxo de validação + RL04/RL05        |
+| `08_checklist_prorrogacoes.json`| Checklist + prorrogações              |
+| `09_relatorios_dashboard.json`  | Dashboards e relatórios               |
+| `10_integracao_frontend.json`   | Substituição dos dados hardcoded      |
+
+---
+
+## Repositório
+
+- GitHub: `https://github.com/PPrauchner/SAGA-Sistema-de-Acompanhamento-e-Gestao-Academica`
+- Branch de trabalho atual: `Pietro`.

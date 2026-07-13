@@ -2,6 +2,7 @@
 
 :root {
   --font-size: 16px;
+  --app-font-scale: 1;
   --background: #f4f6f9;
   --foreground: #1a1a2e;
   --card: #ffffff;
@@ -195,6 +196,19 @@
     @apply bg-background text-foreground;
   }
 
+  /* zoom padronizado (Chrome 128+/Firefox 126+) já resolve %/vh no espaço
+   * escalado — compensar com divisão pela escala encolhe/estoura o layout. */
+  #root {
+    min-height: 100vh;
+    zoom: var(--app-font-scale);
+  }
+
+  @supports not (zoom: 1) {
+    html {
+      font-size: calc(var(--font-size) * var(--app-font-scale));
+    }
+  }
+
   /* ─── Dark mode adaptive overrides ─────────────────────────────────
    * Inline brand-blue text (e.g. color:"#123C7A") doesn't have enough
    * contrast on dark backgrounds. We brighten these tones via attribute
@@ -312,29 +326,94 @@
     box-shadow: var(--elevation-card-shadow);
   }
 
-  /* Inference Page: terminal aesthetic adapts to light mode for legibility.
-   * The page intentionally uses dark surfaces; in light mode we soften them. */
+  /* ─── Inference Page: terminal aesthetic softened for light mode ──────
+   * The page is built with ~200 inline hex colors (dark "terminal" look).
+   * React applies inline styles via the CSSOM, and Chromium serialises the
+   * `style` attribute with colors normalised to `rgb(...)`, so hex-only
+   * `[style*=...]` selectors never match the rendered DOM. We therefore list
+   * BOTH the `rgb(...)` form (what actually renders) and the hex form —
+   * mirroring the dark-mode overrides above. In light mode we keep the dark
+   * "island" but lift pure-black surfaces into a legible slate ramp. */
+
+  /* Container itself is transparent, so in light mode the app's near-white
+   * page background bleeds through the gaps between panels. Give the island a
+   * dark canvas so it reads as one continuous dark surface. */
+  :root:not(.dark) .inference-root {
+    background-color: #121a2e;
+  }
+
+  /* Deep canvas + code boxes → base slate */
+  :root:not(.dark) .inference-root [style*="background: rgb(3, 7, 18)"],
   :root:not(.dark) .inference-root [style*="background:#030712"],
   :root:not(.dark) .inference-root [style*="background: #030712"],
-  :root:not(.dark) .inference-root [style*="background:#0f172a"],
-  :root:not(.dark) .inference-root [style*="background: #0f172a"],
+  :root:not(.dark) .inference-root [style*="background: rgb(10, 22, 40)"],
   :root:not(.dark) .inference-root [style*="background:#0a1628"],
-  :root:not(.dark) .inference-root [style*="background: #0a1628"] {
+  :root:not(.dark) .inference-root [style*="background: #0a1628"],
+  :root:not(.dark) .inference-root [style*="background: rgb(11, 18, 32)"],
+  :root:not(.dark) .inference-root [style*="background:#0b1220"],
+  :root:not(.dark) .inference-root [style*="background: #0b1220"],
+  :root:not(.dark) .inference-root [style*="background:#0c1829"],
+  :root:not(.dark) .inference-root [style*="background: #0c1829"] {
     background-color: #1a2540 !important;
     background-image: none !important;
   }
-  :root:not(.dark) .inference-root [style*="border: 1px solid #1e293b"],
-  :root:not(.dark) .inference-root [style*="border:1px solid #1e293b"],
-  :root:not(.dark) .inference-root [style*="border: 1px solid #0f172a"],
-  :root:not(.dark) .inference-root [style*="border:1px solid #0f172a"] {
-    border-color: rgba(255,255,255,0.10) !important;
+
+  /* Raised panels / chips → one step lighter */
+  :root:not(.dark) .inference-root [style*="background: rgb(15, 23, 42)"],
+  :root:not(.dark) .inference-root [style*="background:#0f172a"],
+  :root:not(.dark) .inference-root [style*="background: #0f172a"],
+  :root:not(.dark) .inference-root [style*="background: rgb(12, 24, 41)"],
+  :root:not(.dark) .inference-root [style*="background:#0c1829"],
+  :root:not(.dark) .inference-root [style*="background: #0c1829"] {
+    background-color: #233052 !important;
+    background-image: none !important;
   }
+
+  /* Active / selected blue surfaces → brighter slate-blue */
+  :root:not(.dark) .inference-root [style*="background: rgb(30, 58, 95)"],
+  :root:not(.dark) .inference-root [style*="background:#1e3a5f"],
+  :root:not(.dark) .inference-root [style*="background: #1e3a5f"] {
+    background-color: #2c4a73 !important;
+  }
+
+  /* Small neutral pills / progress track → mid slate */
+  :root:not(.dark) .inference-root [style*="background: rgb(30, 41, 59)"],
+  :root:not(.dark) .inference-root [style*="background:#1e293b"],
+  :root:not(.dark) .inference-root [style*="background: #1e293b"] {
+    background-color: #334159 !important;
+  }
+
+  /* Header gradient → softened dark gradient (keeps depth, drops the black) */
+  :root:not(.dark) .inference-root [style*="linear-gradient(135deg, rgb(3, 7, 18)"],
+  :root:not(.dark) .inference-root [style*="linear-gradient(135deg, #030712"] {
+    background-image: linear-gradient(135deg, #1a2540 0%, #233458 50%, #241f3f 100%) !important;
+  }
+
+  /* Hairline borders → subtle light divider (any width) */
+  :root:not(.dark) .inference-root [style*="solid rgb(30, 41, 59)"],
+  :root:not(.dark) .inference-root [style*="solid #1e293b"],
+  :root:not(.dark) .inference-root [style*="solid rgb(15, 23, 42)"],
+  :root:not(.dark) .inference-root [style*="solid #0f172a"],
+  :root:not(.dark) .inference-root [style*="solid rgb(51, 65, 85)"],
+  :root:not(.dark) .inference-root [style*="solid #334155"],
+  :root:not(.dark) .inference-root [style*="solid rgb(30, 58, 95)"],
+  :root:not(.dark) .inference-root [style*="solid #1e3a5f"] {
+    border-color: rgba(91, 141, 239, 0.35) !important;
+  }
+
+  /* Muted terminal text → lifted for contrast on the softened surface */
+  :root:not(.dark) .inference-root [style*="color: rgb(100, 116, 139)"],
   :root:not(.dark) .inference-root [style*="color:#64748b"],
   :root:not(.dark) .inference-root [style*="color: #64748b"],
+  :root:not(.dark) .inference-root [style*="color: rgb(71, 85, 105)"],
   :root:not(.dark) .inference-root [style*="color:#475569"],
   :root:not(.dark) .inference-root [style*="color: #475569"],
+  :root:not(.dark) .inference-root [style*="color: rgb(51, 65, 85)"],
   :root:not(.dark) .inference-root [style*="color:#334155"],
-  :root:not(.dark) .inference-root [style*="color: #334155"] {
+  :root:not(.dark) .inference-root [style*="color: #334155"],
+  :root:not(.dark) .inference-root [style*="color: rgb(148, 163, 184)"],
+  :root:not(.dark) .inference-root [style*="color:#94a3b8"],
+  :root:not(.dark) .inference-root [style*="color: #94a3b8"] {
     color: #cbd5e1 !important;
   }
 
@@ -450,4 +529,3 @@
   .stepper-step { min-width: 0; }
   .stepper-step > * { min-width: 0; }
 }
-

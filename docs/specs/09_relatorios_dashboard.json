@@ -1,0 +1,275 @@
+{
+  "modulo": "Relatórios Gerenciais e Dashboards",
+  "versao": "1.0.0-MVP",
+  "descricao": "Endpoints de dados agregados para os três dashboards (aluno, orientador, coordenação) e relatórios gerenciais. Dados vêm do Firestore por queries agregadas — sem motor lógico direto. Aspectos: autorização obrigatória e auditoria em relatórios formais.",
+
+  "arquivos_python": [
+    "backend/app/api/v1/reports.py",
+    "backend/app/api/v1/dashboard.py",
+    "backend/app/api/v1/audit_logs.py",
+    "backend/app/services/report_service.py",
+    "backend/app/services/dashboard_service.py"
+  ],
+
+  "requisitos_fundo": [
+    "Relatórios gerenciais acessíveis apenas pela coordenação",
+    "Dashboard do aluno mostra apenas dados do próprio aluno",
+    "Dashboard do orientador mostra dados agregados dos orientandos",
+    "ReportsPage atual usa dados hardcoded: substituir por chamadas à API",
+    "Audit logs paginados com filtros — AuditPage exibe dados reais da coleção audit_logs/",
+    "Tempo médio de integralização: média de (data_conclusao - data_ingresso) de alunos com situacao_registrada='concluido'",
+    "Produção por aluno e por professor: agrega productions aprovadas por student_id e por autores"
+  ],
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [],
+      "base_fatos_necessaria": [],
+      "nota": "Relatórios usam dados persistidos — não executam o motor em tempo real. Situação inferida exibida nos relatórios vem do campo students/{id}.situacao_inferida (atualizado pelo InferenceService)."
+    },
+    "aop_aspectos": {
+      "join_points": [
+        "ReportService.get_students_at_risk()          — @requires_role('coordenacao'), @audit_operation",
+        "ReportService.get_students_by_status()        — @requires_role('coordenacao')",
+        "ReportService.get_students_by_advisor()       — @requires_role('coordenacao')",
+        "ReportService.get_completion_time_avg()       — @requires_role('coordenacao')",
+        "ReportService.get_productions_report()        — @requires_role('coordenacao')",
+        "DashboardService.get_aluno_dashboard()        — @requires_role('aluno') — aluno vê apenas o próprio",
+        "DashboardService.get_orientador_dashboard()   — @requires_role('orientador')",
+        "DashboardService.get_coordenacao_dashboard()  — @requires_role('coordenacao')"
+      ],
+      "advice": [
+        "Before: @requires_role em todos os endpoints — relatórios gerenciais são exclusivos da coordenação",
+        "Around: @audit_operation em get_students_at_risk() e get_productions_report() — considerados relatórios formais"
+      ]
+    }
+  },
+
+  "contratos_api": [
+    {
+      "path": "/api/v1/dashboard/aluno/{student_id}",
+      "method": "GET",
+      "descricao": "Dashboard do aluno: situação atual, progresso do plano, créditos, notificações recentes",
+      "papeis_autorizados": ["aluno (próprio)", "orientador (orientandos)", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "response_200": {
+        "student_id": "string",
+        "nome": "string",
+        "situacao_registrada": "string",
+        "situacao_inferida": "string",
+        "conflito_situacao": "boolean",
+        "prazo_final": "string",
+        "dias_restantes": "int",
+        "progresso_plano_percentual": "float",
+        "creditos": {
+          "total": "float",
+          "basico": "float",
+          "especifico": "float",
+          "tecnologico": "float",
+          "minimo_requerido": "float"
+        },
+        "checklist_resumo": {
+          "cumpridos": "int",
+          "pendentes": "int",
+          "em_risco": "int",
+          "total": "int"
+        },
+        "tasks_proximas": [
+          {"task_id": "string", "titulo": "string", "prazo": "string", "status": "string"}
+        ],
+        "producoes_aprovadas": "int",
+        "atividades_pendentes_validacao": "int"
+      }
+    },
+    {
+      "path": "/api/v1/dashboard/orientador/{advisor_id}",
+      "method": "GET",
+      "descricao": "Dashboard do orientador: visão agregada dos orientandos",
+      "papeis_autorizados": ["orientador (próprio)", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('orientador','coordenacao')"],
+      "response_200": {
+        "advisor_id": "string",
+        "nome": "string",
+        "total_orientandos": "int",
+        "orientandos_por_status": {
+          "regular": "int",
+          "em_risco": "int",
+          "qualificado": "int",
+          "em_fase_de_defesa": "int",
+          "em_prorrogacao": "int"
+        },
+        "atividades_aguardando_parecer": "int",
+        "orientandos": [
+          {
+            "student_id": "string",
+            "nome": "string",
+            "situacao_inferida": "string",
+            "progresso_plano": "float",
+            "dias_restantes_prazo": "int",
+            "alertas": ["array de strings de alertas ativos"]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/dashboard/coordenacao",
+      "method": "GET",
+      "descricao": "Dashboard da coordenação: visão macro do programa",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')"],
+      "response_200": {
+        "programa_id": "string",
+        "total_alunos": "int (adicionado pós-MVP)",
+        "total_alunos_ativos": "int",
+        "alunos_por_status": {
+          "regular": "int",
+          "em_risco": "int",
+          "em_prorrogacao": "int",
+          "qualificado": "int",
+          "em_fase_de_defesa": "int"
+        },
+        "atividades_aguardando_validacao": "int",
+        "prorrogacoes_pendentes": "int",
+        "producoes_ultimo_mes": "int",
+        "total_concluidos": "int (adicionado pós-MVP)",
+        "tempo_medio_integralizacao_meses": "float | null",
+        "auditoria_recente": [
+          {"operacao": "string", "usuario": "string", "timestamp": "string"}
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/reports/students-at-risk",
+      "method": "GET",
+      "descricao": "Alunos em situação de risco inferida pelo motor",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "response_200": {
+        "total": "int",
+        "items": [
+          {
+            "student_id": "string",
+            "nome": "string",
+            "orientador_nome": "string",
+            "situacao_inferida": "string",
+            "dias_restantes_prazo": "int",
+            "razoes_risco": ["array de strings"]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/reports/students-by-status",
+      "method": "GET",
+      "descricao": "Contagem e lista de alunos agrupados por situação registrada",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')"],
+      "response_200": {
+        "por_situacao": {
+          "regular": {"total": "int", "alunos": ["array resumido"]},
+          "em_risco": {"total": "int", "alunos": ["array resumido"]},
+          "qualificado": {"total": "int", "alunos": ["array resumido"]},
+          "em_fase_de_defesa": {"total": "int", "alunos": ["array resumido"]},
+          "concluido": {"total": "int", "alunos": ["array resumido"]}
+        }
+      }
+    },
+    {
+      "path": "/api/v1/reports/students-by-advisor",
+      "method": "GET",
+      "descricao": "Alunos agrupados por orientador com distribuição de status",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')"],
+      "response_200": {
+        "items": [
+          {
+            "advisor_id": "string",
+            "advisor_nome": "string",
+            "total_orientandos": "int",
+            "em_risco": "int",
+            "regulares": "int"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/reports/completion-time",
+      "method": "GET",
+      "descricao": "Tempo médio de integralização dos alunos concluídos",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')"],
+      "response_200": {
+        "media_meses": "float | null",
+        "total_concluidos": "int",
+        "minimo_meses": "float | null",
+        "maximo_meses": "float | null",
+        "historico": [
+          {"student_nome": "string", "meses": "float", "ano_conclusao": "int"}
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/reports/productions",
+      "method": "GET",
+      "descricao": "Produção bibliográfica por aluno e por orientador",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "response_200": {
+        "total_producoes_aprovadas": "int",
+        "por_aluno": [
+          {
+            "student_id": "string",
+            "student_nome": "string",
+            "total": "int",
+            "pontuacao_total": "float",
+            "por_nivel": {"A1": "int", "A2": "int", "A3": "int", "A4": "int", "A5": "int", "A6": "int", "A7": "int", "A8": "int", "SC": "int"}
+          }
+        ],
+        "por_orientador": [
+          {
+            "advisor_id": "string",
+            "advisor_nome": "string",
+            "total": "int",
+            "pontuacao_total": "float",
+            "pontuacao_media_orientandos": "float"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/audit-logs",
+      "method": "GET",
+      "descricao": "Lista paginada de logs de auditoria com filtros. Alimenta AuditPage.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')"],
+      "query_params": {
+        "page": "int (default: 1)",
+        "page_size": "int (default: 20, max: 100)",
+        "usuario_id": "string (opcional)",
+        "operacao": "string (opcional)",
+        "modulo": "string (opcional)",
+        "data_inicio": "string ISO8601 (opcional)",
+        "data_fim": "string ISO8601 (opcional)",
+        "resultado_status": "string ('sucesso'|'erro') (opcional)"
+      },
+      "response_200": {
+        "total": "int",
+        "page": "int",
+        "page_size": "int",
+        "items": [
+          {
+            "id": "string",
+            "usuario_nome": "string",
+            "role": "string",
+            "operacao": "string",
+            "modulo": "string",
+            "recurso": "string",
+            "resultado_status": "string",
+            "timestamp": "string",
+            "duracao_ms": "int"
+          }
+        ]
+      }
+    }
+  ]
+}

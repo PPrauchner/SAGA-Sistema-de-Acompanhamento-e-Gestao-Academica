@@ -1,52 +1,31 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useCoordDashboard } from "@/hooks/useDashboard";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  getStudentsByAdvisor, getCompletionTime, getProductionsReport,
+  type StudentsByAdvisorResponse, type CompletionTimeResponse,
+  type ProductionsReportResponse,
+} from "@/api/reportsApi";
+import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
+import { usePendingExtensions } from "@/hooks/usePendingExtensions";
+import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
+import type { Extension } from "@/api/extensions";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
-  BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
-  BarChart2, Filter, Bell, GraduationCap, Layers, RefreshCw,
-  FileSpreadsheet,
+  BookOpen, Award, X, ChevronRight, Eye,
+  BarChart2, Filter, Bell, GraduationCap,
+  Loader2,
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend,
   LineChart, Line, ReferenceLine,
 } from "recharts";
 
-// ─── Types ─────────────────────────────────────────────────────────────────
 
 type ReportType = "status" | "orientador" | "producao" | "integralizacao" | null;
-type ExportFormat = "pdf" | "excel" | "csv";
-
-interface ValidationItem {
-  id: string;
-  tipo: "relatorio" | "plano" | "producao" | "atividade";
-  aluno: string;
-  orientador: string;
-  descricao: string;
-  prazo: string;
-  urgencia: "alta" | "media" | "baixa";
-  data: string;
-}
-
-interface ExtensionRequest {
-  id: string;
-  aluno: string;
-  nivel: "Mestrado" | "Doutorado";
-  orientador: string;
-  motivo: string;
-  prazoPrevisto: string;
-  novoPrazo: string;
-  status: "pendente" | "em-analise" | "aprovada" | "negada";
-  dataProtocolo: string;
-}
-
-interface PendingActivity {
-  id: string;
-  descricao: string;
-  responsavel: string;
-  tipo: "aprovacao" | "revisao" | "comunicado" | "reuniao";
-  prazo: string;
-  prioridade: "urgente" | "normal" | "baixa";
-}
 
 interface AlertItem {
   id: string;
@@ -58,76 +37,60 @@ interface AlertItem {
   acao?: string;
 }
 
-// ─── Data ──────────────────────────────────────────────────────────────────
 
-const STATUS_DATA = [
+const INITIAL_STATUS_DATA = [
   { name: "Regular", value: 142, color: "#1F8A70" },
   { name: "Qualificado", value: 38, color: "#123C7A" },
   { name: "Em Risco", value: 24, color: "#D4A017" },
   { name: "Prorrogação", value: 18, color: "#f97316" },
   { name: "Fase de Defesa", value: 16, color: "#8b5cf6" },
-  { name: "Crítico", value: 10, color: "#dc2626" },
 ];
 
-const ORIENTADOR_DATA = [
-  { name: "Carla M.", orientandos: 8, producoes: 14, defesas: 3, risco: 1 },
-  { name: "Paulo R.", orientandos: 6, producoes: 9, defesas: 2, risco: 2 },
-  { name: "Ana L.", orientandos: 9, producoes: 18, defesas: 4, risco: 0 },
-  { name: "João F.", orientandos: 5, producoes: 7, defesas: 1, risco: 2 },
-  { name: "Beatriz S.", orientandos: 7, producoes: 11, defesas: 2, risco: 1 },
-  { name: "Rafael C.", orientandos: 4, producoes: 5, defesas: 0, risco: 3 },
-  { name: "Mariana T.", orientandos: 8, producoes: 16, defesas: 3, risco: 0 },
-  { name: "Diego N.", orientandos: 6, producoes: 8, defesas: 1, risco: 2 },
-];
+interface StatusDataProp { name: string; value: number; color: string; }
 
-const PRODUCAO_DATA = [
-  { mes: "Jan", A1: 3, A2: 5, B1: 8, livros: 1, conf: 4 },
-  { mes: "Fev", A1: 2, A2: 4, B1: 6, livros: 0, conf: 3 },
-  { mes: "Mar", A1: 5, A2: 6, B1: 9, livros: 1, conf: 6 },
-  { mes: "Abr", A1: 4, A2: 7, B1: 11, livros: 2, conf: 5 },
-  { mes: "Mai", A1: 6, A2: 5, B1: 10, livros: 0, conf: 7 },
-  { mes: "Jun", A1: 8, A2: 9, B1: 13, livros: 1, conf: 9 },
-  { mes: "Jul", A1: 5, A2: 6, B1: 8, livros: 0, conf: 5 },
-  { mes: "Ago", A1: 7, A2: 8, B1: 12, livros: 2, conf: 8 },
-  { mes: "Set", A1: 9, A2: 10, B1: 15, livros: 1, conf: 10 },
-  { mes: "Out", A1: 11, A2: 12, B1: 17, livros: 3, conf: 11 },
-  { mes: "Nov", A1: 8, A2: 9, B1: 14, livros: 1, conf: 9 },
-  { mes: "Dez", A1: 6, A2: 7, B1: 11, livros: 0, conf: 7 },
-];
+// Meta de integralização do MVP (mestrado): 24 meses (programs.duracao_meses default).
+const META_INTEGRALIZACAO_MESES = 24;
 
-const INTEGRALIZACAO_DATA = [
-  { ano: "2018", mestrado: 26, doutorado: 50, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2019", mestrado: 25, doutorado: 52, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2020", mestrado: 28, doutorado: 54, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2021", mestrado: 24, doutorado: 49, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2022", mestrado: 27, doutorado: 51, metaMestrado: 24, metaDoutorado: 48 },
-  { ano: "2023", mestrado: 25, doutorado: 48, metaMestrado: 24, metaDoutorado: 48 },
-];
+const PRODUCTION_LEVELS = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "SC"] as const;
 
-const VALIDATIONS: ValidationItem[] = [
-  { id: "v1", tipo: "relatorio", aluno: "Carlos Eduardo Lima", orientador: "Profa. Carla Mendes", descricao: "Relatório Semestral 2024-2", prazo: "05/06/2026", urgencia: "alta", data: "28/05/2026" },
-  { id: "v2", tipo: "plano", aluno: "Juliana Mendes Martins", orientador: "Prof. Paulo Rodrigues", descricao: "Plano de Trabalho — Fase 3", prazo: "08/06/2026", urgencia: "alta", data: "29/05/2026" },
-  { id: "v3", tipo: "producao", aluno: "Ana Paula Costa", orientador: "Profa. Ana Lopes", descricao: "Artigo submetido ao IEEE Access", prazo: "12/06/2026", urgencia: "media", data: "30/05/2026" },
-  { id: "v4", tipo: "atividade", aluno: "Ricardo Alves Santos", orientador: "Prof. João Figueiredo", descricao: "Atividade creditável — Workshop IA", prazo: "15/06/2026", urgencia: "media", data: "01/06/2026" },
-  { id: "v5", tipo: "relatorio", aluno: "Bruno Carvalho Neves", orientador: "Profa. Beatriz Souza", descricao: "Relatório de Qualificação", prazo: "10/06/2026", urgencia: "alta", data: "01/06/2026" },
-  { id: "v6", tipo: "plano", aluno: "Patrícia Lima Farias", orientador: "Prof. Rafael Costa", descricao: "Revisão do Cronograma — Prorrogação", prazo: "20/06/2026", urgencia: "baixa", data: "31/05/2026" },
-];
+const LEVEL_COLORS: Record<string, string> = {
+  A1: "#123C7A", A2: "#1B4F9C", A3: "#1F6FB5", A4: "#2E86C1",
+  A5: "#1F8A70", A6: "#3DA68C", A7: "#D4A017", A8: "#E0BC5C", SC: "#94a3b8",
+};
 
-const EXTENSIONS: ExtensionRequest[] = [
-  { id: "e1", aluno: "Marcos Vinícius Oliveira", nivel: "Mestrado", orientador: "Profa. Carla Mendes", motivo: "Problemas de saúde documentados", prazoPrevisto: "Dez/2024", novoPrazo: "Jun/2025", status: "em-analise", dataProtocolo: "20/05/2026" },
-  { id: "e2", aluno: "Patrícia Lima Farias", nivel: "Doutorado", orientador: "Prof. Rafael Costa", motivo: "Coleta de dados comprometida por pandemia", prazoPrevisto: "Mar/2025", novoPrazo: "Set/2025", status: "pendente", dataProtocolo: "25/05/2026" },
-  { id: "e3", aluno: "Diego Almeida Ramos", nivel: "Doutorado", orientador: "Prof. Diego Neri", motivo: "Mudança de escopo aprovada pelo orientador", prazoPrevisto: "Jun/2025", novoPrazo: "Dez/2025", status: "pendente", dataProtocolo: "28/05/2026" },
-  { id: "e4", aluno: "Camila Ferreira Luz", nivel: "Mestrado", orientador: "Profa. Mariana Torres", motivo: "Licença maternidade", prazoPrevisto: "Jul/2025", novoPrazo: "Jan/2026", status: "aprovada", dataProtocolo: "10/04/2026" },
-];
+/** Uma linha por orientador para o gráfico/lista de desempenho. */
+function advisorRows(data: StudentsByAdvisorResponse) {
+  return data.items.map((o) => ({
+    name: o.advisor_nome ? (o.advisor_nome.split(" ").slice(-1)[0] || o.advisor_nome) : "—",
+    nomeCompleto: o.advisor_nome || "—",
+    orientandos: o.total_orientandos,
+    regulares: o.regulares,
+    risco: o.em_risco,
+  }));
+}
 
-const PENDING_ACTIVITIES: PendingActivity[] = [
-  { id: "p1", descricao: "Aprovar calendário de defesas — 2º semestre 2026", responsavel: "Coordenação", tipo: "aprovacao", prazo: "06/06/2026", prioridade: "urgente" },
-  { id: "p2", descricao: "Emitir comunicado sobre prazo de matrículas", responsavel: "Secretaria", tipo: "comunicado", prazo: "07/06/2026", prioridade: "urgente" },
-  { id: "p3", descricao: "Revisar regimento interno — Art. 24 e 25", responsavel: "Comissão de Normas", tipo: "revisao", prazo: "15/06/2026", prioridade: "normal" },
-  { id: "p4", descricao: "Reunião de colegiado — Pauta: novos orientadores", responsavel: "Todos os docentes", tipo: "reuniao", prazo: "10/06/2026", prioridade: "normal" },
-  { id: "p5", descricao: "Aprovar solicitações de bolsas CAPES pendentes (7)", responsavel: "Coordenação", tipo: "aprovacao", prazo: "12/06/2026", prioridade: "urgente" },
-  { id: "p6", descricao: "Atualizar Plataforma Sucupira — dados 2025", responsavel: "Secretaria", tipo: "revisao", prazo: "30/06/2026", prioridade: "baixa" },
-];
+/** Agrega o histórico de conclusões por ano → média de meses (arredondada). */
+function completionByYear(data: CompletionTimeResponse) {
+  const byYear = new Map<number, { sum: number; count: number }>();
+  for (const h of data.historico) {
+    const cur = byYear.get(h.ano_conclusao) ?? { sum: 0, count: 0 };
+    cur.sum += h.meses;
+    cur.count += 1;
+    byYear.set(h.ano_conclusao, cur);
+  }
+  return [...byYear.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([ano, { sum, count }]) => ({ ano: String(ano), meses: Math.round(sum / count), concluidos: count }));
+}
+
+/** Soma as produções aprovadas por nível de relevância entre todos os alunos. */
+function productionTotals(data: ProductionsReportResponse) {
+  const totals: Record<string, number> = { A1: 0, A2: 0, A3: 0, A4: 0, A5: 0, A6: 0, A7: 0, A8: 0, SC: 0 };
+  for (const s of data.por_aluno) {
+    for (const nivel of PRODUCTION_LEVELS) totals[nivel] += s.por_nivel[nivel] ?? 0;
+  }
+  return PRODUCTION_LEVELS.map((nivel) => ({ nivel, total: totals[nivel] }));
+}
 
 const ALERTS: AlertItem[] = [
   { id: "a1", nivel: "critico", titulo: "Prazos vencidos sem prorrogação aprovada", descricao: "8 alunos ultrapassaram o prazo máximo de integralização sem prorrogação formalizada.", afetados: 8, data: "02/06/2026", acao: "Ver alunos" },
@@ -138,36 +101,28 @@ const ALERTS: AlertItem[] = [
   { id: "a6", nivel: "info", titulo: "Novo edital de bolsas produtividade CNPq", descricao: "Edital aberto para bolsas PQ 2026. Prazo de inscrição: 15/07/2026.", afetados: 0, data: "29/05/2026" },
 ];
 
-const PROGRAM_STATS = [
-  { label: "Taxa de Titulação (5 anos)", value: "78%", sub: "Acima da média nacional (71%)", trend: "up", color: "#1F8A70" },
-  { label: "Nota CAPES", value: "6", sub: "Mantida na última avaliação (2021-2024)", trend: "stable", color: "#123C7A" },
-  { label: "Índice H do Programa", value: "24", sub: "+3 em relação ao triênio anterior", trend: "up", color: "#8b5cf6" },
-  { label: "Produção Média / Aluno", value: "1,8", sub: "Artigos Qualis A1/A2 por aluno/ano", trend: "up", color: "#D4A017" },
-  { label: "Orientadores Ativos", value: "42", sub: "32 doutores · 10 colaboradores", trend: "stable", color: "#123C7A" },
-  { label: "Taxa de Evasão (12 meses)", value: "4,2%", sub: "-1,1 p.p. em relação ao ano anterior", trend: "down-good", color: "#1F8A70" },
-];
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-const URGENCIA_CFG = {
-  alta: { label: "Alta", color: "#dc2626", bg: "#fef2f2" },
-  media: { label: "Média", color: "#D4A017", bg: "#fffbeb" },
-  baixa: { label: "Baixa", color: "#1F8A70", bg: "#f0fdf4" },
-};
-
-const TIPO_CFG: Record<ValidationItem["tipo"], { label: string; color: string; icon: React.ReactNode }> = {
-  relatorio: { label: "Relatório", color: "#123C7A", icon: <FileText size={13} /> },
-  plano: { label: "Plano", color: "#8b5cf6", icon: <Layers size={13} /> },
+const TIPO_CFG: Record<ValidationQueueItem["tipo"], { label: string; color: string; icon: React.ReactNode }> = {
   producao: { label: "Produção", color: "#1F8A70", icon: <Award size={13} /> },
   atividade: { label: "Atividade", color: "#D4A017", icon: <BookOpen size={13} /> },
 };
 
-const EXT_STATUS_CFG = {
+// Chaveado pelos status do backend (ExtensionResponse.status); 'rejeitada' é exibido como "Negada".
+const EXT_STATUS_CFG: Record<string, { label: string; color: string; bg: string }> = {
   pendente: { label: "Pendente", color: "#D4A017", bg: "#fffbeb" },
-  "em-analise": { label: "Em Análise", color: "#123C7A", bg: "#eef3fc" },
+  em_analise: { label: "Em Análise", color: "#123C7A", bg: "#eef3fc" },
   aprovada: { label: "Aprovada", color: "#1F8A70", bg: "#f0fdf4" },
-  negada: { label: "Negada", color: "#dc2626", bg: "#fef2f2" },
+  rejeitada: { label: "Negada", color: "#dc2626", bg: "#fef2f2" },
 };
+
+// Formata data ISO (date "AAAA-MM-DD" ou datetime) em "DD/MM/AAAA", sem deslocar por fuso.
+function formatDataBR(value?: string | null): string {
+  if (!value) return "—";
+  const match = value.slice(0, 10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return `${match[3]}/${match[2]}/${match[1]}`;
+  const parsed = new Date(value);
+  return isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString("pt-BR");
+}
 
 const ALERT_CFG = {
   critico: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: <AlertTriangle size={16} /> },
@@ -175,35 +130,7 @@ const ALERT_CFG = {
   info: { color: "#123C7A", bg: "#eef3fc", border: "#c7d9f5", icon: <Bell size={16} /> },
 };
 
-const ACTIVITY_TIPO_CFG: Record<PendingActivity["tipo"], { color: string; bg: string; label: string }> = {
-  aprovacao: { color: "#123C7A", bg: "#eef3fc", label: "Aprovação" },
-  revisao: { color: "#8b5cf6", bg: "#f5f3ff", label: "Revisão" },
-  comunicado: { color: "#D4A017", bg: "#fffbeb", label: "Comunicado" },
-  reuniao: { color: "#1F8A70", bg: "#f0fdf4", label: "Reunião" },
-};
 
-const PRIORITY_CFG = {
-  urgente: { color: "#dc2626", label: "Urgente" },
-  normal: { color: "#D4A017", label: "Normal" },
-  baixa: { color: "#64748b", label: "Baixa" },
-};
-
-function handleExport(format: ExportFormat, section: string) {
-  const msg = `Exportando ${section} como ${format.toUpperCase()}...`;
-  const el = document.createElement("div");
-  el.textContent = msg;
-  Object.assign(el.style, {
-    position: "fixed", bottom: "24px", right: "24px", zIndex: "9999",
-    background: "#123C7A", color: "#fff", padding: "12px 20px",
-    borderRadius: "12px", fontSize: "13px", fontWeight: "600",
-    boxShadow: "0 8px 24px rgba(0,0,0,0.2)", transition: "opacity 0.3s",
-  });
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; }, 1800);
-  setTimeout(() => { document.body.removeChild(el); }, 2100);
-}
-
-// ─── Sub-components ────────────────────────────────────────────────────────
 
 function KpiCard({ icon, label, value, sub, color, trend }: {
   icon: React.ReactNode; label: string; value: string | number; sub?: string; color: string; trend?: "up" | "down" | "down-good" | "stable";
@@ -237,41 +164,22 @@ function KpiCard({ icon, label, value, sub, color, trend }: {
   );
 }
 
-function ExportBar({ section }: { section: string }) {
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap badge-shrink">
-      {(["pdf", "excel", "csv"] as ExportFormat[]).map((fmt) => (
-        <button
-          key={fmt}
-          onClick={() => handleExport(fmt, section)}
-          title={`Exportar ${fmt.toUpperCase()}`}
-          aria-label={`Exportar ${fmt.toUpperCase()}`}
-          className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg transition-opacity hover:opacity-80 flex-shrink-0"
-          style={{
-            background: fmt === "pdf" ? "var(--tint-danger-bg)" : fmt === "excel" ? "var(--tint-teal-bg)" : "var(--muted)",
-            color: fmt === "pdf" ? "var(--tint-danger-text)" : fmt === "excel" ? "var(--tint-teal-text)" : "var(--muted-foreground)",
-            fontSize: "10px", fontWeight: 700, border: `1px solid ${fmt === "pdf" ? "var(--tint-danger-border)" : fmt === "excel" ? "var(--tint-teal-border)" : "var(--border)"}`,
-          }}
-        >
-          {fmt === "pdf" ? <FileText size={11} /> : fmt === "excel" ? <FileSpreadsheet size={11} /> : <Download size={11} />}
-          <span className="hidden sm:inline">{fmt.toUpperCase()}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
 
-function SectionHeader({ title, sub, section, onReport }: {
-  title: string; sub?: string; section: string; onReport?: () => void;
+function SectionHeader({ title, sub, section, onReport, exportMenu }: {
+  title: string; sub?: string; section: string; onReport?: () => void; exportMenu?: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-2 mb-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)", wordBreak: "break-word" }}>{title}</h3>
-        {sub && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{sub}</p>}
+      <div className="min-w-0 flex items-center gap-2">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "14px", fontWeight: 700, color: "var(--foreground)", wordBreak: "break-word" }}>{title}</h3>
+          </div>
+          {sub && <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{sub}</p>}
+        </div>
       </div>
       <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
-        <ExportBar section={section} />
+        {exportMenu}
         {onReport && (
           <button
             onClick={onReport}
@@ -286,10 +194,32 @@ function SectionHeader({ title, sub, section, onReport }: {
   );
 }
 
-// ─── Report Modal ──────────────────────────────────────────────────────────
 
-function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void }) {
+function ChartState({ loading, error, empty }: { loading: boolean; error: string | null; empty: boolean }) {
+  const message = loading ? null : error ?? (empty ? "Nenhum dado disponível." : null);
+  return (
+    <div className="flex items-center justify-center text-center px-3" style={{ height: 190 }}>
+      {loading
+        ? <Loader2 size={20} className="animate-spin" style={{ color: "var(--muted-foreground)" }} />
+        : <p style={{ fontSize: "12px", color: error ? "var(--tint-danger-text)" : "var(--muted-foreground)" }}>{message}</p>}
+    </div>
+  );
+}
+
+interface ReportModalData {
+  advisorData: StudentsByAdvisorResponse | null;
+  completionData: CompletionTimeResponse | null;
+  productionsData: ProductionsReportResponse | null;
+}
+
+function ReportModal({ type, onClose, statusData, advisorData, completionData, productionsData }: { type: ReportType; onClose: () => void; statusData: StatusDataProp[] } & ReportModalData) {
+  const contentRef = useRef<HTMLDivElement>(null);
+  useEscapeClose(true, onClose);
   if (!type) return null;
+
+  const advisorList = advisorData ? advisorRows(advisorData) : [];
+  const completionYears = completionData ? completionByYear(completionData) : [];
+  const productionByLevel = productionsData ? productionTotals(productionsData) : [];
 
   const configs: Record<Exclude<ReportType, null>, { title: string; sub: string; content: React.ReactNode }> = {
     status: {
@@ -299,14 +229,16 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
         <div className="space-y-4">
           <div className="flex justify-center">
             <PieChart width={260} height={220}>
-              <Pie data={STATUS_DATA} cx={125} cy={105} innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value" isAnimationActive={false}>
-                {STATUS_DATA.map((d, i) => <Cell key={`modal-status-${i}`} fill={d.color} />)}
+              <Pie data={statusData} cx={125} cy={105} innerRadius={55} outerRadius={90} paddingAngle={3} dataKey="value" isAnimationActive={false}>
+                {statusData.map((d, i) => <Cell key={`modal-status-${i}`} fill={d.color} />)}
               </Pie>
               <Tooltip formatter={(v: number) => [`${v} alunos`, ""]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
             </PieChart>
           </div>
           <div className="space-y-2">
-            {STATUS_DATA.map((s) => (
+            {statusData.map((s) => {
+              const totalAlunos = Math.max(1, statusData.reduce((acc, d) => acc + d.value, 0));
+              return (
               <div key={s.name} className="flex items-center justify-between p-2.5 rounded-xl" style={{ background: `${s.color}0d` }}>
                 <div className="flex items-center gap-2">
                   <div className="rounded-full" style={{ width: 10, height: 10, background: s.color }} />
@@ -314,44 +246,46 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="rounded-full overflow-hidden" style={{ width: 80, height: 6, background: "var(--muted)" }}>
-                    <div className="h-full rounded-full" style={{ width: `${(s.value / 248) * 100}%`, background: s.color }} />
+                    <div className="h-full rounded-full" style={{ width: `${(s.value / totalAlunos) * 100}%`, background: s.color }} />
                   </div>
                   <span style={{ fontSize: "13px", fontWeight: 700, color: s.color, minWidth: 60, textAlign: "right" }}>
-                    {s.value} ({((s.value / 248) * 100).toFixed(1)}%)
+                    {s.value} ({((s.value / totalAlunos) * 100).toFixed(1)}%)
                   </span>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)", textAlign: "center", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
-            Total: 248 alunos matriculados · Programa PPGCC · 2026
+            Total: {statusData.reduce((acc, d) => acc + d.value, 0)} alunos matriculados · Programa acadêmico
           </p>
         </div>
       ),
     },
     orientador: {
       title: "Relatório — Desempenho dos Orientadores",
-      sub: "Métricas de orientação, produção e situação dos orientandos",
-      content: (
+      sub: "Orientandos, regulares e em risco por orientador",
+      content: advisorList.length === 0 ? (
+        <p style={{ fontSize: "13px", color: "var(--muted-foreground)", textAlign: "center", padding: "24px 0" }}>Nenhum orientador com dados disponíveis.</p>
+      ) : (
         <div className="space-y-4">
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={ORIENTADOR_DATA} layout="vertical" margin={{ left: 10, right: 20 }}>
+          <ResponsiveContainer width="100%" height={Math.max(180, advisorList.length * 28)}>
+            <BarChart data={advisorList} layout="vertical" margin={{ left: 10, right: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" horizontal={false} />
-              <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} width={60} />
+              <XAxis type="number" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} allowDecimals={false} />
+              <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} width={70} />
               <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
               <Bar dataKey="orientandos" name="Orientandos" fill="#123C7A" radius={[0, 4, 4, 0]} barSize={6} isAnimationActive={false} />
-              <Bar dataKey="producoes" name="Produções" fill="#1F8A70" radius={[0, 4, 4, 0]} barSize={6} isAnimationActive={false} />
+              <Bar dataKey="regulares" name="Regulares" fill="#1F8A70" radius={[0, 4, 4, 0]} barSize={6} isAnimationActive={false} />
+              <Bar dataKey="risco" name="Em Risco" fill="#dc2626" radius={[0, 4, 4, 0]} barSize={6} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
           <div className="space-y-2 max-h-48 overflow-y-auto">
-            {ORIENTADOR_DATA.map((o) => (
-              <div key={o.name} className="flex items-center justify-between p-2.5 rounded-xl" style={{ background: "var(--muted)" }}>
-                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>{o.name}</span>
+            {advisorList.map((o) => (
+              <div key={o.nomeCompleto} className="flex items-center justify-between p-2.5 rounded-xl" style={{ background: "var(--muted)" }}>
+                <span style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>{o.nomeCompleto}</span>
                 <div className="flex items-center gap-3" style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
                   <span><span style={{ fontWeight: 700, color: "#123C7A" }}>{o.orientandos}</span> orient.</span>
-                  <span><span style={{ fontWeight: 700, color: "#1F8A70" }}>{o.producoes}</span> prod.</span>
-                  <span><span style={{ fontWeight: 700, color: "#D4A017" }}>{o.defesas}</span> defesas</span>
+                  <span><span style={{ fontWeight: 700, color: "#1F8A70" }}>{o.regulares}</span> reg.</span>
                   {o.risco > 0 && <span style={{ color: "#dc2626", fontWeight: 700 }}>{o.risco} risco</span>}
                 </div>
               </div>
@@ -361,43 +295,32 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
       ),
     },
     producao: {
-      title: "Relatório — Produção Científica",
-      sub: "Artigos, livros e conferências por mês em 2026",
-      content: (
+      title: "Relatório — Produção por Nível",
+      sub: "Produções aprovadas por estrato de relevância (Qualis)",
+      content: productionsData === null ? (
+        <p style={{ fontSize: "13px", color: "var(--muted-foreground)", textAlign: "center", padding: "24px 0" }}>Dados de produção indisponíveis.</p>
+      ) : (
         <div className="space-y-4">
           <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={PRODUCAO_DATA}>
-              <defs>
-                <linearGradient id="gA1" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#123C7A" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#123C7A" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gA2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#1F8A70" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#1F8A70" stopOpacity={0} />
-                </linearGradient>
-              </defs>
+            <BarChart data={productionByLevel}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="mes" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-              <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+              <XAxis dataKey="nivel" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+              <YAxis tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} allowDecimals={false} />
               <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              <Area type="monotone" dataKey="A1" name="Qualis A1" stroke="#123C7A" fill="url(#gA1)" strokeWidth={2} isAnimationActive={false} />
-              <Area type="monotone" dataKey="A2" name="Qualis A2" stroke="#1F8A70" fill="url(#gA2)" strokeWidth={2} isAnimationActive={false} />
-              <Area type="monotone" dataKey="conf" name="Conferências" stroke="#D4A017" fill="none" strokeWidth={1.5} strokeDasharray="4 4" isAnimationActive={false} />
-            </AreaChart>
+              <Bar dataKey="total" name="Produções" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+                {productionByLevel.map((d) => <Cell key={d.nivel} fill={LEVEL_COLORS[d.nivel]} />)}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {[
-              { label: "Total A1", value: 74, color: "#123C7A" },
-              { label: "Total A2", value: 88, color: "#1F8A70" },
-              { label: "Conferências", value: 84, color: "#D4A017" },
-              { label: "B1", value: 124, color: "#8b5cf6" },
-              { label: "Livros", value: 12, color: "#f97316" },
-              { label: "Média/Aluno", value: "1,8", color: "#123C7A" },
-            ].map((s) => (
-              <div key={s.label} className="rounded-xl p-3 text-center" style={{ background: `${s.color}0d`, border: `1px solid ${s.color}22` }}>
-                <p style={{ fontSize: "20px", fontWeight: 800, color: s.color }}>{s.value}</p>
-                <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>{s.label}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <div className="rounded-xl p-3 text-center" style={{ background: "#123C7A0d", border: "1px solid #123C7A22" }}>
+              <p style={{ fontSize: "20px", fontWeight: 800, color: "#123C7A" }}>{productionsData.total_producoes_aprovadas}</p>
+              <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>Total aprovadas</p>
+            </div>
+            {productionByLevel.map((s) => (
+              <div key={s.nivel} className="rounded-xl p-3 text-center" style={{ background: `${LEVEL_COLORS[s.nivel]}0d`, border: `1px solid ${LEVEL_COLORS[s.nivel]}22` }}>
+                <p style={{ fontSize: "20px", fontWeight: 800, color: LEVEL_COLORS[s.nivel] }}>{s.total}</p>
+                <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px" }}>{s.nivel}</p>
               </div>
             ))}
           </div>
@@ -406,33 +329,33 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
     },
     integralizacao: {
       title: "Relatório — Integralização por Ano",
-      sub: "Tempo médio de conclusão comparado à meta do programa",
-      content: (
+      sub: `Tempo médio de conclusão por ano vs. meta de ${META_INTEGRALIZACAO_MESES} meses`,
+      content: completionYears.length === 0 ? (
+        <p style={{ fontSize: "13px", color: "var(--muted-foreground)", textAlign: "center", padding: "24px 0" }}>Nenhum aluno concluído com datas suficientes para o cálculo.</p>
+      ) : (
         <div className="space-y-4">
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={INTEGRALIZACAO_DATA}>
+            <BarChart data={completionYears}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis dataKey="ano" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-              <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} domain={[20, 60]} unit=" m" />
+              <YAxis tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} domain={[0, "auto"]} unit=" m" />
               <Tooltip formatter={(v: number) => [`${v} meses`, ""]} contentStyle={{ borderRadius: 8, fontSize: 12 }} />
-              <ReferenceLine y={24} stroke="#123C7A" strokeDasharray="4 4" label={{ value: "Meta M", fill: "#123C7A", fontSize: 10 }} />
-              <ReferenceLine y={48} stroke="#8b5cf6" strokeDasharray="4 4" label={{ value: "Meta D", fill: "#8b5cf6", fontSize: 10 }} />
-              <Bar dataKey="mestrado" name="Mestrado (meses)" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-              <Bar dataKey="doutorado" name="Doutorado (meses)" fill="#8b5cf6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+              <ReferenceLine y={META_INTEGRALIZACAO_MESES} stroke="#123C7A" strokeDasharray="4 4" label={{ value: "Meta", fill: "#123C7A", fontSize: 10 }} />
+              <Bar dataKey="meses" name="Média (meses)" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
           <div className="space-y-2">
-            {INTEGRALIZACAO_DATA.map((d) => (
+            {completionYears.map((d) => (
               <div key={d.ano} className="flex items-center justify-between p-2.5 rounded-xl" style={{ background: "var(--muted)" }}>
                 <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{d.ano}</span>
                 <div className="flex items-center gap-4">
                   <span style={{ fontSize: "12px" }}>
-                    <span style={{ color: "var(--muted-foreground)" }}>Mestrado: </span>
-                    <span style={{ fontWeight: 700, color: d.mestrado > d.metaMestrado ? "#dc2626" : "#1F8A70" }}>{d.mestrado}m</span>
+                    <span style={{ color: "var(--muted-foreground)" }}>Média: </span>
+                    <span style={{ fontWeight: 700, color: d.meses > META_INTEGRALIZACAO_MESES ? "#dc2626" : "#1F8A70" }}>{d.meses}m</span>
                   </span>
                   <span style={{ fontSize: "12px" }}>
-                    <span style={{ color: "var(--muted-foreground)" }}>Doutorado: </span>
-                    <span style={{ fontWeight: 700, color: d.doutorado > d.metaDoutorado ? "#dc2626" : "#1F8A70" }}>{d.doutorado}m</span>
+                    <span style={{ color: "var(--muted-foreground)" }}>Concluídos: </span>
+                    <span style={{ fontWeight: 700, color: "var(--foreground)" }}>{d.concluidos}</span>
                   </span>
                 </div>
               </div>
@@ -444,6 +367,18 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
   };
 
   const cfg = configs[type];
+
+  // Helper to determine the export menu props based on type
+  const getModalExportMenuProps = () => {
+    switch (type) {
+      case "status": return { title: "Distribuição de Status", fileName: "distribuicao-status", rows: statusData, columns: [{ key: "name", label: "Situação" }, { key: "value", label: "Alunos" }] };
+      case "orientador": return { title: "Desempenho dos Orientadores", fileName: "desempenho-orientadores", rows: advisorList, columns: [{ key: "nomeCompleto", label: "Orientador" }, { key: "orientandos", label: "Orientandos" }, { key: "regulares", label: "Regulares" }, { key: "risco", label: "Em risco" }] };
+      case "producao": return { title: "Produção por Nível", fileName: "producao-por-nivel", rows: productionByLevel, columns: [{ key: "nivel", label: "Nível" }, { key: "total", label: "Produções" }] };
+      case "integralizacao": return { title: "Integralização por Ano", fileName: "integralizacao-por-ano", rows: completionYears, columns: [{ key: "ano", label: "Ano" }, { key: "meses", label: "Média em meses" }, { key: "concluidos", label: "Concluídos" }] };
+    }
+  };
+
+  const exportProps = type ? getModalExportMenuProps() : null;
 
   return (
     <div
@@ -466,35 +401,56 @@ function ReportModal({ type, onClose }: { type: ReportType; onClose: () => void 
           </button>
         </div>
         <div className="p-5">
-          {cfg.content}
-          <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-            <span style={{ fontSize: "12px", color: "var(--muted-foreground)", marginRight: "auto" }}>Exportar relatório:</span>
-            <ExportBar section={cfg.title} />
+          <div ref={contentRef}>
+            {cfg.content}
           </div>
+          {exportProps && (
+            <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <span style={{ fontSize: "12px", color: "var(--muted-foreground)", marginRight: "auto" }}>Exportar dados do relatório:</span>
+              <ChartExportMenu chartRef={contentRef} data={exportProps.rows as any} columns={exportProps.columns as any} title={exportProps.title} fileName={exportProps.fileName} />
+            </div>
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Chart Cards ───────────────────────────────────────────────────────────
 
-function StatusDistribChart({ onReport }: { onReport: () => void }) {
-  const total = STATUS_DATA.reduce((s, d) => s + d.value, 0);
+function StatusDistribChart({ onReport, statusData }: { onReport: () => void; statusData: StatusDataProp[] }) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const total = Math.max(1, statusData.reduce((s, d) => s + d.value, 0));
   return (
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Distribuição de Status" sub="Situação acadêmica — 248 alunos" section="Status" onReport={onReport} />
-      <div className="flex items-center gap-4">
+      <SectionHeader
+        title="Distribuição de Status"
+        sub={`Situação acadêmica — ${total} alunos`}
+        section="Status"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Distribuição de Status"
+            fileName="distribuicao-status"
+            chartRef={chartRef}
+            data={statusData}
+            columns={[
+              { key: "name", label: "Situação" },
+              { key: "value", label: "Alunos" },
+            ]}
+          />
+        }
+      />
+      <div ref={chartRef} className="flex items-center gap-4" style={{ background: "var(--card)", padding: "4px" }}>
         <div style={{ flexShrink: 0 }}>
           <PieChart width={160} height={160}>
-            <Pie data={STATUS_DATA} cx={75} cy={75} innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" isAnimationActive={false}>
-              {STATUS_DATA.map((d, i) => <Cell key={`status-cell-${i}`} fill={d.color} />)}
+            <Pie data={statusData} cx={75} cy={75} innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" isAnimationActive={false}>
+              {statusData.map((d, i) => <Cell key={`status-cell-${i}`} fill={d.color} />)}
             </Pie>
             <Tooltip formatter={(v: number) => [`${v} alunos`, ""]} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
           </PieChart>
         </div>
         <div className="flex-1 space-y-2">
-          {STATUS_DATA.map((s) => (
+          {statusData.map((s) => (
             <div key={s.name} className="flex items-center gap-2">
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
               <span style={{ fontSize: "12px", color: "var(--foreground)", flex: 1 }}>{s.name}</span>
@@ -510,114 +466,183 @@ function StatusDistribChart({ onReport }: { onReport: () => void }) {
   );
 }
 
-function OrientadorPerfChart({ onReport }: { onReport: () => void }) {
+function OrientadorPerfChart({ onReport, data, loading, error }: {
+  onReport: () => void; data: StudentsByAdvisorResponse | null; loading: boolean; error: string | null;
+}) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const rows = data ? advisorRows(data) : [];
+  const ready = !loading && !error && rows.length > 0;
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Desempenho dos Orientadores" sub="Orientandos, produções e defesas" section="Orientadores" onReport={onReport} />
+      <SectionHeader
+        title="Desempenho dos Orientadores"
+        sub="Orientandos, regulares e em risco"
+        section="Orientadores"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Desempenho dos Orientadores"
+            fileName="desempenho-orientadores"
+            chartRef={chartRef}
+            data={rows}
+            columns={[
+              { key: "nomeCompleto", label: "Orientador" },
+              { key: "orientandos", label: "Orientandos" },
+              { key: "regulares", label: "Regulares" },
+              { key: "risco", label: "Em risco" },
+            ]}
+          />
+        }
+      />
+      {ready ? (
       <div className="overflow-x-auto -mx-1">
-      <div style={{ minWidth: 320 }}>
+      <div ref={chartRef} style={{ minWidth: 320 }}>
       <ResponsiveContainer width="100%" height={200}>
-        <BarChart data={ORIENTADOR_DATA} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
+        <BarChart data={rows} margin={{ top: 4, right: 8, bottom: 0, left: 0 }}>
           <CartesianGrid key="op-grid" strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis key="op-x" dataKey="name" tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} interval={0} />
-          <YAxis key="op-y" width={28} tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} />
+          <YAxis key="op-y" width={28} tick={{ fontSize: 9, fill: "var(--muted-foreground)" }} allowDecimals={false} />
           <Tooltip key="op-tip" contentStyle={{ borderRadius: 8, fontSize: 11 }} />
           <Legend key="op-leg" iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 10 }} />
           <Bar key="op-b1" dataKey="orientandos" name="Orientandos" fill="#123C7A" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-          <Bar key="op-b2" dataKey="producoes" name="Produções" fill="#1F8A70" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-          <Bar key="op-b3" dataKey="defesas" name="Defesas" fill="#D4A017" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-          <Bar key="op-b4" dataKey="risco" name="Em Risco" fill="#dc2626" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          <Bar key="op-b2" dataKey="regulares" name="Regulares" fill="#1F8A70" radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          <Bar key="op-b3" dataKey="risco" name="Em Risco" fill="#dc2626" radius={[3, 3, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
       </div>
       </div>
+      ) : <ChartState loading={loading} error={error} empty={rows.length === 0} />}
     </div>
   );
 }
 
-function ProducaoChart({ onReport }: { onReport: () => void }) {
+function ProducaoChart({ onReport, data, loading, error }: {
+  onReport: () => void; data: ProductionsReportResponse | null; loading: boolean; error: string | null;
+}) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const levels = data ? productionTotals(data) : [];
+  const hasProductions = levels.some((l) => l.total > 0);
+  const ready = !loading && !error && hasProductions;
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Produção Científica" sub="Qualis A1, A2 e conferências — 2026" section="Produção Científica" onReport={onReport} />
+      <SectionHeader
+        title="Produção por Nível"
+        sub="Produções aprovadas por estrato Qualis"
+        section="Produção por Nível"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Produção por Nível"
+            fileName="producao-por-nivel"
+            chartRef={chartRef}
+            data={levels}
+            columns={[
+              { key: "nivel", label: "Nível Qualis" },
+              { key: "total", label: "Produções" },
+            ]}
+          />
+        }
+      />
+      {ready ? (
       <div className="overflow-x-auto -mx-1">
-      <div style={{ minWidth: 300 }}>
+      <div ref={chartRef} style={{ minWidth: 300 }}>
       <ResponsiveContainer width="100%" height={190}>
-        <AreaChart data={PRODUCAO_DATA} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
-          <defs key="pr-defs">
-            <linearGradient key="pr-g1" id="pGA1" x1="0" y1="0" x2="0" y2="1">
-              <stop key="s1a" offset="5%" stopColor="#123C7A" stopOpacity={0.25} />
-              <stop key="s1b" offset="95%" stopColor="#123C7A" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient key="pr-g2" id="pGA2" x1="0" y1="0" x2="0" y2="1">
-              <stop key="s2a" offset="5%" stopColor="#1F8A70" stopOpacity={0.25} />
-              <stop key="s2b" offset="95%" stopColor="#1F8A70" stopOpacity={0} />
-            </linearGradient>
-          </defs>
+        <BarChart data={levels} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid key="pr-grid" strokeDasharray="3 3" stroke="var(--border)" />
-          <XAxis key="pr-x" dataKey="mes" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
-          <YAxis key="pr-y" width={28} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+          <XAxis key="pr-x" dataKey="nivel" tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} />
+          <YAxis key="pr-y" width={28} tick={{ fontSize: 10, fill: "var(--muted-foreground)" }} allowDecimals={false} />
           <Tooltip key="pr-tip" contentStyle={{ borderRadius: 8, fontSize: 11 }} />
-          <Legend key="pr-leg" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-          <Area key="pr-a1" type="monotone" dataKey="A1" name="Qualis A1" stroke="#123C7A" fill="url(#pGA1)" strokeWidth={2} isAnimationActive={false} />
-          <Area key="pr-a2" type="monotone" dataKey="A2" name="Qualis A2" stroke="#1F8A70" fill="url(#pGA2)" strokeWidth={2} isAnimationActive={false} />
-          <Area key="pr-a3" type="monotone" dataKey="conf" name="Conferências" stroke="#D4A017" fill="none" strokeWidth={1.5} strokeDasharray="4 4" isAnimationActive={false} />
-        </AreaChart>
+          <Bar key="pr-bar" dataKey="total" name="Produções" radius={[4, 4, 0, 0]} isAnimationActive={false}>
+            {levels.map((d) => <Cell key={d.nivel} fill={LEVEL_COLORS[d.nivel]} />)}
+          </Bar>
+        </BarChart>
       </ResponsiveContainer>
       </div>
       </div>
+      ) : <ChartState loading={loading} error={error} empty={!hasProductions} />}
     </div>
   );
 }
 
-function IntegralizacaoChart({ onReport }: { onReport: () => void }) {
+function IntegralizacaoChart({ onReport, data, loading, error }: {
+  onReport: () => void; data: CompletionTimeResponse | null; loading: boolean; error: string | null;
+}) {
+  const chartRef = useRef<HTMLDivElement>(null);
+  const years = data ? completionByYear(data) : [];
+  const ready = !loading && !error && years.length > 0;
   return (
     <div className="rounded-2xl p-4 md:p-5 overflow-hidden" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <SectionHeader title="Integralização por Ano" sub="Tempo médio em meses vs. meta do programa" section="Integralização" onReport={onReport} />
+      <SectionHeader
+        title="Integralização por Ano"
+        sub={`Média de meses vs. meta de ${META_INTEGRALIZACAO_MESES}m`}
+        section="Integralização"
+        onReport={onReport}
+        exportMenu={
+          <ChartExportMenu
+            title="Integralização por Ano"
+            fileName="integralizacao-por-ano"
+            chartRef={chartRef}
+            data={years}
+            columns={[
+              { key: "ano", label: "Ano" },
+              { key: "meses", label: "Média em meses" },
+              { key: "concluidos", label: "Concluídos" },
+            ]}
+          />
+        }
+      />
+      {ready ? (
       <div className="overflow-x-auto -mx-1">
-      <div style={{ minWidth: 280 }}>
+      <div ref={chartRef} style={{ minWidth: 280 }}>
       <ResponsiveContainer width="100%" height={190}>
-        <BarChart data={INTEGRALIZACAO_DATA} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
+        <BarChart data={years} margin={{ top: 4, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid key="in-grid" strokeDasharray="3 3" stroke="var(--border)" />
           <XAxis key="in-x" dataKey="ano" tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} />
-          <YAxis key="in-y" width={32} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} domain={[20, 60]} unit="m" />
+          <YAxis key="in-y" width={32} tick={{ fontSize: 11, fill: "var(--muted-foreground)" }} domain={[0, "auto"]} unit="m" />
           <Tooltip key="in-tip" formatter={(v: number) => [`${v} meses`, ""]} contentStyle={{ borderRadius: 8, fontSize: 11 }} />
-          <Legend key="in-leg" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
-          <ReferenceLine key="in-rl1" y={24} stroke="#123C7A" strokeDasharray="4 4" strokeWidth={1.5} />
-          <ReferenceLine key="in-rl2" y={48} stroke="#8b5cf6" strokeDasharray="4 4" strokeWidth={1.5} />
-          <Bar key="in-b1" dataKey="mestrado" name="Mestrado" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
-          <Bar key="in-b2" dataKey="doutorado" name="Doutorado" fill="#8b5cf6" radius={[4, 4, 0, 0]} isAnimationActive={false} />
+          <ReferenceLine key="in-rl1" y={META_INTEGRALIZACAO_MESES} stroke="#123C7A" strokeDasharray="4 4" strokeWidth={1.5} />
+          <Bar key="in-b1" dataKey="meses" name="Média (meses)" fill="#123C7A" radius={[4, 4, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
       </div>
       </div>
+      ) : <ChartState loading={loading} error={error} empty={years.length === 0} />}
     </div>
   );
 }
 
-// ─── Section Components ────────────────────────────────────────────────────
 
-function ValidationQueue() {
-  const [filter, setFilter] = useState<"todos" | ValidationItem["tipo"] | "alta">("todos");
+function ValidationQueue({ items, loading, error }: { items: ValidationQueueItem[]; loading: boolean; error: string | null }) {
+  const [filter, setFilter] = useState<"todos" | ValidationQueueItem["tipo"]>("todos");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const queueRef = useRef<HTMLDivElement>(null);
 
-  const filtered = VALIDATIONS.filter((v) => {
-    if (filter === "todos") return true;
-    if (filter === "alta") return v.urgencia === "alta";
-    return v.tipo === filter;
-  });
+  const filtered = items.filter((v) => filter === "todos" || v.tipo === filter);
 
   return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+    <div ref={queueRef} className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{VALIDATIONS.length} itens aguardando aprovação</p>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{loading ? "Carregando…" : `${items.length} ${items.length === 1 ? "item aguardando" : "itens aguardando"} aprovação`}</p>
         </div>
-        <ExportBar section="Fila de Validação" />
+        <ChartExportMenu 
+          chartRef={queueRef}
+          title="Fila de Validação" 
+          fileName="fila-de-validacao" 
+          data={filtered} 
+          columns={[
+            { key: "aluno", label: "Aluno" },
+            { key: "tipo", label: "Tipo" },
+            { key: "descricao", label: "Descrição" },
+            { key: "orientador", label: "Orientador" },
+            { key: "data", label: "Data", value: (r: any) => formatDataBR(r.data) },
+          ]} 
+        />
       </div>
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {(["todos", "alta", "relatorio", "plano", "producao", "atividade"] as const).map((f) => (
+        {(["todos", "atividade", "producao"] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -629,15 +654,21 @@ function ValidationQueue() {
               border: `1px solid ${filter === f ? "var(--primary)" : "var(--border)"}`,
             }}
           >
-            {f === "todos" ? "Todos" : f === "alta" ? "⚡ Urgente" : TIPO_CFG[f as ValidationItem["tipo"]].label}
+            {f === "todos" ? "Todos" : TIPO_CFG[f].label}
           </button>
         ))}
       </div>
 
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar a fila: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando fila de validação…</p>
+      ) : filtered.length === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhum item aguardando validação.</p>
+      ) : (
       <div className="space-y-2">
         {filtered.map((v) => {
           const tc = TIPO_CFG[v.tipo];
-          const uc = URGENCIA_CFG[v.urgencia];
           const isOpen = expanded === v.id;
           return (
             <div
@@ -654,13 +685,12 @@ function ValidationQueue() {
                   <div className="flex items-center gap-2">
                     <span style={{ fontSize: "12px", fontWeight: 700, color: "var(--foreground)" }}>{v.aluno}</span>
                     <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: `${tc.color}18`, color: tc.color }}>{tc.label}</span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: uc.bg, color: uc.color }}>{uc.label}</span>
                   </div>
                   <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "1px" }}>{v.descricao}</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Prazo</p>
-                  <p style={{ fontSize: "11px", fontWeight: 700, color: v.urgencia === "alta" ? "var(--tint-danger-text)" : "var(--foreground)" }}>{v.prazo}</p>
+                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Enviado</p>
+                  <p style={{ fontSize: "11px", fontWeight: 700, color: "var(--foreground)" }}>{formatDataBR(v.data)}</p>
                 </div>
                 <ChevronRight size={14} style={{ color: "var(--muted-foreground)", transform: isOpen ? "rotate(90deg)" : undefined, transition: "transform 0.2s", flexShrink: 0 }} />
               </button>
@@ -669,7 +699,7 @@ function ValidationQueue() {
                   <div className="rounded-xl p-3 space-y-2" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
                     <div className="grid grid-cols-2 gap-2" style={{ fontSize: "12px" }}>
                       <div><span style={{ color: "var(--muted-foreground)" }}>Orientador: </span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{v.orientador}</span></div>
-                      <div><span style={{ color: "var(--muted-foreground)" }}>Enviado em: </span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{v.data}</span></div>
+                      <div><span style={{ color: "var(--muted-foreground)" }}>Enviado em: </span><span style={{ fontWeight: 600, color: "var(--foreground)" }}>{formatDataBR(v.data)}</span></div>
                     </div>
                     <div className="flex gap-2 mt-3">
                       <button className="flex-1 py-2 rounded-xl" style={{ background: "var(--tint-teal-text)", color: "#fff", fontSize: "12px", fontWeight: 700 }}>
@@ -689,121 +719,82 @@ function ValidationQueue() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }
 
-function ExtensionRequestsSection() {
-  const [filterStatus, setFilterStatus] = useState<ExtensionRequest["status"] | "todos">("todos");
-  const filtered = EXTENSIONS.filter((e) => filterStatus === "todos" || e.status === filterStatus);
+function ExtensionRequestsSection({ extensions, loading, error }: { extensions: Extension[]; loading: boolean; error: string | null }) {
+  const total = extensions.length;
+  const extRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+    <div ref={extRef} className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{EXTENSIONS.filter(e => e.status === "pendente" || e.status === "em-analise").length} pendentes de decisão</p>
+          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{loading ? "Carregando…" : `${total} pendente${total !== 1 ? "s" : ""} de decisão`}</p>
         </div>
-        <ExportBar section="Prorrogações" />
+        <ChartExportMenu 
+          chartRef={extRef}
+          title="Solicitações de Prorrogação" 
+          fileName="prorrogacoes" 
+          data={extensions} 
+          columns={[
+            { key: "aluno", label: "Aluno", value: (r: any) => r.aluno_nome || r.aluno || "—" },
+            { key: "status", label: "Status", value: (r: any) => EXT_STATUS_CFG[r.status]?.label || r.status },
+            { key: "motivo", label: "Motivo", value: (r: any) => r.motivo || r.justificativa || "—" },
+            { key: "prazo_atual", label: "Prazo Atual", value: (r: any) => formatDataBR(r.prazo_atual || r.data_atual) },
+            { key: "nova_data", label: "Novo Prazo", value: (r: any) => formatDataBR(r.nova_data || r.prazo_novo) },
+          ]} 
+        />
       </div>
 
-      <div className="flex items-center gap-2 mb-4">
-        {(["todos", "pendente", "em-analise", "aprovada", "negada"] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilterStatus(s)}
-            className="px-2.5 py-1 rounded-lg transition-all"
-            style={{
-              fontSize: "10px", fontWeight: 600,
-              background: filterStatus === s ? "var(--primary)" : "var(--muted)",
-              color: filterStatus === s ? "var(--primary-foreground)" : "var(--muted-foreground)",
-              border: `1px solid ${filterStatus === s ? "var(--primary)" : "var(--border)"}`,
-            }}
-          >
-            {s === "todos" ? "Todos" : EXT_STATUS_CFG[s].label}
-          </button>
-        ))}
-      </div>
-
-      <div className="space-y-3">
-        {filtered.map((ext) => {
-          const sc = EXT_STATUS_CFG[ext.status];
-          return (
-            <div key={ext.id} className="rounded-xl p-4" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
-              <div className="flex items-start justify-between mb-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{ext.aluno}</span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: ext.nivel === "Doutorado" ? "var(--tint-blue-bg)" : "var(--tint-violet-bg)", color: ext.nivel === "Doutorado" ? "var(--tint-blue-text)" : "var(--tint-violet-text)", border: `1px solid ${ext.nivel === "Doutorado" ? "var(--tint-blue-border)" : "var(--tint-violet-border)"}` }}>
-                      {ext.nivel}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
+      {error ? (
+        <p style={{ fontSize: "12px", color: "var(--tint-danger-text)" }}>Erro ao carregar prorrogações: {error}</p>
+      ) : loading ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Carregando prorrogações…</p>
+      ) : total === 0 ? (
+        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>Nenhuma prorrogação pendente.</p>
+      ) : (
+        <div className="space-y-3">
+          {extensions.map((ext) => {
+            const status = String(ext.status);
+            const sc = EXT_STATUS_CFG[status] ?? { label: status, color: "var(--muted-foreground)", bg: "var(--muted)" };
+            const nome = ext.student_nome || "—";
+                        const podeDecidir = status === "pendente" || status === "em_analise";
+            return (
+              <div key={ext.id} className="rounded-xl p-4" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>{nome}</span>
+                      <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: sc.bg, color: sc.color }}>{sc.label}</span>
+                    </div>
+                    {ext.matricula && (
+                      <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>Matrícula: {ext.matricula}</p>
+                    )}
                   </div>
-                  <p style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>Orient.: {ext.orientador}</p>
+                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Protocolo: {formatDataBR(ext.created_at)}</span>
                 </div>
-                <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Protocolo: {ext.dataProtocolo}</span>
-              </div>
-              <p style={{ fontSize: "12px", color: "var(--foreground)", marginBottom: "8px" }}><span style={{ color: "var(--muted-foreground)" }}>Motivo: </span>{ext.motivo}</p>
-              <div className="flex items-center gap-4" style={{ fontSize: "11px" }}>
-                <span><span style={{ color: "var(--muted-foreground)" }}>Prazo atual: </span><span style={{ fontWeight: 700, color: "var(--tint-danger-text)" }}>{ext.prazoPrevisto}</span></span>
-                <ChevronRight size={12} style={{ color: "var(--muted-foreground)" }} />
-                <span><span style={{ color: "var(--muted-foreground)" }}>Novo prazo: </span><span style={{ fontWeight: 700, color: "var(--tint-teal-text)" }}>{ext.novoPrazo}</span></span>
-              </div>
-              {(ext.status === "pendente" || ext.status === "em-analise") && (
-                <div className="flex gap-2 mt-3">
-                  <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-teal-text)", color: "#fff", fontSize: "11px", fontWeight: 700 }}>Aprovar</button>
-                  <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--tint-danger-border)" }}>Negar</button>
-                  <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--border)" }}>Solicitar Docs</button>
+                <p style={{ fontSize: "12px", color: "var(--foreground)", marginBottom: "8px" }}><span style={{ color: "var(--muted-foreground)" }}>Motivo: </span>{ext.motivo || "—"}</p>
+                <div className="flex items-center gap-4" style={{ fontSize: "11px" }}>
+                  <span><span style={{ color: "var(--muted-foreground)" }}>Prazo atual: </span><span style={{ fontWeight: 700, color: "var(--tint-danger-text)" }}>{formatDataBR(ext.data_atual)}</span></span>
+                  <ChevronRight size={12} style={{ color: "var(--muted-foreground)" }} />
+                  <span><span style={{ color: "var(--muted-foreground)" }}>Novo prazo: </span><span style={{ fontWeight: 700, color: "var(--tint-teal-text)" }}>{formatDataBR(ext.nova_data)}</span></span>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-function PendingActivitiesSection() {
-  return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Atividades Pendentes</h3>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{PENDING_ACTIVITIES.filter(a => a.prioridade === "urgente").length} urgentes · {PENDING_ACTIVITIES.length} total</p>
+                {podeDecidir && (
+                  <div className="flex gap-2 mt-3">
+                    <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-teal-text)", color: "#fff", fontSize: "11px", fontWeight: 700 }}>Aprovar</button>
+                    <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--tint-danger-border)" }}>Negar</button>
+                    <button className="px-4 py-1.5 rounded-lg" style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "11px", fontWeight: 700, border: "1px solid var(--border)" }}>Solicitar Docs</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
-        <ExportBar section="Atividades Pendentes" />
-      </div>
-      <div className="space-y-2">
-        {PENDING_ACTIVITIES.sort((a, b) => {
-          const order = { urgente: 0, normal: 1, baixa: 2 };
-          return order[a.prioridade] - order[b.prioridade];
-        }).map((act) => {
-          const tc = ACTIVITY_TIPO_CFG[act.tipo];
-          const pc = PRIORITY_CFG[act.prioridade];
-          return (
-            <div key={act.id} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: act.prioridade === "urgente" ? "var(--tint-danger-bg)" : "var(--muted)", border: `1px solid ${act.prioridade === "urgente" ? "var(--tint-danger-border)" : "var(--border)"}` }}>
-              <div className="rounded-lg p-1.5" style={{ background: tc.bg, color: tc.color, flexShrink: 0 }}>
-                <RefreshCw size={12} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p style={{ fontSize: "12px", fontWeight: 600, color: act.prioridade === "urgente" ? "var(--tint-danger-text)" : "var(--foreground)" }}>{act.descricao}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="px-1.5 py-0.5 rounded" style={{ fontSize: "10px", fontWeight: 600, background: tc.bg, color: tc.color }}>{tc.label}</span>
-                  <span style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{act.responsavel}</span>
-                </div>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p style={{ fontSize: "10px", fontWeight: 700, color: pc.color }}>{pc.label}</p>
-                <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>Até {act.prazo}</p>
-              </div>
-              <button className="px-3 py-1.5 rounded-lg flex-shrink-0" style={{ background: "var(--primary)", color: "var(--primary-foreground)", fontSize: "11px", fontWeight: 700 }}>
-                Agir
-              </button>
-            </div>
-          );
-        })}
-      </div>
+      )}
     </div>
   );
 }
@@ -816,13 +807,27 @@ function AlertsCenter() {
     <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Central de Alertas</h3>
+          <div className="flex items-center gap-2">
+            <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Central de Alertas</h3>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold" style={{ background: "var(--tint-orange-bg)", color: "var(--tint-orange-text)", border: "1px solid var(--tint-orange-border)" }}>Amostra</span>
+          </div>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>
             <span style={{ color: "var(--tint-danger-text)", fontWeight: 700 }}>{ALERTS.filter(a => a.nivel === "critico").length} críticos</span>
             {" · "}{ALERTS.filter(a => a.nivel === "atencao").length} atenção · {ALERTS.filter(a => a.nivel === "info").length} informativos
           </p>
         </div>
-        <ExportBar section="Alertas" />
+        <TableExportMenu 
+          title="Central de Alertas" 
+          fileName="central-de-alertas" 
+          rows={ALERTS} 
+          columns={[
+            { key: "titulo", label: "Alerta" },
+            { key: "nivel", label: "Nível" },
+            { key: "descricao", label: "Descrição" },
+            { key: "data", label: "Data" },
+            { key: "afetados", label: "Afetados" },
+          ]} 
+        />
       </div>
       <div className="space-y-2">
         {visible.map((alert) => {
@@ -868,72 +873,77 @@ function AlertsCenter() {
   );
 }
 
-function ProgramStatistics() {
-  return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Estatísticas do Programa</h3>
-          <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>PPGCC · Avaliação 2026 · Nota CAPES 6</p>
-        </div>
-        <ExportBar section="Estatísticas do Programa" />
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {PROGRAM_STATS.map((s) => (
-          <div key={s.label} className="rounded-xl p-4" style={{ background: `${s.color}0a`, border: `1px solid ${s.color}22` }}>
-            <div className="flex items-center justify-between mb-1">
-              <p style={{ fontSize: "24px", fontWeight: 800, color: s.color }}>{s.value}</p>
-              {s.trend === "up" && <TrendingUp size={16} style={{ color: "#1F8A70" }} />}
-              {s.trend === "down-good" && <TrendingDown size={16} style={{ color: "#1F8A70" }} />}
-              {s.trend === "stable" && <div style={{ width: 16, height: 2, background: "#64748b", borderRadius: 1 }} />}
-            </div>
-            <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--foreground)" }}>{s.label}</p>
-            <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "2px", lineHeight: 1.4 }}>{s.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 rounded-xl p-4" style={{ background: "linear-gradient(135deg, #123C7A 0%, #1F5FAA 100%)" }}>
-        <div className="flex items-center justify-between">
-          <div>
-            <p style={{ fontSize: "13px", fontWeight: 800, color: "#fff" }}>Avaliação CAPES 2025–2028</p>
-            <p style={{ fontSize: "11px", color: "rgba(255,255,255,0.75)", marginTop: "2px" }}>Próxima avaliação — Envio de dados: 30/07/2026</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-center">
-              <p style={{ fontSize: "28px", fontWeight: 900, color: "#fff", lineHeight: 1 }}>6</p>
-              <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.7)" }}>Nota atual</p>
-            </div>
-            <ChevronRight size={18} style={{ color: "rgba(255,255,255,0.6)" }} />
-            <div className="text-center">
-              <p style={{ fontSize: "28px", fontWeight: 900, color: "#D4A017", lineHeight: 1 }}>7</p>
-              <p style={{ fontSize: "10px", color: "rgba(255,255,255,0.7)" }}>Meta 2028</p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-3">
-          <div className="flex justify-between mb-1" style={{ fontSize: "10px", color: "rgba(255,255,255,0.7)" }}>
-            <span>Progresso em direção à nota 7</span><span>68%</span>
-          </div>
-          <div className="rounded-full overflow-hidden" style={{ height: 6, background: "rgba(255,255,255,0.2)" }}>
-            <div className="h-full rounded-full" style={{ width: "68%", background: "#D4A017" }} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Export ───────────────────────────────────────────────────────────
-
 export function CoordDashboard() {
+  const { token } = useAuth();
+  const { data: dashData, loading, error } = useCoordDashboard();
+  const { data: pendingExtensions, loading: extLoading, error: extError } = usePendingExtensions();
+  const extensions = pendingExtensions ?? [];
+  const { data: validationItems, loading: valLoading, error: valError } = useValidationQueue();
+  const validationQueue = validationItems ?? [];
   const [reportModal, setReportModal] = useState<ReportType>(null);
 
-  const totalAlunos = STATUS_DATA.reduce((s, d) => s + d.value, 0);
-  const ativos = totalAlunos - 12;
-  const emRisco = STATUS_DATA.find((d) => d.name === "Em Risco")!.value + STATUS_DATA.find((d) => d.name === "Crítico")!.value;
-  const emProrrogacao = STATUS_DATA.find((d) => d.name === "Prorrogação")!.value;
-  const concluidos = 47;
+  const [advisor, setAdvisor] = useState<{ data: StudentsByAdvisorResponse | null; error: string | null }>({ data: null, error: null });
+  const [completion, setCompletion] = useState<{ data: CompletionTimeResponse | null; error: string | null }>({ data: null, error: null });
+  const [productions, setProductions] = useState<{ data: ProductionsReportResponse | null; error: string | null }>({ data: null, error: null });
+  const [reportsLoading, setReportsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) {
+      setReportsLoading(false);
+      return;
+    }
+    let active = true;
+    setReportsLoading(true);
+    Promise.allSettled([
+      getStudentsByAdvisor(token),
+      getCompletionTime(token),
+      getProductionsReport(token),
+    ]).then(([a, c, p]) => {
+      if (!active) return;
+      setAdvisor(a.status === "fulfilled" ? { data: a.value, error: null } : { data: null, error: "Não foi possível carregar os orientadores." });
+      setCompletion(c.status === "fulfilled" ? { data: c.value, error: null } : { data: null, error: "Não foi possível carregar a integralização." });
+      setProductions(p.status === "fulfilled" ? { data: p.value, error: null } : { data: null, error: "Não foi possível carregar as produções." });
+      setReportsLoading(false);
+    });
+    return () => { active = false; };
+  }, [token]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center" style={{ minHeight: 400 }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full border-4 border-t-transparent" style={{ width: 40, height: 40, borderColor: "var(--border)", borderTopColor: "transparent" }} />
+          <p style={{ fontSize: "14px", color: "var(--muted-foreground)", marginTop: 16 }}>Carregando dashboard da coordenação...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-2xl p-6 text-center" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+        <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--tint-danger-text)" }}>Erro ao carregar dashboard</p>
+        <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", opacity: 0.75, marginTop: 4 }}>{error}</p>
+      </div>
+    );
+  }
+
+  let statusData = INITIAL_STATUS_DATA;
+  if (dashData?.alunos_por_status) {
+    statusData = [
+      { name: "Regular", value: dashData.alunos_por_status.regular, color: "#1F8A70" },
+      { name: "Qualificado", value: dashData.alunos_por_status.qualificado, color: "#123C7A" },
+      { name: "Em Risco", value: dashData.alunos_por_status.em_risco, color: "#D4A017" },
+      { name: "Prorrogação", value: dashData.alunos_por_status.em_prorrogacao, color: "#f97316" },
+      { name: "Fase de Defesa", value: dashData.alunos_por_status.em_fase_de_defesa, color: "#8b5cf6" },
+    ].filter(s => s.value > 0);
+  }
+
+  const ativos = dashData?.total_alunos_ativos ?? statusData.reduce((s, d) => s + d.value, 0);
+  const totalAlunos = dashData?.total_alunos ?? ativos;
+  const emRisco = dashData?.alunos_por_status?.em_risco ?? 0;
+  const emProrrogacao = dashData?.alunos_por_status?.em_prorrogacao ?? 0;
+  const concluidos = dashData?.total_concluidos ?? 0;
 
   return (
     <div className="space-y-5">
@@ -943,7 +953,7 @@ export function CoordDashboard() {
           <div className="min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <GraduationCap size={18} style={{ color: "rgba(255,255,255,0.85)" }} />
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>PPGCC · Coordenação</span>
+              <span style={{ fontSize: "11px", fontWeight: 600, color: "rgba(255,255,255,0.75)" }}>SAGA · Coordenação</span>
             </div>
             <h2 style={{ fontSize: "clamp(16px,4vw,22px)", fontWeight: 800, color: "#fff", lineHeight: 1.2 }}>Painel da Coordenação</h2>
             <p style={{ fontSize: "12px", color: "rgba(255,255,255,0.75)", marginTop: "4px" }}>
@@ -952,9 +962,8 @@ export function CoordDashboard() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
             {[
-              { v: VALIDATIONS.length, l: "Na fila", color: "#D4A017" },
-              { v: EXTENSIONS.filter(e => e.status !== "aprovada" && e.status !== "negada").length, l: "Prorrogações", color: "#f97316" },
-              { v: ALERTS.filter(a => a.nivel === "critico").length, l: "Críticos", color: "#dc2626" },
+              { v: dashData?.atividades_aguardando_validacao ?? validationQueue.length, l: "Na fila", color: "#D4A017" },
+              { v: dashData?.prorrogacoes_pendentes ?? extensions.length, l: "Prorrogações", color: "#f97316" },
             ].map((s) => (
               <div key={s.l} className="text-center rounded-xl px-3 py-2 sm:px-4 sm:py-2.5" style={{ background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.15)" }}>
                 <p style={{ fontSize: "clamp(16px,4vw,22px)", fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.v}</p>
@@ -972,38 +981,31 @@ export function CoordDashboard() {
         <KpiCard icon={<AlertTriangle size={20} />} label="Em Risco" value={emRisco} sub="Requerem ação imediata" color="#dc2626" trend="down" />
         <KpiCard icon={<Clock size={20} />} label="Em Prorrogação" value={emProrrogacao} sub="Com prazo estendido" color="#f97316" />
         <KpiCard icon={<CheckCircle2 size={20} />} label="Concluídos" value={concluidos} sub="Titulados em 2025–2026" color="#1F8A70" trend="up" />
-        <KpiCard icon={<TrendingUp size={20} />} label="Tempo Médio" value="26m" sub="Mestrado: 25m · Douto: 51m" color="#8b5cf6" />
+        <KpiCard icon={<TrendingUp size={20} />} label="Tempo Médio" value={dashData?.tempo_medio_integralizacao_meses ? `${dashData.tempo_medio_integralizacao_meses.toFixed(1)}m` : "N/D"} sub="Integralização" color="#8b5cf6" />
       </div>
 
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <StatusDistribChart onReport={() => setReportModal("status")} />
-        <OrientadorPerfChart onReport={() => setReportModal("orientador")} />
+        <StatusDistribChart onReport={() => setReportModal("status")} statusData={statusData} />
+        <OrientadorPerfChart onReport={() => setReportModal("orientador")} data={advisor.data} loading={reportsLoading} error={advisor.error} />
       </div>
 
       {/* Charts Row 2 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ProducaoChart onReport={() => setReportModal("producao")} />
-        <IntegralizacaoChart onReport={() => setReportModal("integralizacao")} />
+        <ProducaoChart onReport={() => setReportModal("producao")} data={productions.data} loading={reportsLoading} error={productions.error} />
+        <IntegralizacaoChart onReport={() => setReportModal("integralizacao")} data={completion.data} loading={reportsLoading} error={completion.error} />
       </div>
 
       {/* Validation Queue + Extension Requests */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ValidationQueue />
-        <ExtensionRequestsSection />
+        <ValidationQueue items={validationQueue} loading={valLoading} error={valError} />
+        <ExtensionRequestsSection extensions={extensions} loading={extLoading} error={extError} />
       </div>
-
-      {/* Pending Activities + Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <PendingActivitiesSection />
-        <AlertsCenter />
-      </div>
-
-      {/* Program Statistics */}
-      <ProgramStatistics />
+      {/* Alerts */}
+      <AlertsCenter />
 
       {/* Report Modal */}
-      <ReportModal type={reportModal} onClose={() => setReportModal(null)} />
+      <ReportModal type={reportModal} onClose={() => setReportModal(null)} statusData={statusData} advisorData={advisor.data} completionData={completion.data} productionsData={productions.data} />
     </div>
   );
 }

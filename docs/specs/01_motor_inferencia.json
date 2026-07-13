@@ -1,0 +1,424 @@
+{
+  "modulo": "Motor de Inferência Lógica",
+  "versao": "1.0.0-MVP",
+  "descricao": "Motor de inferência construído do zero em Python puro. Representa fatos e regras como cláusulas, realiza unificação entre termos, aplica substituições e resolve consultas por resolução direta (sem backtracking). Responsável por decidir situações acadêmicas a partir de fatos carregados do Firestore.",
+  "localizacao": "backend/inference_engine/",
+  "dependencias_externas": "NENHUMA — módulo completamente isolado de FastAPI e Firebase",
+
+  "arquivos_python": [
+    "backend/inference_engine/__init__.py",
+    "backend/inference_engine/terms.py",
+    "backend/inference_engine/unification.py",
+    "backend/inference_engine/substitution.py",
+    "backend/inference_engine/resolver.py",
+    "backend/inference_engine/knowledge_base.py",
+    "backend/inference_engine/rules/__init__.py",
+    "backend/inference_engine/rules/defense_eligibility.py",
+    "backend/inference_engine/rules/credit_validation.py",
+    "backend/inference_engine/rules/academic_status.py",
+    "backend/inference_engine/rules/activity_eligibility.py",
+    "backend/inference_engine/rules/production_scoring.py"
+  ],
+
+  "requisitos_fundo": [
+    "Motor totalmente isolado: sem imports de FastAPI, Firebase ou qualquer ORM",
+    "Fatos são carregados pelo InferenceService (backend/app/services/inference_service.py) antes de cada consulta, a partir do Firestore",
+    "Regras são módulos Python declarativos: alterar política = alterar regra, não fluxo de controle",
+    "Interface pública única: engine.query(goal: Term) -> list[dict] — o restante do sistema nunca acessa internos",
+    "Resolução direta por conjunção de condições; sem backtracking",
+    "em_risco modelado por condições positivas afirmativas (múltiplas cláusulas alternativas), sem Negação como Falha",
+    "Testes unitários obrigatórios com pytest para cada uma das 5 regras, cobrindo cenários apto/risco/inapto"
+  ],
+
+  "modulos": {
+    "terms.py": {
+      "responsabilidade": "Representar as unidades de informação manipuladas pelo motor",
+      "classes": [
+        {
+          "nome": "Atom",
+          "descricao": "Valor concreto imutável. Aceita str, int, float, bool.",
+          "exemplo": "Atom('aluno_001'), Atom(42), Atom(True)"
+        },
+        {
+          "nome": "Variable",
+          "descricao": "Incógnita identificada por nome string. Igualdade por nome.",
+          "exemplo": "Variable('X'), Variable('Aluno')"
+        },
+        {
+          "nome": "Compound",
+          "descricao": "Functor (string) + lista de argumentos (Term). Representa predicados.",
+          "exemplo": "Compound('creditos_grupo_basico', [Atom('aluno_001'), Variable('N')])"
+        }
+      ],
+      "tipo_union": "Term = Atom | Variable | Compound"
+    },
+
+    "unification.py": {
+      "responsabilidade": "Comparar dois termos e descobrir quais valores os tornam iguais",
+      "assinatura": "def unify(t1: Term, t2: Term, subst: dict) -> dict | None",
+      "casos": [
+        "Atom == Atom com mesmo valor → retorna subst inalterada",
+        "Atom != Atom → retorna None",
+        "Variable(X) já em subst → unifica subst[X] com t2",
+        "Variable(X) não em subst → retorna {**subst, X: t2} (occur check: X não pode aparecer em t2)",
+        "Compound vs Compound → mesmo functor e aridade; unifica argumentos par a par recursivamente",
+        "Qualquer outro combinação → retorna None"
+      ]
+    },
+
+    "substitution.py": {
+      "responsabilidade": "Representar e aplicar substituições variável→valor",
+      "tipo_substituicao": "dict[str, Term]",
+      "assinatura": "def apply(term: Term, subst: dict) -> Term",
+      "comportamento": [
+        "Atom → retorna inalterado",
+        "Variable(X) em subst → aplica recursivamente apply(subst[X], subst)",
+        "Variable(X) fora de subst → retorna Variable(X)",
+        "Compound → retorna Compound(functor, [apply(arg, subst) for arg in args])"
+      ]
+    },
+
+    "resolver.py": {
+      "responsabilidade": "Estratégia de resolução direta sem backtracking",
+      "assinatura": "def solve(goal: Term, kb: KnowledgeBase, subst: dict) -> Iterator[dict]",
+      "algoritmo": [
+        "1. Verifica se goal está na FactBase com unificação — se sim, yield a substituição resultante",
+        "2. Para cada cláusula (head, body) da RuleBase:",
+        "   a. Renomeia variáveis da cláusula para evitar colisão (ex: X → X_1)",
+        "   b. Tenta unify(goal, head, subst)",
+        "   c. Se unificação bem-sucedida, resolve cada condição do body sequencialmente",
+        "   d. Acumula substituições ao longo da conjunção",
+        "3. Sem backtracking: não testa caminhos alternativos após falha parcial numa conjunção"
+      ]
+    },
+
+    "knowledge_base.py": {
+      "responsabilidade": "Agregar FactBase e RuleBase; expor interface única de consulta",
+      "componentes": {
+        "FactBase": {
+          "descricao": "Coleção de Compounds verdadeiros. Populada pelo InferenceService antes de cada consulta.",
+          "metodos": ["add_fact(compound: Compound)", "get_facts() -> list[Compound]"]
+        },
+        "RuleBase": {
+          "descricao": "Coleção de cláusulas (head: Compound, body: list[Compound]). Importadas dos módulos em rules/.",
+          "metodos": ["add_rule(head: Compound, body: list[Compound])", "get_rules() -> list[Clause]"]
+        },
+        "InferenceEngine": {
+          "descricao": "Orquestra FactBase + RuleBase + Resolver. Único ponto de acesso externo.",
+          "metodo_publico": "query(goal: Term) -> list[dict]",
+          "comportamento": "Executa solve(goal, self, {}) e coleta todos os resultados em lista"
+        }
+      },
+      "interface_publica": "engine = InferenceEngine(fact_base, rule_base); resultados = engine.query(goal)"
+    }
+  },
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [
+        {
+          "id": "RL01",
+          "nome": "Aptidão à Defesa",
+          "arquivo": "rules/defense_eligibility.py",
+          "head": "apto_defesa(A)",
+          "body": [
+            "creditos_validos(A)",
+            "proficiencia_comprovada(A)",
+            "qualificacao_aprovada(A)",
+            "producao_bibliografica_validada(A)",
+            "plano_concluido(A)"
+          ],
+          "nota": "Todas as 5 condições devem ser satisfeitas. Cada uma é ela mesma um fato ou regra resolvível.",
+          "casos_de_teste": [
+            {
+              "cenario": "apto",
+              "fatos_presentes": ["creditos_validos(a1)", "proficiencia_comprovada(a1)", "qualificacao_aprovada(a1)", "producao_bibliografica_validada(a1)", "plano_concluido(a1)"],
+              "query": "apto_defesa(a1)",
+              "esperado": true
+            },
+            {
+              "cenario": "inapto_sem_producao",
+              "fatos_presentes": ["creditos_validos(a1)", "proficiencia_comprovada(a1)", "qualificacao_aprovada(a1)", "plano_concluido(a1)"],
+              "fatos_ausentes": ["producao_bibliografica_validada(a1)"],
+              "query": "apto_defesa(a1)",
+              "esperado": false
+            },
+            {
+              "cenario": "inapto_creditos_invalidos",
+              "fatos_presentes": ["proficiencia_comprovada(a1)", "qualificacao_aprovada(a1)", "producao_bibliografica_validada(a1)", "plano_concluido(a1)"],
+              "fatos_ausentes": ["creditos_validos(a1)"],
+              "query": "apto_defesa(a1)",
+              "esperado": false
+            }
+          ]
+        },
+        {
+          "id": "RL02",
+          "nome": "Validação de Créditos por Grupo",
+          "arquivo": "rules/credit_validation.py",
+          "head": "creditos_validos(A)",
+          "body_descricao": "Verifica se créditos por grupo satisfazem mínimos/máximos configurados como fatos",
+          "body_pseudocodigo": [
+            "creditos_grupo_basico(A, N1)    — fato: quantidade de créditos básicos do aluno A",
+            "min_creditos_basico(P, Min1)    — fato de configuração do programa P",
+            "N1 >= Min1                       — comparação aritmética",
+            "creditos_grupo_especifico(A, N2)",
+            "min_creditos_especifico(P, Min2)",
+            "N2 >= Min2",
+            "creditos_grupo_tecnologico(A, N3)",
+            "max_creditos_tecnologico(P, Max3)",
+            "N3 <= Max3",
+            "total_creditos(A, T)",
+            "min_creditos_total(P, MinT)",
+            "T >= MinT"
+          ],
+          "nota_implementacao": "Comparações aritméticas (>=, <=) são tratadas como built-ins no Resolver: Compound('gte', [Variable('N'), Variable('Min')]) resolve calculando os valores após aplicar substituições",
+          "fatos_de_configuracao": [
+            "min_creditos_basico('prog_default', 12)",
+            "min_creditos_especifico('prog_default', 8)",
+            "max_creditos_tecnologico('prog_default', 4)",
+            "min_creditos_total('prog_default', 24)"
+          ],
+          "casos_de_teste": [
+            {
+              "cenario": "creditos_validos",
+              "fatos": {"basico": 14, "especifico": 10, "tecnologico": 3, "total": 27},
+              "esperado": true
+            },
+            {
+              "cenario": "basico_insuficiente",
+              "fatos": {"basico": 10, "especifico": 10, "tecnologico": 2, "total": 22},
+              "esperado": false
+            },
+            {
+              "cenario": "tecnologico_excedido",
+              "fatos": {"basico": 14, "especifico": 10, "tecnologico": 6, "total": 30},
+              "esperado": false
+            },
+            {
+              "cenario": "total_insuficiente",
+              "fatos": {"basico": 12, "especifico": 8, "tecnologico": 2, "total": 22},
+              "esperado": false
+            }
+          ]
+        },
+        {
+          "id": "RL03",
+          "nome": "Situação Acadêmica — Em Risco",
+          "arquivo": "rules/academic_status.py",
+          "nota_modelagem": "em_risco é modelado como 4 cláusulas alternativas independentes (OR implícito). Não usa NAF.",
+          "clausulas": [
+            {
+              "head": "em_risco(A)",
+              "body": ["prazo_estourado(A)"],
+              "gatilho": "Prazo final do aluno já ultrapassou a data atual"
+            },
+            {
+              "head": "em_risco(A)",
+              "body": ["creditos_insuficientes(A)"],
+              "gatilho": "creditos_insuficientes é fato derivado: total < min_creditos_total e prazo_qualificacao_proximo"
+            },
+            {
+              "head": "em_risco(A)",
+              "body": ["qualificacao_pendente(A)", "prazo_qualificacao_proximo(A)"],
+              "gatilho": "Não qualificou e faltam menos de N meses para o prazo de qualificação"
+            },
+            {
+              "head": "em_risco(A)",
+              "body": ["plano_atrasado(A)"],
+              "gatilho": "Percentual de conclusão do plano está abaixo do esperado para a data atual"
+            }
+          ],
+          "fatos_derivados_pelo_inference_service": [
+            "prazo_estourado(aluno_id) — InferenceService compara prazoFinal com date.today()",
+            "prazo_qualificacao_proximo(aluno_id) — faltam <= 3 meses para prazo estimado de qualificação",
+            "qualificacao_pendente(aluno_id) — qualificacao_aprovada ausente da FactBase",
+            "plano_atrasado(aluno_id) — progresso < limiar esperado para o mês atual",
+            "creditos_insuficientes(aluno_id) — total < minimo configurado"
+          ],
+          "casos_de_teste": [
+            {
+              "cenario": "em_risco_prazo",
+              "fatos": ["prazo_estourado(a1)"],
+              "query": "em_risco(a1)",
+              "esperado": true
+            },
+            {
+              "cenario": "em_risco_qualificacao",
+              "fatos": ["qualificacao_pendente(a1)", "prazo_qualificacao_proximo(a1)"],
+              "query": "em_risco(a1)",
+              "esperado": true
+            },
+            {
+              "cenario": "regular",
+              "fatos": [],
+              "query": "em_risco(a1)",
+              "esperado": false
+            }
+          ]
+        },
+        {
+          "id": "RL04",
+          "nome": "Elegibilidade de Atividade Creditável",
+          "arquivo": "rules/activity_eligibility.py",
+          "head": "atividade_elegivel(Atv, A)",
+          "body": [
+            "dentro_periodo_curso(Atv, A)       — data da atividade >= dataIngresso do aluno",
+            "tem_comprovante(Atv)               — campo comprovante não está vazio",
+            "tipo_ativo(Atv)                    — o TipoAtividade associado tem ativo=true",
+            "nao_excede_limite_categoria(Atv, A) — soma créditos aprovados da categoria + créditos de Atv <= limite"
+          ],
+          "nota_implementacao": "nao_excede_limite_categoria é verificação positiva: InferenceService pré-calcula a soma e insere fato positivo se abaixo do limite",
+          "casos_de_teste": [
+            {
+              "cenario": "elegivel",
+              "fatos": ["dentro_periodo_curso(atv1, a1)", "tem_comprovante(atv1)", "tipo_ativo(atv1)", "nao_excede_limite_categoria(atv1, a1)"],
+              "query": "atividade_elegivel(atv1, a1)",
+              "esperado": true
+            },
+            {
+              "cenario": "sem_comprovante",
+              "fatos": ["dentro_periodo_curso(atv1, a1)", "tipo_ativo(atv1)", "nao_excede_limite_categoria(atv1, a1)"],
+              "query": "atividade_elegivel(atv1, a1)",
+              "esperado": false
+            },
+            {
+              "cenario": "tipo_inativo",
+              "fatos": ["dentro_periodo_curso(atv1, a1)", "tem_comprovante(atv1)", "nao_excede_limite_categoria(atv1, a1)"],
+              "query": "atividade_elegivel(atv1, a1)",
+              "esperado": false
+            },
+            {
+              "cenario": "excede_limite_tecnologico",
+              "fatos": ["dentro_periodo_curso(atv1, a1)", "tem_comprovante(atv1)", "tipo_ativo(atv1)"],
+              "fatos_ausentes": ["nao_excede_limite_categoria(atv1, a1)"],
+              "query": "atividade_elegivel(atv1, a1)",
+              "esperado": false
+            }
+          ]
+        },
+        {
+          "id": "RL05",
+          "nome": "Pontuação Ponderada de Produção",
+          "arquivo": "rules/production_scoring.py",
+          "head": "pontuacao_producao(P, Score)",
+          "body": [
+            "producao_veiculo(P, V)              — fato: produção P foi publicada no veículo V",
+            "nivel_relevancia(V, Prog, Nivel)    — fato configurável: veículo V tem nível Nivel no programa Prog",
+            "relevancia_peso(Nivel, Peso)        — fato configurável: nível Nivel tem peso Peso",
+            "pontuacao_base(P, Base)             — fato derivado do TipoAtividade da produção",
+            "Score = Base * Peso                 — built-in aritmético"
+          ],
+          "fatos_de_configuracao": [
+            "relevancia_peso('A1', 1.0)",
+            "relevancia_peso('A2', 0.9)",
+            "relevancia_peso('A3', 0.8)",
+            "relevancia_peso('A4', 0.7)",
+            "relevancia_peso('A5', 0.6)",
+            "relevancia_peso('A6', 0.5)",
+            "relevancia_peso('A7', 0.4)",
+            "relevancia_peso('A8', 0.3)",
+            "relevancia_peso('SC', 0.2)"
+          ],
+          "casos_de_teste": [
+            {
+              "cenario": "producao_A1_base10",
+              "fatos": ["producao_veiculo(p1, v1)", "nivel_relevancia(v1, prog1, 'A1')", "relevancia_peso('A1', 1.0)", "pontuacao_base(p1, 10)"],
+              "query": "pontuacao_producao(p1, Score)",
+              "esperado": {"Score": 10.0}
+            },
+            {
+              "cenario": "producao_A5_base10",
+              "fatos": ["producao_veiculo(p1, v2)", "nivel_relevancia(v2, prog1, 'A5')", "relevancia_peso('A5', 0.6)", "pontuacao_base(p1, 10)"],
+              "query": "pontuacao_producao(p1, Score)",
+              "esperado": {"Score": 6.0}
+            },
+            {
+              "cenario": "producao_SC_base10",
+              "fatos": ["producao_veiculo(p1, v3)", "nivel_relevancia(v3, prog1, 'SC')", "relevancia_peso('SC', 0.2)", "pontuacao_base(p1, 10)"],
+              "query": "pontuacao_producao(p1, Score)",
+              "esperado": {"Score": 2.0}
+            }
+          ]
+        }
+      ],
+
+      "base_fatos_necessaria": [
+        "creditos_grupo_basico(aluno_id, quantidade:int)",
+        "creditos_grupo_especifico(aluno_id, quantidade:int)",
+        "creditos_grupo_tecnologico(aluno_id, quantidade:int)",
+        "total_creditos(aluno_id, total:int)",
+        "creditos_insuficientes(aluno_id)",
+        "proficiencia_comprovada(aluno_id)",
+        "qualificacao_aprovada(aluno_id)",
+        "qualificacao_pendente(aluno_id)",
+        "producao_bibliografica_validada(aluno_id)",
+        "plano_concluido(aluno_id)",
+        "plano_atrasado(aluno_id)",
+        "prazo_estourado(aluno_id)",
+        "prazo_qualificacao_proximo(aluno_id)",
+        "dentro_periodo_curso(atividade_id, aluno_id)",
+        "tem_comprovante(atividade_id)",
+        "tipo_ativo(atividade_id)",
+        "nao_excede_limite_categoria(atividade_id, aluno_id)",
+        "producao_veiculo(producao_id, veiculo_id)",
+        "nivel_relevancia(veiculo_id, programa_id, nivel:str)",
+        "relevancia_peso(nivel:str, peso:float)",
+        "pontuacao_base(producao_id, valor:float)",
+        "min_creditos_basico(programa_id, valor:int)",
+        "min_creditos_especifico(programa_id, valor:int)",
+        "max_creditos_tecnologico(programa_id, valor:int)",
+        "min_creditos_total(programa_id, valor:int)",
+        "max_prorrogacoes(programa_id, valor:int)"
+      ]
+    },
+
+    "aop_aspectos": {
+      "join_points": [
+        "GET /api/v1/inference/{student_id} — interceptado por @requires_role antes de chamar InferenceService"
+      ],
+      "advice": [
+        "Before: @requires_role('aluno', 'orientador', 'coordenacao') verifica JWT claim",
+        "O motor em si não tem aspectos — é código de inferência pura sem side effects"
+      ]
+    }
+  },
+
+  "contratos_api": [
+    {
+      "path": "/api/v1/inference/{student_id}",
+      "method": "GET",
+      "descricao": "Executa todas as inferências para o aluno e retorna resultado estruturado com fatos usados e conclusões",
+      "papeis_autorizados": ["aluno (somente próprio student_id)", "orientador (somente orientandos)", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')", "@audit_operation"],
+      "request_body": null,
+      "path_params": {"student_id": "string — ID do documento Firestore do aluno"},
+      "response_200": {
+        "student_id": "string",
+        "programa_id": "string",
+        "timestamp": "string (ISO8601)",
+        "situacao_inferida": "string: 'regular' | 'em_risco' | 'qualificado' | 'em_fase_de_defesa'",
+        "apto_defesa": "boolean",
+        "creditos_validos": "boolean",
+        "em_risco": "boolean",
+        "checklist": {
+          "creditos_minimos":           {"status": "string: 'cumprido'|'pendente'|'em_risco'", "obtidos": "int", "minimo": "int"},
+          "creditos_grupo_basico":      {"status": "string", "obtidos": "int", "minimo": "int"},
+          "creditos_grupo_especifico":  {"status": "string", "obtidos": "int", "minimo": "int"},
+          "creditos_grupo_tecnologico": {"status": "string", "obtidos": "int", "maximo": "int"},
+          "proficiencia":               {"status": "string"},
+          "qualificacao":               {"status": "string"},
+          "producao_validada":          {"status": "string"},
+          "plano_concluido":            {"status": "string"}
+        },
+        "atividades_elegiveis": ["array de activity_ids que passaram na regra RL04"],
+        "pontuacoes_producoes": [
+          {"producao_id": "string", "score": "float", "nivel_veiculo": "string", "peso_aplicado": "float"}
+        ],
+        "fatos_usados": ["array de strings representando os fatos carregados — para exibição na InferencePage"]
+      },
+      "response_403": {"detail": "Acesso negado: papel insuficiente ou aluno não é orientando"},
+      "response_404": {"detail": "Aluno não encontrado"}
+    }
+  ]
+}

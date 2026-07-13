@@ -1,0 +1,296 @@
+{
+  "modulo": "Integração Frontend — Substituição dos Dados Hardcoded",
+  "versao": "1.0.0-MVP",
+  "descricao": "Mapeamento explícito das 17 páginas React para chamadas de API reais. Para cada página: dados atualmente hardcoded, endpoint(s) que os substituem, mudanças necessárias na UI e dependências de autenticação. onSnapshot do Firestore para notificações em tempo real.",
+
+  "requisitos_fundo": [
+    "Criar pasta frontend/src/api/ com um arquivo de service por domínio (studentsApi.ts, workPlanApi.ts, etc.)",
+    "Instalar e configurar firebase no frontend: frontend/src/lib/firebase.ts",
+    "Substituir react-router customizado (switch/case no AppContext) por react-router-dom com PrivateRoute por papel",
+    "Criar um hook useAuth() que expõe currentUser, role, token e funções de login/logout",
+    "Todos os fetches de dados usam o token JWT: Authorization: Bearer <await user.getIdToken()>",
+    "Criar um hook useNotifications() que assina onSnapshot da coleção notifications filtrada por uid",
+    "Corrigir nomenclaturas de status: alinhar todas as páginas para usar os mesmos valores do backend",
+    "Substituir escala Qualis fixa (A1-A8/SC) por nivel_relevancia carregado de GET /api/v1/vehicles",
+    "Não refatorar nada além do necessário para a integração — manter componentes visuais como estão"
+  ],
+
+  "configuracao_firebase_frontend": {
+    "arquivo": "frontend/src/lib/firebase.ts",
+    "conteudo": "initializeApp(config) + getAuth() + getFirestore() exportados como constantes",
+    "variaveis_ambiente": "VITE_FIREBASE_API_KEY, VITE_FIREBASE_PROJECT_ID, VITE_AUTH_DOMAIN, VITE_FIRESTORE_DB"
+  },
+
+  "hook_useAuth": {
+    "arquivo": "frontend/src/hooks/useAuth.ts",
+    "exporta": "{ currentUser, role, programaId, token, login, logout, loading }",
+    "comportamento": "Assina onAuthStateChanged; chama GET /api/v1/auth/me após login para obter student_id ou advisor_id"
+  },
+
+  "hook_useNotifications": {
+    "arquivo": "frontend/src/hooks/useNotifications.ts",
+    "query_firestore": "collection(db, 'notifications') where destinatario_id == uid, where lida == false, orderBy timestamp desc",
+    "exporta": "{ notifications, unreadCount, markAsRead }",
+    "markAsRead": "chama PATCH /api/v1/notifications/{id}/read"
+  },
+
+  "router_guards": {
+    "arquivo": "frontend/src/app/router/PrivateRoute.tsx",
+    "comportamento": "Redireciona para /login se não autenticado; redireciona para /unauthorized se papel incorreto",
+    "rotas_por_papel": {
+      "aluno": ["/dashboard", "/plano", "/atividades", "/producoes", "/checklist", "/prorrogacoes", "/notificacoes", "/configuracoes"],
+      "orientador": ["/dashboard", "/alunos", "/plano/*", "/atividades", "/notificacoes"],
+      "coordenacao": ["todas as rotas"]
+    }
+  },
+
+  "paginas": [
+    {
+      "componente": "LoginPage",
+      "dados_hardcoded_atuais": "Radio button de papel; qualquer e-mail/senha funciona",
+      "substituicoes": [
+        "Firebase Auth signInWithEmailAndPassword(email, senha)",
+        "Após login: GET /api/v1/auth/me para obter role e IDs associados",
+        "Remover radio button de papel — papel vem do custom claim do token"
+      ],
+      "mudancas_ui": "Remover seletor de papel; adicionar loading state; tratar erros de credencial inválida"
+    },
+    {
+      "componente": "FirstAccessPage",
+      "dados_hardcoded_atuais": "Formulário estático sem integração",
+      "substituicoes": [
+        "Lê token da URL: /first-access?token=<uuid>",
+        "POST /api/v1/auth/first-access com { token, senha }",
+        "Após sucesso: redirect para /login"
+      ],
+      "mudancas_ui": "Adicionar validação de força de senha (componente PasswordStrength.tsx já existe)"
+    },
+    {
+      "componente": "PasswordRecoveryPage",
+      "dados_hardcoded_atuais": "Formulário estático",
+      "substituicoes": [
+        "Firebase Auth sendPasswordResetEmail(email) — nativo do Firebase, sem endpoint backend"
+      ],
+      "mudancas_ui": "Mínima — apenas integrar SDK do Firebase"
+    },
+    {
+      "componente": "Dashboard (AlunoDashboard)",
+      "dados_hardcoded_atuais": "Créditos, progresso, tasks próximas, status — todos constantes TypeScript",
+      "substituicoes": [
+        "GET /api/v1/dashboard/aluno/{student_id}",
+        "useNotifications() hook para badge de notificações"
+      ],
+      "mudancas_ui": "Substituir constantes pelos campos do response. Exibir badge laranja quando situacao_registrada != situacao_inferida"
+    },
+    {
+      "componente": "Dashboard (OrientadorDashboard)",
+      "dados_hardcoded_atuais": "Lista de orientandos com status e progresso hardcoded",
+      "substituicoes": ["GET /api/v1/dashboard/orientador/{advisor_id}"],
+      "mudancas_ui": "Alimentar gráficos recharts com orientandos_por_status do response"
+    },
+    {
+      "componente": "Dashboard (CoordDashboard)",
+      "dados_hardcoded_atuais": "Métricas do programa hardcoded",
+      "substituicoes": ["GET /api/v1/dashboard/coordenacao"],
+      "mudancas_ui": "Alimentar cards e gráficos com dados reais"
+    },
+    {
+      "componente": "StudentsPage",
+      "dados_hardcoded_atuais": "Array de alunos com status 'atencao'/'critico' (nomenclatura incorreta)",
+      "substituicoes": [
+        "GET /api/v1/students (com filtros de status e orientador)",
+        "POST /api/v1/students (modal de novo aluno)",
+        "PUT /api/v1/students/{id} (edição)",
+        "PATCH /api/v1/students/{id}/situacao",
+        "PATCH /api/v1/students/{id}/qualificacao",
+        "PATCH /api/v1/students/{id}/proficiencia"
+      ],
+      "mudancas_ui": [
+        "CRÍTICO: renomear status 'atencao' → 'em_risco', 'critico' → 'em_risco' para consistência",
+        "Exibir badge de conflito quando situacao_inferida != situacao_registrada",
+        "Formulário de novo aluno deve persistir via POST e gerar convite"
+      ]
+    },
+    {
+      "componente": "AdvisorsPage",
+      "dados_hardcoded_atuais": "Array de orientadores com contagem de orientandos estática",
+      "substituicoes": [
+        "GET /api/v1/advisors",
+        "POST /api/v1/advisors"
+      ],
+      "mudancas_ui": "Exibir orientandos_ativos e limite_orientandos reais"
+    },
+    {
+      "componente": "WorkPlanPage",
+      "dados_hardcoded_atuais": "Etapas, tasks e kanban com dados fixos; botões sem efeito",
+      "substituicoes": [
+        "GET /api/v1/work-plan/{student_id} (carga inicial)",
+        "POST /api/v1/work-plan/{student_id}/stages (nova etapa — orientador)",
+        "POST /api/v1/stages/{stage_id}/tasks (nova task — orientador)",
+        "PATCH /api/v1/tasks/{task_id}/status (atualizar status — orientador)",
+        "POST /api/v1/tasks/{task_id}/updates (registrar progresso — aluno)"
+      ],
+      "mudancas_ui": "Controlar visibilidade dos botões de edição por papel (orientador edita; aluno registra progresso)"
+    },
+    {
+      "componente": "ActivitiesPage",
+      "dados_hardcoded_atuais": "1170 linhas com fluxo de validação simulado e dados fixos",
+      "substituicoes": [
+        "GET /api/v1/activities (listagem com filtros)",
+        "POST /api/v1/activities (nova atividade — aluno)",
+        "PATCH /api/v1/activities/{id}/validate (validação — orientador/coordenacao)",
+        "GET /api/v1/activity-types (tipos disponíveis)"
+      ],
+      "mudancas_ui": [
+        "Controlar botões por papel: aluno submete, orientador emite parecer, coordenação valida",
+        "Exibir campo elegibilidade_preliminar retornado pelo POST",
+        "Exibir motor_inferencia_executado no resultado da validação"
+      ]
+    },
+    {
+      "componente": "ProductionsPage",
+      "dados_hardcoded_atuais": "Escala Qualis fixa (A1-A8/SC) e produções estáticas",
+      "substituicoes": [
+        "GET /api/v1/productions",
+        "POST /api/v1/productions",
+        "GET /api/v1/vehicles (carrega veículos com nível_relevancia real)"
+      ],
+      "mudancas_ui": [
+        "CRÍTICO: substituir seletor Qualis fixo por dropdown de veículos carregado da API",
+        "Exibir pontuacao_calculada e peso_aplicado retornados pelo motor (RL05)",
+        "Exibir nivel_veiculo em vez de classificação Qualis"
+      ]
+    },
+    {
+      "componente": "ChecklistPage",
+      "dados_hardcoded_atuais": "7 requisitos com status fixo — não reflete dados do aluno logado",
+      "substituicoes": [
+        "GET /api/v1/checklist/{student_id} (executa motor lógico e retorna checklist real)"
+      ],
+      "mudancas_ui": [
+        "Alimentar cada requisito com status do response (cumprido/pendente/em_risco)",
+        "Exibir valores reais: créditos obtidos vs mínimo, data de qualificação, etc.",
+        "Exibir banner de conflito se situacao_inferida != situacao_registrada",
+        "Exibir lista riscos_detectados do response"
+      ]
+    },
+    {
+      "componente": "InferencePage",
+      "dados_hardcoded_atuais": "1041 linhas — grafo visual estático, fatos e conclusões hardcoded",
+      "substituicoes": [
+        "GET /api/v1/inference/{student_id} (retorna fatos_usados + todas as inferências)"
+      ],
+      "mudancas_ui": [
+        "Alimentar grafo de fatos com campo fatos_usados[] do response",
+        "Exibir apto_defesa, creditos_validos, em_risco como badges coloridos",
+        "Exibir pontuacoes_producoes[] na tabela de produções",
+        "Exibir situacao_inferida calculada pelo motor"
+      ]
+    },
+    {
+      "componente": "ExtensionsPage",
+      "dados_hardcoded_atuais": "Lista de prorrogações estática",
+      "substituicoes": [
+        "GET /api/v1/extensions",
+        "POST /api/v1/extensions (aluno solicita)",
+        "PATCH /api/v1/extensions/{id}/review (orientador — parecer)",
+        "PATCH /api/v1/extensions/{id}/approve (coordenação — decisão)"
+      ],
+      "mudancas_ui": "Controlar ações por papel; exibir prazo_novo quando aprovado"
+    },
+    {
+      "componente": "ReportsPage",
+      "dados_hardcoded_atuais": "Gráficos recharts com dados mockados",
+      "substituicoes": [
+        "GET /api/v1/reports/students-at-risk",
+        "GET /api/v1/reports/students-by-status",
+        "GET /api/v1/reports/students-by-advisor",
+        "GET /api/v1/reports/completion-time",
+        "GET /api/v1/reports/productions"
+      ],
+      "mudancas_ui": "Alimentar cada gráfico com os dados reais do endpoint correspondente"
+    },
+    {
+      "componente": "AuditPage",
+      "dados_hardcoded_atuais": "Tabela de logs hardcoded com dados fictícios",
+      "substituicoes": [
+        "GET /api/v1/audit-logs (paginado com filtros)"
+      ],
+      "mudancas_ui": "Implementar paginação e filtros por operação, usuário e data. Dados reais gerados pelo aspecto A02."
+    },
+    {
+      "componente": "NotificationsPage",
+      "dados_hardcoded_atuais": "Array fixo de notificações",
+      "substituicoes": [
+        "useNotifications() hook (onSnapshot Firestore — tempo real)",
+        "PATCH /api/v1/notifications/{id}/read (marcar como lida)"
+      ],
+      "mudancas_ui": [
+        "Substituir array estático pela lista reativa do hook",
+        "Badge de não-lidas atualiza em tempo real via onSnapshot",
+        "Botão 'Marcar como lida' chama o endpoint REST"
+      ]
+    },
+    {
+      "componente": "SettingsPage",
+      "dados_hardcoded_atuais": "Configurações estáticas sem persistência",
+      "substituicoes": [
+        "GET /api/v1/activity-types (listar e editar tipos)",
+        "GET /api/v1/vehicles (listar veículos)",
+        "PUT /api/v1/vehicle-levels/{id} (atualizar nível — fato do motor)",
+        "GET /api/v1/auth/me (dados do perfil do usuário logado)"
+      ],
+      "mudancas_ui": "Apenas coordenação vê configurações de programa e tipos de atividade"
+    }
+  ],
+
+  "ordem_de_integracao_recomendada": {
+    "descricao": "Integrar por complexidade crescente para validar a stack antes de partes mais críticas",
+    "fases": [
+      {
+        "fase": 1,
+        "semana": "Semana 4",
+        "paginas": ["LoginPage", "FirstAccessPage", "Dashboard (aluno)"],
+        "motivo": "Valida autenticação Firebase + chamada básica à API antes de tudo"
+      },
+      {
+        "fase": 2,
+        "semana": "Semana 4",
+        "paginas": ["StudentsPage", "AdvisorsPage", "WorkPlanPage"],
+        "motivo": "CRUD básico — valida aspectos A01 (autorização) e A02 (auditoria)"
+      },
+      {
+        "fase": 3,
+        "semana": "Semana 5",
+        "paginas": ["ActivitiesPage", "ProductionsPage", "ChecklistPage"],
+        "motivo": "Valida motor lógico RL04 e RL05 integrados ao frontend"
+      },
+      {
+        "fase": 4,
+        "semana": "Semana 5",
+        "paginas": ["InferencePage", "NotificationsPage", "AuditPage"],
+        "motivo": "Valida motor completo (todos os RLs) e aspectos A05 (alertas) + A02 (auditoria)"
+      },
+      {
+        "fase": 5,
+        "semana": "Semana 6",
+        "paginas": ["ExtensionsPage", "ReportsPage", "SettingsPage", "Dashboards (orientador e coordenação)"],
+        "motivo": "Features secundárias — polimento final"
+      }
+    ]
+  },
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [],
+      "base_fatos_necessaria": [],
+      "nota": "Frontend não interage com o motor diretamente — apenas exibe resultados dos endpoints /inference e /checklist"
+    },
+    "aop_aspectos": {
+      "join_points": ["Frontend não implementa aspectos — apenas consome endpoints onde os aspectos já estão aplicados"],
+      "advice": []
+    }
+  },
+
+  "contratos_api": []
+}

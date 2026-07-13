@@ -1,0 +1,533 @@
+"""
+Serviço de agregação de dados dos dashboards dos três perfis.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import date, datetime, timedelta, timezone
+
+from fastapi import HTTPException, status
+
+from backend.app.core.auth import CurrentUser
+from backend.app.models.dashboard import (
+    AlunoDashboardResponse,
+    AlunosPorStatus,
+    AuditoriaRecenteItem,
+    ChecklistResumo,
+    CoordDashboardResponse,
+    CreditosResumo,
+    DashboardIndiceOrientadorResponse,
+    IndiceModalidade,
+    IndiceOrientadorResponse,
+    OrientadorDashboardResponse,
+    OrientandoResumo,
+    OrientandosPorStatus,
+    PosicaoRelativaResponse,
+    ProducoesResumo,
+    TaskProxima,
+)
+from backend.app.repositories.activity_repository import ActivityRepository
+from backend.app.repositories.activity_type_repository import ActivityTypeRepository
+from backend.app.repositories.advisor_repository import AdvisorRepository
+from backend.app.repositories.firebase_repository import FirebaseRepository
+from backend.app.repositories.production_repository import ProductionRepository
+from backend.app.repositories.dashboard_repository import DashboardRepository
+from backend.app.repositories.student_repository import StudentRepository
+from backend.app.repositories.work_plan_repository import WorkPlanRepository
+from backend.app.models.work_plan import STATUS_CONCLUIDO
+
+
+
+
+def _to_iso_date(value: object) -> str | None:
+    """Converte datetime/date do Firestore para string ISO, ou None."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    return str(value) or None
+
+
+def _days_remaining(prazo_final: object) -> int:
+    """Calcula dias restantes até o prazo final a partir de hoje."""
+    if prazo_final is None:
+        return 0
+    if isinstance(prazo_final, datetime):
+        target = prazo_final.date()
+    elif isinstance(prazo_final, date):
+        target = prazo_final
+    else:
+        return 0
+    return (target - date.today()).days
+
+
+def _aggregate_credits(activities: list[dict], types_map: dict[str, str]) -> CreditosResumo:
+    """Soma créditos de atividades aprovadas por grupo de categoria."""
+    basico = 0.0
+    especifico = 0.0
+    tecnologico = 0.0
+    for act in activities:
+        if act.get("status") != "aprovado":
+            continue
+        creditos = float(act.get("creditos_concedidos") or act.get("creditos_gerados") or 0.0)
+        tipo_id = act.get("tipo_id", "")
+        categoria = types_map.get(tipo_id, "")
+        if categoria == "basico":
+            basico += creditos
+        elif categoria == "especifico":
+            especifico += creditos
+        elif categoria == "tecnologico":
+            tecnologico += creditos
+    return CreditosResumo(
+        total=basico + especifico + tecnologico,
+        basico=basico,
+        especifico=especifico,
+        tecnologico=tecnologico,
+    )
+
+
+_STATUS_FIELD_MAP: dict[str, str] = {
+    "regular": "regular",
+    "em_risco": "em_risco",
+    "qualificado": "qualificado",
+    "em_fase_de_defesa": "em_fase_de_defesa",
+    "em_prorrogacao": "em_prorrogacao",
+}
+
+
+def _count_by_status(
+    students: list[dict],
+) -> dict[str, int]:
+    """Conta alunos por situacao_inferida, mapeando para nomes de atributo."""
+    counts: dict[str, int] = {v: 0 for v in _STATUS_FIELD_MAP.values()}
+    for s in students:
+        sit = s.get("situacao_inferida", "")
+        attr = _STATUS_FIELD_MAP.get(sit)
+        if attr:
+            counts[attr] += 1
+    return counts
+
+
+def _build_orientando_resumo(student: dict) -> OrientandoResumo:
+    """Constrói resumo de um orientando para o dashboard do orientador."""
+    alertas: list[str] = []
+    sit = student.get("situacao_inferida", "")
+    if sit == "em_risco":
+        alertas.append("Situação em risco")
+    dias = _days_remaining(student.get("prazo_final"))
+    if 0 < dias <= 90:
+        alertas.append(f"Prazo crítico: {dias} dias restantes")
+    elif dias <= 0 and student.get("prazo_final") is not None:
+        alertas.append("Prazo expirado")
+
+    return OrientandoResumo(
+        student_id=student.get("id", ""),
+        nome=student.get("nome", ""),
+        situacao_inferida=sit,
+        progresso_plano=0.0,  # TODO: integrar com WorkPlanRepository
+        dias_restantes_prazo=dias,
+        alertas=alertas,
+    )
+
+
+
+
+class DashboardService:
+    """Serviço de agregação de dados para os dashboards dos três perfis."""
+
+    def __init__(self) -> None:
+        self._students = StudentRepository()
+        self._advisors = AdvisorRepository()
+        self._activities = ActivityRepository()
+        self._activity_types = ActivityTypeRepository()
+        self._audit_logs = FirebaseRepository("audit_logs")
+        self._extensions = FirebaseRepository("extensions")
+        self._productions = FirebaseRepository("productions")
+        self._production_reports = ProductionRepository()
+        self._work_plan = WorkPlanRepository()
+        self._dashboard = DashboardRepository()
+
+    async def get_meu_aluno_dashboard(self, user: CurrentUser) -> AlunoDashboardResponse:
+        """Retorna o dashboard do aluno autenticado sem aceitar student_id do cliente."""
+        if user.role != "aluno":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Dashboard do discente disponivel apenas para aluno",
+            )
+
+        students = await self._students.query(filters=[("uid", "==", user.uid)])
+        if not students:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Aluno nao encontrado para o usuario autenticado",
+            )
+        return await self.get_aluno_dashboard(students[0]["id"])
+
+    async def _aggregate_productions(self, activities: list[dict]) -> ProducoesResumo:
+        credited_ids = {
+            activity["producao_id"]
+            for activity in activities
+            if activity.get("status") == "aprovado" and activity.get("producao_id")
+        }
+        if not credited_ids:
+            return ProducoesResumo()
+
+        productions = await self._production_reports.list_by_ids(credited_ids)
+        production_by_id = {production["id"]: production for production in productions}
+        por_nivel: dict[str, int] = {}
+        pontuacao_total = 0.0
+
+        for producao_id in credited_ids:
+            production = production_by_id.get(producao_id)
+            if production is None:
+                continue
+            nivel = production.get("nivel") or production.get("nivel_veiculo") or "SC"
+            por_nivel[nivel] = por_nivel.get(nivel, 0) + 1
+            pontuacao_total += float(production.get("pontuacao_calculada", 0.0) or 0.0)
+
+        return ProducoesResumo(
+            total=sum(por_nivel.values()),
+            pontuacao_total=round(pontuacao_total, 2),
+            por_nivel=por_nivel,
+        )
+
+    async def get_aluno_dashboard(self, student_id: str) -> AlunoDashboardResponse:
+        """Agrega dados do dashboard do aluno a partir de dados persistidos.
+
+        Não executa o motor de inferência — lê situacao_inferida já calculada.
+
+        Args:
+            student_id: ID do documento em students/.
+
+        Returns:
+            AlunoDashboardResponse com dados agregados.
+
+        Raises:
+            HTTPException(403): Se o usuário não tiver permissão.
+            HTTPException(404): Se o aluno não existir.
+        """
+        student = await self._students.get(student_id)
+        if student is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Aluno não encontrado",
+            )
+
+        situacao_reg = student.get("situacao_registrada", "")
+        situacao_inf = student.get("situacao_inferida", "")
+
+        # Leituras independentes em paralelo — antes eram 4 round-trips em série (issue #319).
+        activities, types_list, tasks, snapshots = await asyncio.gather(
+            self._activities.list_by_student(student_id),
+            self._activity_types.list_all(),
+            self._work_plan.get_all_tasks_for_student(student_id),
+            self._students.list_subcollection(student_id, "inferred_status"),
+        )
+
+        types_map = {t.get("id"): t.get("categoria", "") for t in types_list}
+        creditos = _aggregate_credits(activities, types_map)
+
+        producoes_aprovadas = sum(
+            1
+            for a in activities
+            if a.get("status") == "aprovado" and a.get("producao_id")
+        )
+        producoes_resumo = await self._aggregate_productions(activities)
+        atividades_pendentes = sum(
+            1 for a in activities if a.get("status") == "enviado"
+        )
+
+        total_tasks = len(tasks)
+        concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
+        progresso = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
+
+        pendentes = [t for t in tasks if t.get("status") != STATUS_CONCLUIDO]
+        try:
+            pendentes.sort(key=lambda x: str(x.get("prazo") or "9999-12-31"))
+        except Exception:
+            pass
+
+        tasks_proximas_list = []
+        for t in pendentes[:3]:
+            tasks_proximas_list.append(TaskProxima(
+                task_id=t.get("id", ""),
+                titulo=t.get("titulo", "Tarefa sem título"),
+                prazo=str(t.get("prazo") or "Sem prazo"),
+                status="Pendente"
+            ))
+
+        cumpridos = 0
+        pend_chk = 8
+        em_risco = 0
+        total_chk = 8
+
+        if snapshots:
+            latest = max(snapshots, key=lambda snap: snap.get("timestamp", ""))
+            checklist_data = latest.get("checklist", {})
+
+            pend_chk = 0
+            for key in [
+                "creditos_minimos", "creditos_grupo_basico", "creditos_grupo_especifico",
+                "creditos_grupo_tecnologico", "proficiencia", "qualificacao",
+                "producao_validada", "plano_concluido"
+            ]:
+                item = checklist_data.get(key)
+                if item:
+                    item_status = item.get("status")
+                    if item_status == "cumprido":
+                        cumpridos += 1
+                    elif item_status == "pendente":
+                        pend_chk += 1
+                    elif item_status == "em_risco":
+                        em_risco += 1
+                else:
+                    pend_chk += 1
+
+        checklist = ChecklistResumo(
+            total=total_chk,
+            cumpridos=cumpridos,
+            pendentes=pend_chk,
+            em_risco=em_risco
+        )
+
+        return AlunoDashboardResponse(
+            student_id=student_id,
+            nome=student.get("nome", ""),
+            situacao_registrada=situacao_reg,
+            situacao_inferida=situacao_inf,
+            conflito_situacao=situacao_reg != situacao_inf,
+            prazo_final=_to_iso_date(student.get("prazo_final")),
+            dias_restantes=_days_remaining(student.get("prazo_final")),
+            progresso_plano_percentual=progresso,
+            creditos=creditos,
+            checklist_resumo=checklist,
+            tasks_proximas=tasks_proximas_list,
+            producoes_aprovadas=producoes_aprovadas,
+            producoes=producoes_resumo,
+            atividades_pendentes_validacao=atividades_pendentes,
+        )
+
+
+    async def get_orientador_dashboard(
+        self, advisor_id: str
+    ) -> OrientadorDashboardResponse:
+        """Agrega dados do dashboard do orientador.
+
+        Lista orientandos, conta por status, soma atividades aguardando parecer.
+
+        Args:
+            advisor_id: ID do documento em advisors/.
+
+        Returns:
+            OrientadorDashboardResponse com dados agregados.
+
+        Raises:
+            HTTPException(403): Se não tiver permissão.
+            HTTPException(404): Se o orientador não existir.
+        """
+        advisor = await self._advisors.get(advisor_id)
+        if advisor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Orientador não encontrado",
+            )
+        # Alunos e atividades agregadas em paralelo; antes havia dois loops N+1
+        # sequenciais (atividades e tasks por orientando) — issue #319.
+        all_students, all_activities = await asyncio.gather(
+            self._students.list_all(),
+            self._activities.list_all_grouped(),
+        )
+        orientandos = [
+            s for s in all_students if s.get("orientador_id") == advisor_id
+        ]
+        status_counts = _count_by_status(orientandos)
+
+        orientando_ids = {s.get("id", "") for s in orientandos}
+        total_pending = sum(
+            1
+            for a in all_activities
+            if a.get("student_id") in orientando_ids and a.get("status") == "enviado"
+        )
+
+        tasks_por_orientando = await asyncio.gather(
+            *(self._work_plan.get_all_tasks_for_student(s.get("id", "")) for s in orientandos)
+        )
+        orientandos_resumo = []
+        for s, tasks in zip(orientandos, tasks_por_orientando):
+            resumo = _build_orientando_resumo(s)
+            total_tasks = len(tasks)
+            concluidas = sum(1 for t in tasks if t.get("status") == STATUS_CONCLUIDO)
+            resumo.progresso_plano = (concluidas / total_tasks * 100.0) if total_tasks > 0 else 0.0
+            orientandos_resumo.append(resumo)
+
+        return OrientadorDashboardResponse(
+            advisor_id=advisor_id,
+            nome=advisor.get("nome", ""),
+            total_orientandos=len(orientandos),
+            orientandos_por_status=OrientandosPorStatus(**status_counts),
+            atividades_aguardando_parecer=total_pending,
+            orientandos=orientandos_resumo,
+        )
+
+    async def get_coordenacao_dashboard(self) -> CoordDashboardResponse:
+        """Agrega dados do dashboard da coordenação.
+
+        Visão macro: totais por status, atividades aguardando validação,
+        prorrogações pendentes, produções recentes, tempo médio, auditoria.
+
+        Returns:
+            CoordDashboardResponse com dados agregados.
+        """
+        # Todas as leituras são independentes: uma rodada paralela substitui o loop
+        # N+1 de atividades por aluno e o list_all() de audit_logs (coleção que só
+        # cresce) — a auditoria recente é limitada e ordenada no servidor (issue #319).
+        (all_students, all_activities, recent_audit_logs, all_exts, all_prods) = await asyncio.gather(
+            self._students.list_all(),
+            self._activities.list_all_grouped(),
+            self._audit_logs.query(order_by="timestamp", descending=True, limit=5),
+            self._extensions.list_all(),
+            self._productions.list_all(),
+        )
+
+        status_counts = _count_by_status(all_students)
+
+        total_pending = sum(
+            1 for a in all_activities if a.get("status") == "enviado"
+        )
+
+        tempo_medio = _compute_avg_completion_time(all_students)
+        total_concluidos = sum(1 for s in all_students if s.get("situacao_registrada") == "concluido")
+        total_alunos_ativos = sum(1 for s in all_students if s.get("situacao_registrada") not in ("concluido", "desligado"))
+        auditoria_recente = _build_recent_audit(recent_audit_logs, limit=5)
+
+        prorrogacoes_pendentes = sum(1 for e in all_exts if e.get("status") == "pendente")
+        thirty_days_ago = date.today() - timedelta(days=30)
+        producoes_ultimo_mes = 0
+        for p in all_prods:
+            d = p.get("criado_em")
+            if d:
+                if isinstance(d, datetime):
+                    d = d.date()
+                if isinstance(d, date) and d >= thirty_days_ago:
+                    producoes_ultimo_mes += 1
+
+        return CoordDashboardResponse(
+            programa_id="prog_default",
+            total_alunos=len(all_students),
+            total_alunos_ativos=total_alunos_ativos,
+            alunos_por_status=AlunosPorStatus(**status_counts),
+            atividades_aguardando_validacao=total_pending,
+            prorrogacoes_pendentes=prorrogacoes_pendentes,
+            producoes_ultimo_mes=producoes_ultimo_mes,
+            total_concluidos=total_concluidos,
+            tempo_medio_integralizacao_meses=tempo_medio,
+            auditoria_recente=auditoria_recente,
+        )
+
+    async def get_dashboard_indice_orientador(
+        self,
+        advisor_id: str,
+        modalidade: IndiceModalidade,
+    ) -> DashboardIndiceOrientadorResponse:
+        """Calcula índice de produção do orientador e posição relativa anônima."""
+        advisor = await self._dashboard.get_advisor(advisor_id)
+        if advisor is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Orientador não encontrado",
+            )
+
+        average = modalidade == IndiceModalidade.media_por_orientando
+        indice, total_orientandos, total_pontuacao = await self._dashboard.production_index_for_advisor(
+            advisor_id,
+            average=average,
+        )
+
+        advisors = await self._dashboard.list_advisors_by_program(advisor.get("programa_id"))
+        indices_programa: list[float] = []
+        for item in advisors:
+            item_id = item.get("id")
+            if not item_id:
+                continue
+            item_index, _, _ = await self._dashboard.production_index_for_advisor(
+                item_id,
+                average=average,
+            )
+            indices_programa.append(item_index)
+
+        if not indices_programa:
+            indices_programa = [indice]
+
+        media_programa = round(sum(indices_programa) / len(indices_programa), 2)
+        abaixo_ou_igual = sum(1 for value in indices_programa if value <= indice)
+        percentil = round((abaixo_ou_igual / len(indices_programa)) * 100, 2)
+
+        return DashboardIndiceOrientadorResponse(
+            indice=IndiceOrientadorResponse(
+                advisor_id=advisor_id,
+                modalidade=modalidade,
+                indice=indice,
+                total_orientandos=total_orientandos,
+                total_pontuacao=total_pontuacao,
+            ),
+            posicao_relativa=PosicaoRelativaResponse(
+                modalidade=modalidade,
+                media_programa=media_programa,
+                percentil=percentil,
+                total_orientadores=len(indices_programa),
+            ),
+        )
+
+
+def _compute_avg_completion_time(students: list[dict]) -> float | None:
+    """Calcula média de integralização dos alunos com situacao_registrada=concluido.
+    Nota: utiliza prazo_final como fallback quando data_conclusao está ausente.
+    Trata-se de uma aproximação que pode inflar o tempo médio.
+    """
+    durations: list[float] = []
+    for s in students:
+        if s.get("situacao_registrada") != "concluido":
+            continue
+        ingresso = s.get("data_ingresso")
+        conclusao = s.get("data_conclusao") or s.get("prazo_final")
+        if ingresso is None or conclusao is None:
+            continue
+        if isinstance(ingresso, datetime):
+            ingresso = ingresso.date()
+        if isinstance(conclusao, datetime):
+            conclusao = conclusao.date()
+        dias = (conclusao - ingresso).days
+        if dias > 0:
+            durations.append(dias / 30.0)
+    return sum(durations) / len(durations) if durations else None
+
+
+def _build_recent_audit(
+    audit_logs: list[dict], *, limit: int = 5
+) -> list[AuditoriaRecenteItem]:
+    """Constrói lista de auditoria recente, ordenada do mais recente."""
+    _min_ts = datetime.min.replace(tzinfo=timezone.utc)
+    sorted_logs = sorted(
+        audit_logs,
+        key=lambda log: log.get("timestamp") or _min_ts,
+        reverse=True,
+    )
+    result: list[AuditoriaRecenteItem] = []
+    for log in sorted_logs[:limit]:
+        ts = log.get("timestamp")
+        ts_str = ""
+        if isinstance(ts, datetime):
+            ts_str = ts.isoformat()
+        elif ts is not None:
+            ts_str = str(ts)
+        result.append(
+            AuditoriaRecenteItem(
+                operacao=log.get("operacao", ""),
+                usuario=log.get("usuario_id", ""),
+                timestamp=ts_str,
+            )
+        )
+    return result

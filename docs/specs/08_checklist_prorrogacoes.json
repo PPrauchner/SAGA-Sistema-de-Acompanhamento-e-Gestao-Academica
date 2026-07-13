@@ -1,0 +1,250 @@
+{
+  "modulo": "Checklist de Integralização e Prorrogações",
+  "versao": "1.0.0-MVP",
+  "descricao": "Checklist é calculado sob demanda pelo motor lógico — não é persistido como documento fixo. O endpoint executa as inferências RL01, RL02 e RL03 e devolve status de cada requisito. Prorrogações são solicitadas pelo aluno, avaliadas pelo orientador e aprovadas pela coordenação. Aspectos aplicados: autorização, auditoria e validação de prazos.",
+
+  "arquivos_python": [
+    "backend/app/api/v1/checklist.py",
+    "backend/app/api/v1/extensions.py",
+    "backend/app/services/checklist_service.py",
+    "backend/app/services/extension_service.py",
+    "backend/app/services/inference_service.py",
+    "backend/app/models/extension.py",
+    "backend/app/repositories/extension_repository.py"
+  ],
+
+  "requisitos_fundo": [
+    "Checklist é calculado pelo motor a cada requisição — não é um documento Firestore estático",
+    "ChecklistService delega ao InferenceService que monta a FactBase e executa as regras RL01, RL02, RL03",
+    "Resultado é snapshot imutável gravado em students/{id}/inferred_status/ para histórico e para a InferencePage",
+    "ChecklistPage exibe 7 requisitos: créditos mínimos, créditos por grupo (3), proficiência, qualificação, produção validada, defesa/plano",
+    "Para cada requisito: status 'cumprido' | 'pendente' | 'em_risco'",
+    "Prorrogação: aluno solicita → orientador emite parecer (não aprova) → coordenação decide",
+    "Aprovação da prorrogação atualiza prazo_final do aluno e insere fato max_prorrogacoes no motor",
+    "Aspecto A04 (@check_deadlines) verifica se aluno ainda está dentro do prazo para solicitar prorrogação",
+    "Aspecto A05 (@trigger_alerts) notifica aluno após aprovação/rejeição da prorrogação"
+  ],
+
+  "inference_service": {
+    "arquivo": "backend/app/services/inference_service.py",
+    "responsabilidade": "Orquestra a carga de fatos do Firestore e delegação ao motor de inferência",
+    "metodo_principal": "async def run_inference(student_id: str, programa_id: str) -> InferenceResult",
+    "passos": [
+      "1. Carrega student do Firestore (campos: data_ingresso, prazo_final, proficiencia_comprovada, qualificacao_aprovada)",
+      "2. Carrega configurações do programa (créditos mínimos, pesos de relevância)",
+      "3. Carrega atividades aprovadas do aluno e calcula créditos por categoria",
+      "4. Carrega tasks do plano e verifica quais etapas estão concluídas",
+      "5. Carrega produções aprovadas e verifica se há ao menos 1 bibliográfica",
+      "6. Calcula fatos derivados temporais: prazo_estourado, prazo_qualificacao_proximo, plano_atrasado",
+      "7. Monta FactBase com todos os fatos coletados",
+      "8. Instancia InferenceEngine com FactBase + RuleBase (rules/)",
+      "9. Executa queries: apto_defesa, creditos_validos, em_risco, atividades_elegiveis, pontuacoes_producoes",
+      "10. Monta InferenceResult e persiste snapshot em students/{id}/inferred_status/",
+      "11. Atualiza students/{id}.situacao_inferida com resultado"
+    ]
+  },
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [
+        {
+          "id": "RL01",
+          "usado_em": "ChecklistService.get_checklist() — item 'Aptidão à Defesa'",
+          "descricao": "apto_defesa(A) — todos os 5 requisitos cumpridos"
+        },
+        {
+          "id": "RL02",
+          "usado_em": "ChecklistService.get_checklist() — itens de crédito",
+          "descricao": "creditos_validos(A) — créditos por grupo satisfazem mínimos e máximos"
+        },
+        {
+          "id": "RL03",
+          "usado_em": "ChecklistService.get_checklist() e ExtensionService.request_extension()",
+          "descricao": "em_risco(A) — qualquer condição de risco presente (4 cláusulas alternativas)"
+        }
+      ],
+      "base_fatos_necessaria": [
+        "Todos os fatos listados em 01_motor_inferencia.json > base_fatos_necessaria",
+        "InferenceService é o único responsável por popular a FactBase — outros módulos não instanciam o motor diretamente"
+      ]
+    },
+    "aop_aspectos": {
+      "join_points": [
+        "ChecklistService.get_checklist()           — @requires_role('aluno','orientador','coordenacao')",
+        "ExtensionService.request_extension()       — @requires_role('aluno'), @audit_operation, @check_deadlines",
+        "ExtensionService.advisor_review()          — @requires_role('orientador'), @audit_operation",
+        "ExtensionService.approve_extension()       — @requires_role('coordenacao'), @audit_operation, @trigger_alerts"
+      ],
+      "advice": [
+        "Before: @requires_role em todos os join points",
+        "Before: @check_deadlines em request_extension() — verifica: (1) aluno ainda não atingiu max_prorrogacoes; (2) não está com prazo já expirado há mais de 30 dias (fora de prazo para solicitar)",
+        "Around: @audit_operation em request_extension() e approve_extension()",
+        "After: @trigger_alerts em approve_extension() — notifica aluno: 'Sua prorrogação foi {aprovada|rejeitada}. Novo prazo: {data}'"
+      ]
+    }
+  },
+
+  "contratos_api": [
+    {
+      "path": "/api/v1/checklist/{student_id}",
+      "method": "GET",
+      "descricao": "Executa o motor lógico e retorna o checklist completo de integralização do aluno. Persiste snapshot em inferred_status/.",
+      "papeis_autorizados": ["aluno (próprio)", "orientador (orientandos)", "coordenacao"],
+      "aspectos_aplicados": [
+        "@requires_role('aluno','orientador','coordenacao')",
+        "@check_deadlines (garante fatos de prazo atualizados antes da inferência)"
+      ],
+      "request_body": null,
+      "response_200": {
+        "student_id": "string",
+        "student_nome": "string",
+        "timestamp": "string (ISO8601)",
+        "situacao_registrada": "string",
+        "situacao_inferida": "string",
+        "conflito_situacao": "boolean (true se registrada != inferida)",
+        "apto_defesa": "boolean",
+        "requisitos": {
+          "creditos_minimos": {
+            "status": "string ('cumprido'|'pendente'|'em_risco')",
+            "obtidos": "float",
+            "minimo": "float",
+            "descricao": "Mínimo de 24 créditos totais"
+          },
+          "creditos_grupo_basico": {
+            "status": "string",
+            "obtidos": "float",
+            "minimo": "float",
+            "descricao": "Mínimo de 12 créditos em disciplinas básicas"
+          },
+          "creditos_grupo_especifico": {
+            "status": "string",
+            "obtidos": "float",
+            "minimo": "float",
+            "descricao": "Mínimo de 8 créditos em atividades específicas"
+          },
+          "creditos_grupo_tecnologico": {
+            "status": "string",
+            "obtidos": "float",
+            "maximo": "float",
+            "descricao": "Máximo de 4 créditos em atividades tecnológicas"
+          },
+          "proficiencia": {
+            "status": "string",
+            "data_comprovacao": "string | null"
+          },
+          "qualificacao": {
+            "status": "string",
+            "data_aprovacao": "string | null"
+          },
+          "producao_validada": {
+            "status": "string",
+            "quantidade_aprovadas": "int"
+          },
+          "plano_concluido": {
+            "status": "string",
+            "tasks_concluidas": "int",
+            "tasks_total_nao_defesa": "int"
+          }
+        },
+        "riscos_detectados": [
+          "string (ex: 'Prazo final em 45 dias', 'Qualificação pendente há 14 meses')"
+        ],
+        "snapshot_id": "string (ID do documento em inferred_status/)"
+      }
+    },
+    {
+      "path": "/api/v1/extensions",
+      "method": "GET",
+      "descricao": "Lista prorrogações. Aluno vê as próprias; coordenação vê todas.",
+      "papeis_autorizados": ["aluno", "orientador", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "response_200": {
+        "items": [
+          {
+            "id": "string",
+            "student_nome": "string",
+            "motivo": "string",
+            "semestres_solicitados": "int",
+            "status": "string",
+            "parecer_orientador": "string | null",
+            "prazo_novo": "string | null",
+            "criado_em": "string"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/extensions",
+      "method": "POST",
+      "descricao": "Aluno solicita prorrogação de prazo",
+      "papeis_autorizados": ["aluno"],
+      "aspectos_aplicados": [
+        "@requires_role('aluno')",
+        "@audit_operation",
+        "@check_deadlines (verifica max_prorrogacoes e elegibilidade para solicitar)"
+      ],
+      "request_body": {
+        "motivo": "string",
+        "plano_atualizado": "string (descrição do plano revisado)",
+        "semestres_solicitados": "int (default: 1, max: max_prorrogacoes configurado)"
+      },
+      "response_201": {
+        "id": "string",
+        "message": "Solicitação de prorrogação registrada",
+        "prorrogacoes_restantes": "int"
+      },
+      "response_409": {"detail": "Limite de prorrogações atingido ou já existe solicitação pendente"}
+    },
+    {
+      "path": "/api/v1/extensions/{extension_id}/review",
+      "method": "PATCH",
+      "descricao": "Orientador emite parecer sobre a solicitação (sem aprovar — apenas comentário)",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation"],
+      "request_body": {
+        "parecer_orientador": "string"
+      },
+      "response_200": {"message": "Parecer registrado"}
+    },
+    {
+      "path": "/api/v1/extensions/{extension_id}/approve",
+      "method": "POST",
+      "descricao": "Coordenação aprova a prorrogação/trancamento pendente. Recalcula prazo_final do aluno quando há nova_data; prorrogação (prazo_defesa|prazo_qualificacao) também move situacao_registrada do aluno para 'em_prorrogacao' (CONTEXT.md → Prorrogação). NOTA DE IMPLEMENTAÇÃO (desvio registrado): aprovar e rejeitar são endpoints POST separados (approve/reject), não um único PATCH com {acao}; a resposta devolve o ExtensionResponse completo, e o campo situacao_registrada (=situacao_aluno_atualizada) reflete a transição.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": [
+        "@requires_role('coordenacao')",
+        "@audit_operation",
+        "@trigger_alerts (A05 — notifica aluno: 'Sua solicitação de {prorrogação|trancamento} foi aprovada. Novo prazo: {data}')"
+      ],
+      "request_body": null,
+      "response_200": {
+        "_schema": "ExtensionResponse",
+        "id": "string",
+        "status": "string ('aprovada')",
+        "tipo": "string",
+        "nova_data": "string (ISO8601) | null",
+        "situacao_registrada": "string | null (='em_prorrogacao' para prorrogação; null para trancamento)"
+      }
+    },
+    {
+      "path": "/api/v1/extensions/{extension_id}/reject",
+      "method": "POST",
+      "descricao": "Coordenação rejeita a prorrogação/trancamento pendente, com motivo obrigatório. Não altera prazo_final nem situacao_registrada do aluno.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": [
+        "@requires_role('coordenacao')",
+        "@audit_operation"
+      ],
+      "request_body": {
+        "motivo": "string (obrigatório, min_length=1)"
+      },
+      "response_200": {
+        "_schema": "ExtensionResponse",
+        "id": "string",
+        "status": "string ('rejeitada')",
+        "motivo": "string"
+      },
+      "response_422": {"detail": "Motivo e obrigatorio para rejeitar a solicitacao"}
+    }
+  ]
+}

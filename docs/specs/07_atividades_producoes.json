@@ -1,0 +1,324 @@
+{
+  "modulo": "Atividades Creditáveis, Produções e Veículos",
+  "versao": "1.0.0-MVP",
+  "descricao": "Registro e validação de atividades creditáveis e produções bibliográficas. É o módulo com maior densidade de aspectos e de inferências do motor. Fluxo de validação: aluno submete → orientador emite parecer → coordenação aprova/rejeita. Motor verifica elegibilidade (RL04) e calcula pontuação de produções (RL05). Todos os 5 aspectos AOP incidem aqui.",
+
+  "arquivos_python": [
+    "backend/app/api/v1/activities.py",
+    "backend/app/api/v1/productions.py",
+    "backend/app/api/v1/activity_types.py",
+    "backend/app/api/v1/vehicles.py",
+    "backend/app/services/activity_service.py",
+    "backend/app/services/production_service.py",
+    "backend/app/models/activity.py",
+    "backend/app/models/production.py",
+    "backend/app/repositories/activity_repository.py"
+  ],
+
+  "requisitos_fundo": [
+    "Coordenação cadastra e mantém tipos de atividade creditável com pontuação, limites e status ativo",
+    "Aluno registra atividades (incluindo produções) enviando o comprovante via upload real (Firebase Storage) e a data de realização",
+    "Upload de comprovante via Firebase Storage faz parte do MVP: o arquivo é enviado ao backend, que o persiste no bucket (Admin SDK) e grava a URL de download em comprovante_url — desvio consciente vs. specs originais (que tratavam comprovante como URL string)",
+    "Fluxo de status da atividade: rascunho → enviado → (aprovado | rejeitado)",
+    "Motor verifica elegibilidade antes de contabilizar créditos (RL04)",
+    "Motor calcula pontuação de produções ponderando nível do veículo (RL05)",
+    "producao_bibliografica_validada(student_id) é inserida na FactBase quando ao menos 1 produção com status='aprovado' existe",
+    "Veículos são cadastrados pela coordenação; nível de relevância configurado em programs/prog_default/vehicle_levels/",
+    "Qualis fixo deve ser substituído por nivel_relevancia configurável — campo 'nivel' em vehicle_levels",
+    "Aspecto A03 (@track_history) versiona TipoAtividadeCreditavel quando pontuação ou limite são alterados"
+  ],
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [
+        {
+          "id": "RL04",
+          "aplicado_em": "ActivityService.validate_activity() e GET /api/v1/checklist/{student_id}",
+          "descricao": "Motor verifica elegibilidade antes de contabilizar créditos. InferenceService pré-calcula e insere fatos."
+        },
+        {
+          "id": "RL05",
+          "aplicado_em": "ProductionService.create_production() e GET /api/v1/inference/{student_id}",
+          "descricao": "Motor calcula pontuação ponderada. Resultado gravado em productions/{id}.pontuacao_calculada."
+        }
+      ],
+      "base_fatos_necessaria": [
+        "dentro_periodo_curso(activity_id, student_id) — data_realizacao >= student.data_ingresso",
+        "tem_comprovante(activity_id) — comprovante_url != null e != ''",
+        "tipo_ativo(activity_id) — activity_types/{tipo_id}.ativo = true",
+        "nao_excede_limite_categoria(activity_id, student_id) — soma créditos aprovados da categoria + pontucacao_base <= limite_maximo_creditos",
+        "producao_veiculo(producao_id, veiculo_id) — campo da produção",
+        "nivel_relevancia(veiculo_id, programa_id, nivel) — de programs/prog_default/vehicle_levels/",
+        "relevancia_peso(nivel, peso) — de programs/prog_default/qualis_weights/",
+        "pontuacao_base(producao_id, valor) — de activity_types/{tipo_id}.pontuacao_base",
+        "producao_bibliografica_validada(student_id) — ≥1 produção com status='aprovado' na coleção"
+      ]
+    },
+    "aop_aspectos": {
+      "join_points": [
+        "ActivityTypeService.create_type()          — @requires_role('coordenacao'), @audit_operation",
+        "ActivityTypeService.update_type()          — @requires_role('coordenacao'), @audit_operation, @track_history",
+        "ActivityTypeService.toggle_active()        — @requires_role('coordenacao'), @audit_operation, @track_history",
+        "ActivityService.submit_activity()          — @requires_role('aluno'), @audit_operation, @check_deadlines, @trigger_alerts",
+        "emitir_parecer (PATCH /parecer)            — @requires_role('orientador'), @requires_ownership, @audit_operation",
+        "validate_activity (PATCH /validate)        — @requires_role('coordenacao'), @audit_operation, @trigger_alerts",
+        "ProductionService.create_production()      — @requires_role('aluno'), @audit_operation, @check_deadlines",
+        "VehicleService.create_vehicle()            — @requires_role('coordenacao'), @audit_operation",
+        "VehicleService.update_vehicle_level()      — @requires_role('coordenacao'), @audit_operation"
+      ],
+      "advice": [
+        "Before: @requires_role em todas as mutações — papel correto por etapa do fluxo",
+        "Around: @audit_operation em todas as mutações — validate_activity é a operação mais crítica auditada",
+        "Before+After: @track_history em update_type() e toggle_active() — persiste snapshot de TipoAtividade em activity_types/{id}/history/",
+        "Before: @check_deadlines em submit_activity() — verifica data_realizacao está dentro do período do aluno",
+        "After: @trigger_alerts em submit_activity() — notifica orientador: 'Aluno {nome} submeteu atividade para validação'",
+        "After: @trigger_alerts em validate_activity() — notifica aluno: 'Sua atividade foi {aprovada|rejeitada}'"
+      ]
+    }
+  },
+
+  "contratos_api": [
+    {
+      "path": "/api/v1/activity-types",
+      "method": "GET",
+      "descricao": "Lista tipos de atividade creditável do programa",
+      "papeis_autorizados": ["coordenacao", "orientador", "aluno"],
+      "aspectos_aplicados": ["@requires_role('coordenacao','orientador','aluno')"],
+      "response_200": {
+        "items": [
+          {
+            "id": "string",
+            "nome": "string",
+            "categoria": "string",
+            "pontuacao_base": "float",
+            "limite_maximo_creditos": "float | null",
+            "exige_comprovante": "boolean",
+            "ativo": "boolean"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/activity-types",
+      "method": "POST",
+      "descricao": "Cria novo tipo de atividade creditável",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "request_body": {
+        "nome": "string",
+        "categoria": "string ('basico'|'especifico'|'tecnologico')",
+        "pontuacao_base": "float",
+        "limite_maximo_creditos": "float | null",
+        "exige_comprovante": "boolean",
+        "permite_multiplas": "boolean"
+      },
+      "response_201": {"id": "string", "nome": "string"}
+    },
+    {
+      "path": "/api/v1/activity-types/{type_id}",
+      "method": "PUT",
+      "descricao": "Atualiza tipo de atividade — aciona histórico AOP",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation", "@track_history"],
+      "request_body": {
+        "pontuacao_base": "float (opcional)",
+        "limite_maximo_creditos": "float | null (opcional)",
+        "ativo": "boolean (opcional)"
+      },
+      "response_200": {"message": "Tipo atualizado", "historico_criado": true}
+    },
+    {
+      "path": "/api/v1/activities",
+      "method": "GET",
+      "descricao": "Lista atividades. Aluno vê as próprias; orientador vê dos orientandos; coordenação vê todas.",
+      "papeis_autorizados": ["aluno", "orientador", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "query_params": {
+        "student_id": "string (opcional)",
+        "status": "string (opcional)",
+        "categoria": "string (opcional)"
+      },
+      "response_200": {
+        "items": [
+          {
+            "id": "string",
+            "tipo_nome": "string",
+            "categoria": "string",
+            "descricao": "string",
+            "data_realizacao": "string",
+            "comprovante_url": "string | null",
+            "creditos_gerados": "float",
+            "status": "string",
+            "parecer_orientador": "string | null",
+            "observacao_coordenacao": "string | null",
+            "elegivel": "boolean | null (calculado pelo motor quando status='aprovado')"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/activities",
+      "method": "POST",
+      "descricao": "Aluno registra nova atividade creditável",
+      "papeis_autorizados": ["aluno"],
+      "aspectos_aplicados": [
+        "@requires_role('aluno')",
+        "@audit_operation",
+        "@check_deadlines (verifica data_realizacao dentro do período do curso)",
+        "@trigger_alerts (notifica orientador após submissão)"
+      ],
+      "request_body": {
+        "tipo_id": "string",
+        "descricao": "string",
+        "data_realizacao": "string (ISO8601)",
+        "comprovante_url": "string | null (URL de download retornada por POST /api/v1/activities/{activity_id}/comprovante)",
+        "status": "string ('rascunho'|'enviado')",
+        "coauthor_student_uids": "array de users.uid de discentes cadastrados (opcional)",
+        "external_authors": "array de strings livres para autores externos (opcional)"
+      },
+      "response_201": {
+        "id": "string",
+        "elegibilidade_preliminar": "boolean (motor RL04 roda imediatamente)",
+        "notificacao_enviada": "boolean",
+        "created_activity_ids": "array com os ids das copias criadas",
+        "activity_group_id": "string | null para rastrear copias independentes"
+      },
+      "coautoria_standalone": "Cada coautor cadastrado recebe uma copia independente em students/{coautor}/activities com status enviado, ID proprio e credito cheio quando aprovada. Autores externos ficam apenas como texto. RL04 continua escopada por aluno; copias entre alunos diferentes nao sao duplicatas."
+    },
+    {
+      "path": "/api/v1/activities/{activity_id}/comprovante",
+      "method": "POST",
+      "descricao": "Faz upload real do comprovante (PDF ou imagem) ao Firebase Storage e devolve a URL de download para gravar em comprovante_url. Backend persiste no bucket via Admin SDK; o frontend nunca escreve direto no Storage.",
+      "papeis_autorizados": ["aluno"],
+      "aspectos_aplicados": ["@requires_role('aluno')", "@audit_operation"],
+      "request_body": {
+        "arquivo": "multipart/form-data (PDF|JPEG|PNG, tamanho máximo validado no backend)"
+      },
+      "response_201": {
+        "comprovante_url": "string (URL de download tokenizada gerada pelo Storage)",
+        "path_bucket": "string (comprovantes/{programa_id}/{student_id}/{activity_id}/{filename})"
+      }
+    },
+    {
+      "path": "/api/v1/activities/{activity_id}/parecer",
+      "method": "PATCH",
+      "descricao": "Orientador emite parecer textual sobre a atividade do próprio orientando (issue #48). O parecer é um campo (activities.parecer_orientador), não um estado: o status permanece 'enviado' até a decisão da coordenação. Endpoint separado de /validate para que a autorização por propriedade (A01) seja expressa só por aspectos, sem despacho de papel por ação no router.",
+      "papeis_autorizados": ["orientador (dono do aluno)"],
+      "aspectos_aplicados": [
+        "@requires_role('orientador')",
+        "@requires_ownership (A01 por propriedade — só o orientador do aluno; resolução activities→students.orientador_id→advisors.uid)",
+        "@audit_operation"
+      ],
+      "request_body": {
+        "parecer": "string (texto do parecer; obrigatório, não vazio)"
+      },
+      "response_200": "ActivityResponse (atividade atualizada; parecer_orientador preenchido como string, status inalterado)"
+    },
+    {
+      "path": "/api/v1/activities/{activity_id}/validate",
+      "method": "PATCH",
+      "descricao": "Coordenação aprova ou rejeita definitivamente a atividade submetida (issue #49). Separado de /parecer: cada endpoint tem um único papel, então a autorização vive inteiramente nos aspectos.",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": [
+        "@requires_role('coordenacao')",
+        "@audit_operation (operação mais crítica — auditada com detalhes)",
+        "@trigger_alerts (notifica aluno após decisão da coordenação)"
+      ],
+      "request_body": {
+        "acao": "string ('aprovar'|'rejeitar')",
+        "observacao": "string | null",
+        "creditos_concedidos": "float | null (coordenação pode ajustar)"
+      },
+      "response_200": {
+        "message": "string",
+        "novo_status": "string",
+        "creditos_contabilizados": "float | null",
+        "motor_inferencia_executado": "boolean",
+        "fato_gerado": "string | null (ex: 'producao_bibliografica_validada(student_id)')"
+      }
+    },
+    {
+      "path": "/api/v1/productions",
+      "method": "GET",
+      "descricao": "Lista produções bibliográficas com pontuação calculada pelo motor",
+      "papeis_autorizados": ["aluno (próprias)", "orientador (orientandos)", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "response_200": {
+        "items": [
+          {
+            "id": "string",
+            "titulo": "string",
+            "doi": "string | null",
+            "veiculo_nome": "string",
+            "nivel_veiculo": "string (ex: 'A1')",
+            "tipo_producao": "string",
+            "status_publicacao": "string",
+            "observacao": "string | null",
+            "pontuacao_calculada": "float",
+            "peso_aplicado": "float",
+            "status_atividade": "string"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/productions",
+      "method": "POST",
+      "descricao": "Aluno registra produção bibliográfica. Motor RL05 calcula pontuação imediatamente.",
+      "papeis_autorizados": ["aluno"],
+      "aspectos_aplicados": ["@requires_role('aluno')", "@audit_operation", "@check_deadlines"],
+      "request_body": {
+        "titulo": "string",
+        "doi": "string | null",
+        "veiculo_id": "string",
+        "tipo_producao": "string ('artigo'|'livro'|'capitulo') — natureza; situação de publicação em status_publicacao",
+        "status_publicacao": "string ('publicado'|'submetido'|'aceito')",
+        "observacao": "string | null",
+        "data_realizacao": "string (ISO8601)",
+        "comprovante_url": "string | null (URL de download retornada por POST /api/v1/activities/{activity_id}/comprovante)"
+      },
+      "response_201": {
+        "id": "string",
+        "activity_id": "string",
+        "pontuacao_calculada": "float",
+        "nivel_veiculo": "string",
+        "peso_aplicado": "float"
+      }
+    },
+    {
+      "path": "/api/v1/vehicles",
+      "method": "GET",
+      "descricao": "Lista veículos com nível de relevância do programa atual",
+      "papeis_autorizados": ["aluno", "orientador", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "response_200": {
+        "items": [
+          {
+            "id": "string",
+            "nome": "string",
+            "tipo": "string",
+            "sigla": "string | null",
+            "issn": "string | null",
+            "nivel": "string (de vehicle_levels do programa)",
+            "peso": "float"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/vehicles",
+      "method": "POST",
+      "descricao": "Coordenação cadastra novo veículo",
+      "papeis_autorizados": ["coordenacao"],
+      "aspectos_aplicados": ["@requires_role('coordenacao')", "@audit_operation"],
+      "request_body": {
+        "nome": "string",
+        "tipo": "string ('evento'|'revista')",
+        "sigla": "string | null",
+        "issn": "string | null",
+        "nivel": "string ('A1'|'A2'|'A3'|'A4'|'A5'|'A6'|'A7'|'A8'|'SC') — configurável em vehicle_levels"
+      },
+      "response_201": {"id": "string", "peso_atribuido": "float"}
+    }
+  ]
+}

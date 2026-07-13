@@ -70,7 +70,7 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
               className="flex-1 rounded-full transition-all duration-300"
               style={{
                 height: 5,
-                background: strength.score >= level ? strength.color : "#e2e8f0",
+                background: strength.score >= level ? strength.color : "var(--border)",
               }}
             />
           ))}
@@ -101,20 +101,20 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
               style={{
                 width: 14,
                 height: 14,
-                background: check.ok ? "#dcfce7" : "#f1f5f9",
-                border: `1.5px solid ${check.ok ? "#22c55e" : "#cbd5e1"}`,
+                background: check.ok ? "var(--tint-teal-bg)" : "var(--muted)",
+                border: `1.5px solid ${check.ok ? "var(--tint-teal-border)" : "var(--border)"}`,
                 transition: "all 0.2s",
               }}
             >
               {check.ok && (
                 <svg width="8" height="8" viewBox="0 0 8 8" fill="none">
-                  <path d="M1.5 4L3 5.5L6.5 2" stroke="#16a34a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M1.5 4L3 5.5L6.5 2" stroke="var(--tint-teal-text)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               )}
             </div>
             <span style={{
               fontSize: "11px",
-              color: check.ok ? "#16a34a" : "#94a3b8",
+              color: check.ok ? "var(--tint-teal-text)" : "var(--muted-foreground)",
               fontWeight: check.ok ? 600 : 400,
               transition: "color 0.2s",
             }}>

@@ -1,9 +1,70 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useEffect, useLayoutEffect, useState, ReactNode } from "react";
 
-export type UserRole = "aluno" | "orientador" | "coordenacao";
+import { useAuth } from "@/hooks/useAuth";
+import { useNotifications } from "@/hooks/useNotifications";
+
+export type UserRole = "aluno" | "orientador" | "coordenacao" | "adm";
+export type ActiveView = "aluno" | "orientador" | "coordenador";
+export type FontSizePreference = "small" | "normal" | "large";
+export interface NotificationPreferences {
+  email: boolean;
+  in_app: boolean;
+  work_plan: boolean;
+  transfers: boolean;
+  activities: boolean;
+  extensions: boolean;
+}
+
+const DARK_MODE_STORAGE_KEY = "saga:darkMode";
+
+function getInitialDarkMode(): boolean {
+  if (typeof window === "undefined") return false;
+
+  try {
+    const stored = window.localStorage.getItem(DARK_MODE_STORAGE_KEY);
+    if (stored === "true") return true;
+    if (stored === "false") return false;
+  } catch {
+    // Sem storage: cai para a preferencia do sistema abaixo.
+  }
+
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ?? false;
+}
+
+const FONT_SIZE_STORAGE_KEY = "saga:fontSizePreference";
+const FONT_SIZE_SCALES: Record<FontSizePreference, string> = {
+  small: "0.875",
+  normal: "1",
+  large: "1.125",
+};
+
+function isFontSizePreference(value: string | null): value is FontSizePreference {
+  return value === "small" || value === "normal" || value === "large";
+}
+
+function getInitialFontSizePreference(): FontSizePreference {
+  if (typeof window === "undefined") return "normal";
+
+  try {
+    const stored = window.localStorage.getItem(FONT_SIZE_STORAGE_KEY);
+    return isFontSizePreference(stored) ? stored : "normal";
+  } catch {
+    return "normal";
+  }
+}
+
+function applyFontSizePreference(preference: FontSizePreference): void {
+  if (typeof document === "undefined") return;
+
+  document.documentElement.style.setProperty(
+    "--app-font-scale",
+    FONT_SIZE_SCALES[preference],
+  );
+  document.documentElement.dataset.fontSize = preference;
+}
 
 export type PageId =
-  | "login" | "register" | "password-recovery" | "change-password" | "first-access"
+  | "login" | "register" | "password-recovery" | "first-access"
   | "dashboard"
   | "alunos" | "aluno-detail"
   | "orientadores" | "orientador-detail"
@@ -11,12 +72,16 @@ export type PageId =
   | "atividades"
   | "producoes"
   | "checklist"
+  | "solicitacoes"
   | "prorrogacoes"
+  | "transferencias"
+  | "registration-requests"
   | "relatorios"
   | "inferencia"
   | "auditoria"
   | "notificacoes"
-  | "configuracoes";
+  | "configuracoes"
+  | "departamentos";
 
 export interface User {
   id: string;
@@ -24,10 +89,14 @@ export interface User {
   email: string;
   role: UserRole;
   avatar?: string;
+  student_id?: string;
+  advisor_id?: string;
+  programa_id?: string;
   matricula?: string;
   programa?: string;
   orientador?: string;
   departamento?: string;
+  notificationPreferences: NotificationPreferences;
 }
 
 interface AppContextType {
@@ -38,66 +107,147 @@ interface AppContextType {
   darkMode: boolean;
   notificationCount: number;
   mobileMenuOpen: boolean;
-  setCurrentUser: (user: User | null) => void;
+  loading: boolean;
+  profileLoading: boolean;
+  isAuthenticated: boolean;
+  token: string | null;
+  profileUnavailable: boolean;
+  activeView: ActiveView;
+  isMultiRoleAdvisor: boolean;
+  fontSizePreference: FontSizePreference;
+  retryProfile: () => Promise<void>;
+  login: (email: string, senha: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
+  setActiveView: (view: ActiveView) => void;
   setCurrentPage: (page: PageId) => void;
   setSelectedStudentId: (id: string | null) => void;
   setSidebarCollapsed: (v: boolean) => void;
   toggleDarkMode: () => void;
+  setFontSizePreference: (preference: FontSizePreference) => void;
   logout: () => void;
   setMobileMenuOpen: (v: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const DEMO_USERS: Record<UserRole, User> = {
-  coordenacao: {
-    id: "1",
-    name: "Prof. Dr. Roberto Almeida",
-    email: "roberto.almeida@ppg.ufx.br",
-    role: "coordenacao",
-    departamento: "Ciência da Computação",
-    programa: "PPGCC - Programa de Pós-Graduação em Ciência da Computação",
-  },
-  orientador: {
-    id: "2",
-    name: "Profa. Dra. Carla Mendes",
-    email: "carla.mendes@ppg.ufx.br",
-    role: "orientador",
-    departamento: "Ciência da Computação",
-    programa: "PPGCC",
-  },
-  aluno: {
-    id: "3",
-    name: "Lucas Ferreira Silva",
-    email: "lucas.silva@pos.ufx.br",
-    role: "aluno",
-    matricula: "2023001",
-    programa: "PPGCC - Doutorado",
-    orientador: "Profa. Dra. Carla Mendes",
-  },
-};
-
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const {
+    currentUser: firebaseUser,
+    profile,
+    profileError,
+    token,
+    login,
+    loginWithGoogle,
+    logout: signOut,
+    loading,
+    profileLoading,
+    retryProfile,
+  } = useAuth();
+
+  const { unreadCount } = useNotifications();
+
   const [currentPage, setCurrentPage] = useState<PageId>("login");
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [darkMode, setDarkMode] = useState(false);
-  const [notificationCount] = useState(5);
+  const [darkMode, setDarkMode] = useState(getInitialDarkMode);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeView, setActiveViewState] = useState<ActiveView>("aluno");
+  const [fontSizePreference, setFontSizePreferenceState] = useState<FontSizePreference>(
+    getInitialFontSizePreference,
+  );
 
+  // O perfil vem do backend (GET /auth/me) via useAuth; mapeamos para o formato
+  // de exibicao consumido pelo layout. Campos sem origem no backend ficam vazios.
+  const currentUser: User | null = profile
+    ? {
+        id: profile.uid,
+        name: profile.nome,
+        email: profile.email,
+        role: profile.role,
+        programa: profile.programaId,
+        programa_id: profile.programaId,
+        departamento: profile.departamento ?? undefined,
+        matricula: profile.matricula ?? undefined,
+        student_id: profile.studentId ?? undefined,
+        advisor_id: profile.advisorId ?? undefined,
+        notificationPreferences: profile.notificationPreferences,
+      }
+    : null;
+
+  const defaultView: ActiveView =
+    profile?.role === "coordenacao"
+      ? "coordenador"
+      : profile?.role === "orientador"
+        ? "orientador"
+        : "aluno";
+
+  const isMultiRoleAdvisor = currentUser?.role === "coordenacao" && Boolean(currentUser.advisor_id);
+
+  useEffect(() => {
+    setActiveViewState(defaultView);
+  }, [defaultView, profile?.uid]);
+
+  const setActiveView = (view: ActiveView) => {
+    if (!currentUser) return;
+
+    if (currentUser.role === "coordenacao") {
+      const canUseAdvisorView = view === "orientador" && isMultiRoleAdvisor;
+      const canUseCoordinatorView = view === "coordenador";
+
+      setActiveViewState(canUseAdvisorView || canUseCoordinatorView ? view : "coordenador");
+      return;
+    }
+
+    if (currentUser.role === "orientador") {
+      setActiveViewState("orientador");
+      return;
+    }
+
+    setActiveViewState("aluno");
+  };
+
+  // Sessao Firebase valida, mas perfil indisponivel (GET /auth/me falhou). Distinto
+  // de "deslogado": o usuario permanece na app em estado degradado, com retry. A guarda
+  // de rota vive no PrivateRoute, que suprime o redirect quando profileUnavailable e true.
+  const profileUnavailable = !!firebaseUser && profileError && !profile;
+
+  // Sessao Firebase ativa: o PrivateRoute redireciona da pagina de login para o dashboard
+  // assim que existe sessao, mostrando o skeleton enquanto profileLoading e true.
+  const isAuthenticated = !!firebaseUser;
+
+  // Persistimos apenas na escolha explicita do usuario: sem preferencia salva, o
+  // app continua seguindo prefers-color-scheme a cada carregamento.
   const toggleDarkMode = () => {
-    setDarkMode((d) => {
-      const next = !d;
-      document.documentElement.classList.toggle("dark", next);
-      return next;
-    });
+    const next = !darkMode;
+    setDarkMode(next);
+    try {
+      window.localStorage.setItem(DARK_MODE_STORAGE_KEY, String(next));
+    } catch {
+      // A preferencia de tema ainda funciona na sessao atual mesmo sem storage.
+    }
+  };
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+  }, [darkMode]);
+
+  useLayoutEffect(() => {
+    applyFontSizePreference(fontSizePreference);
+    try {
+      window.localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSizePreference);
+    } catch {
+      // A preferencia visual ainda funciona na sessao atual mesmo sem storage.
+    }
+  }, [fontSizePreference]);
+
+  const setFontSizePreference = (preference: FontSizePreference) => {
+    setFontSizePreferenceState(preference);
   };
 
   const logout = () => {
-    setCurrentUser(null);
-    setCurrentPage("login");
+    void signOut();
     setMobileMenuOpen(false);
+    // PrivateRoute redireciona para "login" quando o perfil e limpo.
   };
 
   return (
@@ -108,13 +258,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         selectedStudentId,
         sidebarCollapsed,
         darkMode,
-        notificationCount,
+        notificationCount: unreadCount,
         mobileMenuOpen,
-        setCurrentUser,
+        loading,
+        profileLoading,
+        token,
+        isAuthenticated,
+        profileUnavailable,
+        activeView,
+        isMultiRoleAdvisor,
+        fontSizePreference,
+        retryProfile,
+        login,
+        loginWithGoogle,
+        setActiveView,
         setCurrentPage,
         setSelectedStudentId,
         setSidebarCollapsed,
         toggleDarkMode,
+        setFontSizePreference,
         logout,
         setMobileMenuOpen,
       }}
@@ -129,5 +291,3 @@ export function useApp() {
   if (!ctx) throw new Error("useApp must be used within AppProvider");
   return ctx;
 }
-
-export { DEMO_USERS };

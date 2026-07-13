@@ -1,0 +1,219 @@
+{
+  "meta": {
+    "projeto": "SAGA — Sistema de Acompanhamento e Gestão Acadêmica",
+    "tech_lead_ia": "Claude (Anthropic)",
+    "metodologia": "SDD + Kanban + Regras de Sessão Estritas",
+    "versao_relatorio": "1.3.0",
+    "prazo_github": "2026-06-07T23:59:00",
+    "prazo_entrega_final": "2026-07-13T00:00:00"
+  },
+  "ultima_atualizacao": "2026-06-04",
+  "sprint_atual": 1,
+  "foco_mvp": "Implementar backend FastAPI + motor de inferência + 5 aspectos AOP e integrar à UI existente",
+  "progresso_geral_porcento": 22,
+  "nota_atual_estimada": "3.5 / 10 (diagnóstico inicial) — planejamento concluído, pronto para implementação",
+
+  "specs_geradas": {
+    "status": "COMPLETO",
+    "arquivos": [
+      { "arquivo": "docs/specs/01_motor_inferencia.json",    "conteudo": "5 módulos Python, 5 regras declarativas com head/body/casos de teste, base de fatos, contrato GET /inference/{id}" },
+      { "arquivo": "docs/specs/02_aspectos_aop.json",        "conteudo": "5 aspectos com join points, advice (before/after/around), mecanismo Python e weaving documentados" },
+      { "arquivo": "docs/specs/03_firebase_schema.json",     "conteudo": "Schema completo Firestore, mapeamento das 17 páginas, seed de fatos de configuração do motor" },
+      { "arquivo": "docs/specs/04_autenticacao.json",        "conteudo": "FastAPI + Firebase Auth JWT, fluxo de primeiro acesso, custom claims, 4 endpoints" },
+      { "arquivo": "docs/specs/05_discentes.json",           "conteudo": "CRUD alunos/orientadores, fatos base do motor, 3 aspectos aplicados, 9 endpoints" },
+      { "arquivo": "docs/specs/06_plano_trabalho.json",      "conteudo": "Plano, etapas, tasks, progresso. Fatos plano_concluido/task_concluida. 4 aspectos. 7 endpoints" },
+      { "arquivo": "docs/specs/07_atividades_producoes.json","conteudo": "Tipos, atividades, produções, veículos, fluxo validação. Motor RL04+RL05. Todos 5 aspectos. 9 endpoints" },
+      { "arquivo": "docs/specs/08_checklist_prorrogacoes.json","conteudo": "Checklist sob demanda pelo motor (RL01+RL02+RL03), prorrogações, InferenceService. 5 endpoints" },
+      { "arquivo": "docs/specs/09_relatorios_dashboard.json","conteudo": "3 dashboards por papel, 5 relatórios gerenciais, audit-logs paginado. 9 endpoints" },
+      { "arquivo": "docs/specs/10_integracao_frontend.json", "conteudo": "17 páginas mapeadas: dado hardcoded → endpoint real. onSnapshot para notificações. Ordem de integração em 5 fases." }
+    ],
+    "total_endpoints_especificados": 59,
+    "aspectos_mapeados_por_modulo": {
+      "05_discentes": ["A01 autorização", "A02 auditoria", "A03 histórico"],
+      "06_plano_trabalho": ["A01", "A02", "A03", "A04 prazos", "A05 alertas"],
+      "07_atividades_producoes": ["A01", "A02", "A03", "A04", "A05"],
+      "08_checklist_prorrogacoes": ["A01", "A02", "A04", "A05"],
+      "09_relatorios": ["A01", "A02"]
+    },
+    "regras_motor_mapeadas_por_modulo": {
+      "05_discentes": ["Fatos: proficiencia_comprovada, qualificacao_aprovada"],
+      "06_plano_trabalho": ["Fatos: task_concluida, plano_concluido, plano_atrasado"],
+      "07_atividades_producoes": ["RL04 elegibilidade", "RL05 pontuação produção"],
+      "08_checklist_prorrogacoes": ["RL01 apto_defesa", "RL02 creditos_validos", "RL03 em_risco"]
+    }
+  },
+
+  "diagnostico_inicial": {
+    "pontos_fortes": [
+      "17 páginas React cobrindo todos os módulos do enunciado",
+      "Design system robusto (shadcn/ui + Tailwind + Recharts)",
+      "Dashboards segmentados por papel com gráficos funcionais",
+      "WorkPlanPage com Kanban / Timeline / Gantt / Calendário",
+      "ActivitiesPage com fluxo de validação por etapas"
+    ],
+    "lacunas_criticas": [
+      "Zero código Python — FastAPI ausente",
+      "Motor de inferência ausente (InferencePage é estática)",
+      "Zero aspectos AOP implementados",
+      "Firebase não configurado",
+      "100% dos dados são hardcoded como constantes TypeScript",
+      "Autenticação simulada — qualquer e-mail/senha funciona",
+      "react-router instalado mas não usado"
+    ],
+    "divida_tecnica_ui": [
+      "ActivitiesPage.tsx: 1170 linhas — viola Clean Code",
+      "InferencePage.tsx: 1041 linhas — viola Clean Code",
+      "Status inconsistente: StudentsPage usa 'critico', Dashboard usa 'em-risco'",
+      "Qualis fixo (A1/A2/B1...) em vez de nível configurável por programa"
+    ]
+  },
+
+  "regras_de_sessao": {
+    "1_validacao_previa": "Antes de gerar qualquer spec ou código, listar dúvidas no chat e aguardar aprovação.",
+    "2_relatorio_continuo": "A cada prompt respondido, atualizar este arquivo.",
+    "3_foco_mvp": "Ignorar perfumarias visuais. Foco total em backend, motor lógico, aspectos e integração."
+  },
+
+  "decisoes_de_negocio": {
+    "D004_creditos_por_grupo": {
+      "defaults_mvp": { "grupo_basico_min": 12, "grupo_especifico_min": 8, "grupo_tecnologico_max": 4, "total_min": 24 },
+      "sessao": 2
+    },
+    "D005_negacao_motor": { "estrategia": "condições positivas afirmativas — sem NAF", "sessao": 2 },
+    "D006_pesos_relevancia": { "defaults_mvp": { "A1": 2.0, "A2": 1.5, "B": 1.0, "C": 0.5 }, "sessao": 2 },
+    "D007_situacao_inferida_vs_registrada": { "ui": "badge de conflito quando divergem", "sessao": 2 },
+    "D008_qualificacao_e_proficiencia": { "tipo": "fatos booleanos manuais pela coordenação", "sessao": 2 },
+    "D009_plano_concluido": { "definicao": "todas tasks pré-defesa em status 'concluida'", "sessao": 2 },
+    "D010_prorrogacao_limite": { "defaults": "max 1, 6 meses — fatos configuráveis", "sessao": 2 },
+    "D011_comprovante_mvp": { "tipo": "URL/texto livre — Storage opcional", "sessao": 2 },
+    "D012_tenant": { "tipo": "single-tenant com programa_id nas entidades", "sessao": 2 },
+    "D013_primeiro_acesso": { "fluxo": "coordenação cria convite; usuário define senha via link", "sessao": 2 },
+    "D014_escopo_historico": { "entidades": ["plano", "checklist", "tipo_atividade", "situacao_registrada"], "sessao": 2 },
+    "D015_notificacoes": { "mecanismo": "Firestore onSnapshot no frontend — aspecto A05 escreve, frontend reage", "sessao": 3 }
+  },
+
+  "prioridades_absolutas": [
+    { "ordem": 1, "acao": "Criar repositório GitHub privado e adicionar professores (paulosevero, sequincozes)", "prazo": "2026-06-07", "risco": "CRÍTICO — NOk para o grupo inteiro se negligenciado" },
+    { "ordem": 2, "acao": "Scaffold backend FastAPI + estrutura de pastas + endpoint /health", "prazo": "Semana 1" },
+    { "ordem": 3, "acao": "Motor de inferência isolado com testes pytest", "prazo": "Semana 1–2" },
+    { "ordem": 4, "acao": "5 aspectos AOP com documentação de join points / advices / weaving", "prazo": "Semana 2–3" },
+    { "ordem": 5, "acao": "Integração frontend ↔ backend em 5 fases (ver 10_integracao_frontend.json)", "prazo": "Semana 3–5" }
+  ],
+
+  "decisoes_tomadas": [
+    { "id": "D001", "decisao": "Usar JSON como formato de especificação de módulos", "sessao": 1 },
+    { "id": "D002", "decisao": "Não refatorar frontend agora — integrar incrementalmente", "sessao": 1 },
+    { "id": "D003", "decisao": "Motor de inferência começa em isolamento total antes do domínio acadêmico", "sessao": 1 },
+    { "id": "D004", "decisao": "Créditos por grupo como fatos configuráveis — defaults: básico≥12, específico≥8, tecnológico≤4, total≥24", "sessao": 2 },
+    { "id": "D005", "decisao": "em_risco modelado por condições positivas afirmativas — sem NAF", "sessao": 2 },
+    { "id": "D006", "decisao": "Escala de relevância como fatos configuráveis: A1=2.0, A2=1.5, B=1.0, C=0.5", "sessao": 2 },
+    { "id": "D007", "decisao": "Situação registrada prevalece formalmente; inferida prevalece para alertas; UI exibe ambas", "sessao": 2 },
+    { "id": "D008", "decisao": "Qualificação e proficiência são fatos manuais registrados pela coordenação", "sessao": 2 },
+    { "id": "D009", "decisao": "Plano concluído = todas as tasks pré-defesa em status 'concluída'", "sessao": 2 },
+    { "id": "D010", "decisao": "Prorrogação: max 1, duração 6 meses — fatos configuráveis", "sessao": 2 },
+    { "id": "D011", "decisao": "Comprovante = URL/texto livre no MVP; Firebase Storage opcional", "sessao": 2 },
+    { "id": "D012", "decisao": "Single-tenant com programa_id presente nas entidades", "sessao": 2 },
+    { "id": "D013", "decisao": "Coordenação cria contas; usuário define senha via link de primeiro acesso", "sessao": 2 },
+    { "id": "D014", "decisao": "Histórico cobre: plano, tipo de atividade e situação registrada do aluno", "sessao": 2 },
+    { "id": "D015", "decisao": "Notificações via Firestore onSnapshot (tempo real, sem polling)", "sessao": 3 }
+  ],
+
+  "perguntas_bloqueantes_ia": [],
+
+  "historico_conversas": [
+    {
+      "sessao": 1,
+      "data": "2026-06-04",
+      "acoes_realizadas": [
+        "Leitura completa de docs/enunciado.md e diagnóstico arquitetural",
+        "Varredura da estrutura do repositório existente",
+        "Criação do session_report.json com diagnóstico e 12 perguntas bloqueantes"
+      ],
+      "decisoes_tomadas": ["D001", "D002", "D003"]
+    },
+    {
+      "sessao": 2,
+      "data": "2026-06-04",
+      "acoes_realizadas": [
+        "Todas as 12 perguntas bloqueantes respondidas",
+        "Decisões D004–D014 registradas"
+      ],
+      "decisoes_tomadas": ["D004", "D005", "D006", "D007", "D008", "D009", "D010", "D011", "D012", "D013", "D014"]
+    },
+    {
+      "sessao": 3,
+      "data": "2026-06-04",
+      "acoes_realizadas": [
+        "Plano de 10 specs apresentado e aprovado",
+        "D015 definida (onSnapshot para notificações)",
+        "10 arquivos JSON de spec criados em docs/specs/",
+        "59 endpoints especificados com request/response",
+        "5 aspectos AOP com join points, advice e weaving documentados",
+        "5 regras lógicas com casos de teste especificadas",
+        "17 páginas React mapeadas para chamadas de API reais",
+        "Schema Firestore completo com seed de fatos do motor",
+        "session_report.json atualizado para v1.3.0"
+      ],
+      "decisoes_tomadas": ["D015"],
+      "proximos_passos": [
+        "Implementar motor de inferência (backend/inference_engine/) seguindo 01_motor_inferencia.json",
+        "Implementar os 5 aspectos AOP (backend/app/aspects/) seguindo 02_aspectos_aop.json",
+        "Configurar Firebase project e executar seed (03_firebase_schema.json)",
+        "Scaffold FastAPI + endpoint /health (04_autenticacao.json)",
+        "URGENTE: criar repositório GitHub e adicionar paulosevero + sequincozes até 07/06/2026 23h59",
+        "Executar: export GITHUB_TOKEN='ghp_...' && bash scripts/setup_github_issues.sh"
+      ]
+    }
+  ],
+
+  "status_por_integrante": {
+    "@PPrauchner":    { "tarefas_concluidas": [], "tarefas_sprint": ["#01 Setup GitHub (URGENTE)", "#02 Implementar FastAPI core"] },
+    "@Inaurrara":    { "tarefas_concluidas": [], "tarefas_sprint": ["#03 Implementar terms.py"] },
+    "@Lorenzoficher": { "tarefas_concluidas": [], "tarefas_sprint": ["#04 Implementar unification.py + substitution.py"] },
+    "@rjnlopes03":   { "tarefas_concluidas": [], "tarefas_sprint": ["#05 Implementar firebase.py + FirebaseRepository + seed"] },
+    "@bielGD23":     { "tarefas_concluidas": [], "tarefas_sprint": ["#06 Implementar resolver.py + knowledge_base.py"] }
+  },
+
+  "kanban_issues": {
+    "status": "SCRIPT GERADO — aguardando execução manual com GITHUB_TOKEN",
+    "script": "scripts/setup_github_issues.sh",
+    "total_issues": 22,
+    "decisoes_reorganizacao": [
+      "RL05 migrou de #09 Sprint 2 (Lorenzoficher) para #14 Sprint 3 — coesão com InferenceService",
+      "A03 HistoryMeta migrou de #11 Sprint 2 (bielGD23) para #17 Sprint 3 — após serviços de domínio existirem",
+      "#14 dividido em #14 (InferenceService core + RL05) e #15 (endpoints /inference + /checklist) — mesmo responsável, Lorenzoficher",
+      "Testes pytest distribuídos na issue de quem implementa — sem issue dedicada",
+      "Issues descrevem implementação de conteúdo (arquitetura pré-criada pelo time)"
+    ],
+    "sprint_1": [
+      {"id": "#01", "responsavel": "@PPrauchner",   "titulo": "Configurar repositório GitHub + Kanban"},
+      {"id": "#02", "responsavel": "@PPrauchner",   "titulo": "Implementar FastAPI core (main.py, config, docker-compose, /health)"},
+      {"id": "#03", "responsavel": "@Inaurrara",    "titulo": "Implementar terms.py (Atom, Variable, Compound) + testes"},
+      {"id": "#04", "responsavel": "@Lorenzoficher","titulo": "Implementar unification.py + substitution.py + testes"},
+      {"id": "#05", "responsavel": "@rjnlopes03",   "titulo": "Implementar firebase.py + FirebaseRepository + seed_firestore.py"},
+      {"id": "#06", "responsavel": "@bielGD23",     "titulo": "Implementar resolver.py + knowledge_base.py + testes"}
+    ],
+    "sprint_2": [
+      {"id": "#07", "responsavel": "@PPrauchner",   "titulo": "Implementar auth: core/auth.py + api/v1/auth.py (3 endpoints)"},
+      {"id": "#08", "responsavel": "@Inaurrara",    "titulo": "Implementar RL01 (defense_eligibility) + RL02 (credit_validation) + testes"},
+      {"id": "#09", "responsavel": "@Lorenzoficher","titulo": "Implementar RL03 (academic_status, 4 cláusulas) + RL04 (activity_eligibility) + testes"},
+      {"id": "#10", "responsavel": "@rjnlopes03",   "titulo": "Implementar aspect_config + authorization (@requires_role) + audit (@audit_operation+inspect) + docstrings"},
+      {"id": "#11", "responsavel": "@bielGD23",     "titulo": "Implementar deadline_validation (@check_deadlines) + alerts (@trigger_alerts) + docstrings"}
+    ],
+    "sprint_3": [
+      {"id": "#12", "responsavel": "@PPrauchner",   "titulo": "Implementar módulo Discentes (students + advisors, 11 endpoints, A01+A02+A03)"},
+      {"id": "#13", "responsavel": "@Inaurrara",    "titulo": "Implementar módulo Plano de Trabalho (7 endpoints, todos os 5 aspectos)"},
+      {"id": "#14", "responsavel": "@Lorenzoficher","titulo": "Implementar RL05 (production_scoring) + inference_service.py completo"},
+      {"id": "#15", "responsavel": "@Lorenzoficher","titulo": "Implementar api/v1/inference.py + api/v1/checklist.py + checklist_service.py", "blocked_by": "#14"},
+      {"id": "#16", "responsavel": "@rjnlopes03",   "titulo": "Implementar módulo Atividades + Tipos (8 endpoints, todos os 5 aspectos)"},
+      {"id": "#17", "responsavel": "@bielGD23",     "titulo": "Implementar A03 HistoryMeta + módulo Produções + Veículos + Prorrogações (8 endpoints)"}
+    ],
+    "sprint_4": [
+      {"id": "#18", "responsavel": "@PPrauchner",   "titulo": "Frontend Auth + Router (firebase.ts, useAuth, PrivateRoute, LoginPage, AlunoDashboard, useNotifications)"},
+      {"id": "#19", "responsavel": "@Inaurrara",    "titulo": "Frontend Gestão: StudentsPage + AdvisorsPage + WorkPlanPage integrados"},
+      {"id": "#20", "responsavel": "@Lorenzoficher","titulo": "Frontend Paradigmas: ActivitiesPage + ProductionsPage + ChecklistPage + InferencePage integrados"},
+      {"id": "#21", "responsavel": "@rjnlopes03",   "titulo": "Backend Relatórios (9 endpoints) + Frontend: ReportsPage + AuditPage + Dashboards Orientador/Coord"},
+      {"id": "#22", "responsavel": "@bielGD23",     "titulo": "Frontend Final: ExtensionsPage + NotificationsPage + SettingsPage + correções de status + substituição Qualis"}
+    ]
+  }
+}

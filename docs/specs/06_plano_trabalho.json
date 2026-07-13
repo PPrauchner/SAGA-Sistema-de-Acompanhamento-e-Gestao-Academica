@@ -1,0 +1,207 @@
+{
+  "modulo": "Plano de Trabalho — Etapas, Tasks e Progresso",
+  "versao": "1.0.0-MVP",
+  "descricao": "Gerenciamento do plano de trabalho do aluno dividido em etapas e tasks. Orientador cria e mantém o plano; aluno registra atualizações de progresso. Gera os fatos task_concluida e plano_concluido para o motor lógico. Aspectos aplicados: autorização, auditoria, histórico de plano, validação de prazos e alertas.",
+
+  "arquivos_python": [
+    "backend/app/api/v1/work_plan.py",
+    "backend/app/services/work_plan_service.py",
+    "backend/app/models/work_plan.py",
+    "backend/app/repositories/work_plan_repository.py"
+  ],
+
+  "requisitos_fundo": [
+    "Cada aluno tem exatamente 1 plano de trabalho no MVP",
+    "Orientador cria etapas e tasks apenas para os próprios orientandos",
+    "Aluno registra atualizações de progresso apenas nas próprias tasks",
+    "Quando todas tasks não-defesa de um aluno estão com status='concluida': InferenceService insere fato plano_concluido(student_id)",
+    "Aspecto A04 (@check_deadlines) verifica task.prazo antes de aceitar atualização de progresso",
+    "Aspecto A05 (@trigger_alerts) notifica o orientador após cada atualização de progresso do aluno",
+    "Aspecto A03 (@track_history) versiona o plano quando seus campos principais são alterados",
+    "WorkPlanPage atual usa dados hardcoded: substituir por GET /api/v1/work-plan/{student_id}"
+  ],
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [
+        "plano_concluido(A) :- todas_tasks_nao_defesa_concluidas(A)",
+        "plano_atrasado(A) — fato derivado pelo InferenceService quando progresso_percentual < progresso_esperado(data_atual)"
+      ],
+      "base_fatos_necessaria": [
+        "task_concluida(task_id, student_id) — inserido quando task.status = 'concluida' e etapa != 'defesa'",
+        "plano_concluido(student_id) — inserido pelo InferenceService após verificar todas as tasks",
+        "plano_atrasado(student_id) — inserido pelo InferenceService com base em progresso_percentual vs tempo decorrido"
+      ]
+    },
+    "aop_aspectos": {
+      "join_points": [
+        "WorkPlanService.create_plan()              — @requires_role('orientador'), @audit_operation",
+        "WorkPlanService.update_plan()              — @requires_role('orientador'), @audit_operation, @track_history",
+        "WorkPlanService.create_stage()             — @requires_role('orientador'), @audit_operation",
+        "WorkPlanService.update_stage()             — @requires_role('orientador'), @audit_operation",
+        "WorkPlanService.create_task()              — @requires_role('orientador'), @audit_operation",
+        "WorkPlanService.update_task()              — @requires_role('orientador'), @audit_operation",
+        "WorkPlanService.update_task_status()       — @requires_role('orientador'), @audit_operation",
+        "WorkPlanService.add_progress_update()      — @requires_role('aluno'), @audit_operation, @check_deadlines, @trigger_alerts"
+      ],
+      "advice": [
+        "Before: @requires_role verifica papel e propriedade (orientador só acessa próprios orientandos)",
+        "Around: @audit_operation em todas as mutações",
+        "Before+After: @track_history na update_plan() — persiste snapshot em students/{id}/work_plan/{plan_id}/history/",
+        "Before: @check_deadlines em add_progress_update() — verifica task.prazo; se task.prazo < today(): marca task como 'atrasada' e insere fato prazo_estourado_task",
+        "After: @trigger_alerts em add_progress_update() — notifica orientador: 'Aluno {nome} registrou progresso em {task_titulo}'"
+      ]
+    }
+  },
+
+  "contratos_api": [
+    {
+      "path": "/api/v1/work-plan/{student_id}",
+      "method": "GET",
+      "descricao": "Retorna o plano completo do aluno com etapas, tasks e últimas atualizações",
+      "papeis_autorizados": ["aluno (próprio)", "orientador (orientandos)", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "request_body": null,
+      "response_200": {
+        "plan_id": "string",
+        "student_id": "string",
+        "titulo": "string",
+        "data_inicio": "string (ISO8601)",
+        "data_fim_prevista": "string (ISO8601)",
+        "progresso_percentual": "float",
+        "status_geral": "string",
+        "stages": [
+          {
+            "stage_id": "string",
+            "nome": "string",
+            "ordem": "int",
+            "data_inicio": "string",
+            "data_fim": "string",
+            "status": "string",
+            "tasks": [
+              {
+                "task_id": "string",
+                "titulo": "string",
+                "descricao": "string",
+                "prazo": "string",
+                "status": "string",
+                "prioridade": "string",
+                "ultima_atualizacao": {
+                  "conteudo": "string",
+                  "percentual": "float",
+                  "criado_em": "string"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/api/v1/work-plan/{student_id}",
+      "method": "POST",
+      "descricao": "Cria o plano de trabalho do aluno (apenas orientador responsável)",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation"],
+      "request_body": {
+        "titulo": "string",
+        "data_inicio": "string (ISO8601)",
+        "data_fim_prevista": "string (ISO8601)"
+      },
+      "response_201": {"plan_id": "string", "message": "Plano criado"}
+    },
+    {
+      "path": "/api/v1/work-plan/{plan_id}",
+      "method": "PUT",
+      "descricao": "Atualiza dados gerais do plano — aciona aspecto de histórico",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation", "@track_history"],
+      "request_body": {
+        "titulo": "string (opcional)",
+        "data_fim_prevista": "string ISO8601 (opcional)"
+      },
+      "response_200": {"message": "Plano atualizado", "historico_criado": true}
+    },
+    {
+      "path": "/api/v1/work-plan/{plan_id}/stages",
+      "method": "POST",
+      "descricao": "Adiciona etapa ao plano",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation"],
+      "request_body": {
+        "nome": "string ('revisao_bibliografica'|'definicao_problema'|'desenvolvimento'|'experimentos'|'escrita'|'qualificacao'|'defesa')",
+        "ordem": "int",
+        "data_inicio": "string",
+        "data_fim": "string"
+      },
+      "response_201": {"stage_id": "string"}
+    },
+    {
+      "path": "/api/v1/stages/{stage_id}/tasks",
+      "method": "POST",
+      "descricao": "Adiciona task a uma etapa",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation"],
+      "request_body": {
+        "titulo": "string",
+        "descricao": "string",
+        "prazo": "string (ISO8601)",
+        "prioridade": "string ('baixa'|'media'|'alta')"
+      },
+      "response_201": {"task_id": "string"}
+    },
+    {
+      "path": "/api/v1/tasks/{task_id}/status",
+      "method": "PATCH",
+      "descricao": "Orientador atualiza status de uma task",
+      "papeis_autorizados": ["orientador"],
+      "aspectos_aplicados": ["@requires_role('orientador')", "@audit_operation"],
+      "request_body": {
+        "status": "string ('pendente'|'em_andamento'|'concluida'|'atrasada')"
+      },
+      "response_200": {
+        "message": "Status atualizado",
+        "fato_motor_gerado": "task_concluida(task_id, student_id) se status='concluida'"
+      }
+    },
+    {
+      "path": "/api/v1/tasks/{task_id}/updates",
+      "method": "POST",
+      "descricao": "Aluno registra atualização de progresso em uma task",
+      "papeis_autorizados": ["aluno"],
+      "aspectos_aplicados": [
+        "@requires_role('aluno')",
+        "@audit_operation",
+        "@check_deadlines (verifica task.prazo antes de aceitar)",
+        "@trigger_alerts (notifica orientador após persistir)"
+      ],
+      "request_body": {
+        "conteudo": "string",
+        "percentual": "float (0-100)"
+      },
+      "response_201": {
+        "update_id": "string",
+        "alerta_prazo": "boolean (true se task.prazo < date.today() + 7 dias)",
+        "notificacao_enviada_ao_orientador": "boolean"
+      }
+    },
+    {
+      "path": "/api/v1/tasks/{task_id}/updates",
+      "method": "GET",
+      "descricao": "Lista todas as atualizações de progresso de uma task",
+      "papeis_autorizados": ["aluno (própria task)", "orientador", "coordenacao"],
+      "aspectos_aplicados": ["@requires_role('aluno','orientador','coordenacao')"],
+      "response_200": {
+        "items": [
+          {
+            "update_id": "string",
+            "conteudo": "string",
+            "percentual": "float",
+            "autor_nome": "string",
+            "criado_em": "string"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,170 +1,315 @@
-import { useState } from "react";
-import { Search, Plus, Users, BookOpen, Award, Eye } from "lucide-react";
+import { FormEvent, useEffect, useState } from "react";
+import { ArrowRightLeft, BookOpen, Eye, Plus, Search, Users } from "lucide-react";
 
-const ADVISORS = [
-  { id: "1", name: "Prof. Dr. Roberto Almeida", email: "roberto.almeida@ufx.br", departamento: "Ciência da Computação", titulacao: "Doutor", lattes: "http://lattes.cnpq.br/123", orientandos: 8, producoes: 42, areas: ["Inteligência Artificial", "Visão Computacional"], qualis: "A1", ativo: true },
-  { id: "2", name: "Profa. Dra. Carla Mendes", email: "carla.mendes@ufx.br", departamento: "Engenharia de Software", titulacao: "Doutora", lattes: "http://lattes.cnpq.br/456", orientandos: 6, producoes: 31, areas: ["Engenharia de Software", "Qualidade de Software"], qualis: "A2", ativo: true },
-  { id: "3", name: "Prof. Dr. João Batista", email: "joao.batista@ufx.br", departamento: "Redes de Computadores", titulacao: "Doutor", lattes: "http://lattes.cnpq.br/789", orientandos: 5, producoes: 28, areas: ["Redes de Computadores", "IoT"], qualis: "B1", ativo: true },
-  { id: "4", name: "Profa. Dra. Márcia Santos", email: "marcia.santos@ufx.br", departamento: "Banco de Dados", titulacao: "Doutora", lattes: "http://lattes.cnpq.br/321", orientandos: 4, producoes: 19, areas: ["Banco de Dados", "Big Data"], qualis: "A2", ativo: true },
-  { id: "5", name: "Prof. Dr. Fernando Lima", email: "fernando.lima@ufx.br", departamento: "Segurança da Informação", titulacao: "Doutor", lattes: "http://lattes.cnpq.br/654", orientandos: 3, producoes: 15, areas: ["Segurança", "Criptografia"], qualis: "B1", ativo: false },
-];
+import {
+  createAdvisor,
+  getAdvisors,
+  type Advisor,
+  type AdvisorCreatePayload,
+  updateAdvisor,
+} from "@/api/advisorsApi";
+import { programsApi, type Program } from "@/api/programsApi";
+import { coordinationTransfersApi } from "@/api/coordinationTransfersApi";
+import { useAuth } from "@/hooks/useAuth";
+import { useEscapeClose } from "@/hooks/useEscapeClose";
 
-const QUALIS_COLORS: Record<string, { color: string; bg: string }> = {
-  A1: { color: "#123C7A", bg: "#eef3fc" },
-  A2: { color: "#1F8A70", bg: "#dcfce7" },
-  B1: { color: "#D4A017", bg: "#fef9c3" },
-  B2: { color: "#8b5cf6", bg: "#ede9fe" },
+const emptyForm: AdvisorCreatePayload = {
+  uid: null,
+  nome: "",
+  email: "",
+  lattes: "",
+  programa_id: "",
+  limite_orientandos: 5,
+};
+
+const fieldStyle = {
+  border: "1px solid var(--border)",
+  background: "var(--input-background)",
+  fontSize: "13px",
+  color: "var(--foreground)",
 };
 
 export function AdvisorsPage() {
+  const { token, role, currentUser } = useAuth();
+  const [advisors, setAdvisors] = useState<Advisor[]>([]);
+  const [programs, setPrograms] = useState<Program[]>([]);
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState<AdvisorCreatePayload>(emptyForm);
+  const [editingAdvisor, setEditingAdvisor] = useState<Advisor | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [inviteToken, setInviteToken] = useState<string | null>(null);
+  const [confirmTransferAdvisor, setConfirmTransferAdvisor] = useState<Advisor | null>(null);
 
-  const filtered = ADVISORS.filter((a) =>
-    a.name.toLowerCase().includes(search.toLowerCase()) ||
-    a.departamento.toLowerCase().includes(search.toLowerCase())
-  );
+  // ESC fecha os modais de cadastro/edicao e de confirmacao (issue #316).
+  useEscapeClose(showForm, () => { setShowForm(false); setEditingAdvisor(null); setError(null); });
+  useEscapeClose(Boolean(confirmTransferAdvisor), () => setConfirmTransferAdvisor(null));
+
+  async function loadData(authToken: string): Promise<void> {
+    setLoading(true);
+    setError(null);
+    try {
+      const [advisorsData, programsData] = await Promise.all([
+        getAdvisors(authToken),
+        programsApi.getPrograms(authToken),
+      ]);
+      setAdvisors(advisorsData);
+      setPrograms(programsData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao carregar orientadores");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (token) void loadData(token);
+  }, [token]);
+
+  const filtered = advisors.filter((advisor) => {
+    const term = search.toLowerCase();
+    return (
+      advisor.nome.toLowerCase().includes(term) ||
+      (advisor.departamento ?? "").toLowerCase().includes(term) ||
+      advisor.email.toLowerCase().includes(term)
+    );
+  });
+
+  function openCreateForm(): void {
+    setEditingAdvisor(null);
+    setForm({ ...emptyForm, programa_id: programs[0]?.id ?? "" });
+    setInviteToken(null);
+    setError(null);
+    setShowForm(true);
+  }
+
+  function openEditForm(advisor: Advisor): void {
+    setEditingAdvisor(advisor);
+    setForm({
+      uid: advisor.uid ?? null,
+      nome: advisor.nome,
+      email: advisor.email,
+      lattes: advisor.lattes ?? "",
+      programa_id: advisor.programa_id,
+      limite_orientandos: advisor.limite_orientandos,
+    });
+    setInviteToken(null);
+    setError(null);
+    setShowForm(true);
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault();
+    if (!token) return;
+    if (!editingAdvisor && !form.programa_id) {
+      setError("Selecione um programa para cadastrar o orientador");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      if (editingAdvisor) {
+        await updateAdvisor(token, editingAdvisor.id, {
+          nome: form.nome,
+          lattes: form.lattes,
+          limite_orientandos: form.limite_orientandos,
+        });
+        setShowForm(false);
+      } else {
+        const result = await createAdvisor(token, form);
+        setInviteToken(result.invite_token);
+        setShowForm(false);
+      }
+      setForm(emptyForm);
+      setEditingAdvisor(null);
+      await loadData(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : editingAdvisor ? "Falha ao editar orientador" : "Falha ao cadastrar orientador");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTransferCoordination(): Promise<void> {
+    if (!token || !confirmTransferAdvisor?.uid) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await coordinationTransfersApi.start(token, confirmTransferAdvisor.uid);
+      setConfirmTransferAdvisor(null);
+      await loadData(token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Falha ao enviar solicitação de transferência");
+      setConfirmTransferAdvisor(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const activeCount = advisors.length;
+  const studentCount = advisors.reduce((sum, advisor) => sum + advisor.orientandos_ativos, 0);
+  const capacity = advisors.reduce((sum, advisor) => sum + advisor.limite_orientandos, 0);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 style={{ color: "var(--foreground)", marginBottom: "4px" }}>Orientadores</h1>
-          <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>{ADVISORS.length} orientadores cadastrados</p>
+          <p style={{ color: "var(--muted-foreground)", fontSize: "14px" }}>{advisors.length} orientadores cadastrados</p>
         </div>
-        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
+        <button onClick={openCreateForm} className="flex items-center gap-2 rounded-xl px-4 py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, fontSize: "14px" }}>
           <Plus size={16} /> Novo Orientador
         </button>
       </div>
 
-      {/* Summary stats */}
+      {error && <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px" }}>{error}</div>}
+      {inviteToken && <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#dcfce7", color: "#166534", fontSize: "13px" }}>Convite criado: {inviteToken}</div>}
+
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <div className="rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "28px", fontWeight: 800, color: "#123C7A" }}>{ADVISORS.filter(a => a.ativo).length}</p>
-          <p style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>Ativos</p>
-        </div>
-        <div className="rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "28px", fontWeight: 800, color: "#1F8A70" }}>{ADVISORS.reduce((s, a) => s + a.orientandos, 0)}</p>
-          <p style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>Orientandos</p>
-        </div>
-        <div className="rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "28px", fontWeight: 800, color: "#D4A017" }}>{ADVISORS.reduce((s, a) => s + a.producoes, 0)}</p>
-          <p style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>Produções Totais</p>
-        </div>
+        <Stat label="Ativos" value={activeCount} color="#123C7A" />
+        <Stat label="Orientandos" value={studentCount} color="#1F8A70" />
+        <Stat label="Capacidade" value={capacity} color="#D4A017" />
       </div>
 
-      {/* Search */}
       <div className="relative mb-4">
         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted-foreground)" }} />
-        <input
-          placeholder="Buscar orientador..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full max-w-sm rounded-xl pl-9 pr-4 py-2.5 outline-none"
-          style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }}
-        />
+        <input placeholder="Buscar orientador..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full max-w-sm rounded-xl pl-9 pr-4 py-2.5 outline-none" style={{ background: "var(--card)", border: "1px solid var(--border)", fontSize: "13px", color: "var(--foreground)" }} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {filtered.map((advisor) => {
-          const qualis = QUALIS_COLORS[advisor.qualis] || QUALIS_COLORS.B2;
-          return (
-            <div key={advisor.id} className="rounded-2xl p-5 transition-all" style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-              <div className="flex items-start gap-4 mb-4">
-                <div className="rounded-2xl flex items-center justify-center flex-shrink-0" style={{ width: 52, height: 52, background: "#eef3fc" }}>
-                  <span style={{ color: "#123C7A", fontSize: "20px", fontWeight: 800 }}>
-                    {advisor.name.split(" ").slice(-1)[0].charAt(0)}
-                  </span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>{advisor.name}</p>
-                      <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{advisor.departamento}</p>
+      {loading ? (
+        <div className="rounded-2xl p-8 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--muted-foreground)" }}>Carregando orientadores...</div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {filtered.map((advisor) => {
+            const usage = advisor.limite_orientandos > 0 ? advisor.orientandos_ativos / advisor.limite_orientandos : 0;
+            const statusColor = usage >= 1 ? "#dc2626" : usage >= 0.8 ? "#D4A017" : "#1F8A70";
+            const isPendingInvite = !advisor.uid;
+            // Auto-gestão bloqueada (issue #309): a coordenação não edita o próprio
+            // registro de orientador — o backend retorna 403; aqui escondemos o botão.
+            const isSelf = Boolean(advisor.uid) && advisor.uid === currentUser?.uid;
+            return (
+              <div key={advisor.id} className="rounded-2xl p-5 transition-all" style={{ background: "var(--card)", border: "1px solid var(--border)", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                <div className="flex items-start gap-4 mb-4">
+                  <div className="rounded-2xl flex items-center justify-center flex-shrink-0" style={{ width: 52, height: 52, background: "#eef3fc" }}>
+                    <span style={{ color: "#123C7A", fontSize: "20px", fontWeight: 800 }}>{advisor.nome.charAt(0)}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>{advisor.nome}</p>
+                          {role === "coordenacao" && isPendingInvite && (
+                            <span className="px-2 py-0.5 rounded-lg" style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 700 }}>
+                              Convite Pendente
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{advisor.departamento}</p>
+                        <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{advisor.email}</p>
+                      </div>
+                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: statusColor }} title="Capacidade de orientação" />
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="px-2 py-0.5 rounded-lg" style={{ background: qualis.bg, color: qualis.color, fontSize: "11px", fontWeight: 700 }}>
-                        Qualis {advisor.qualis}
-                      </span>
-                      <span
-                        className="w-2 h-2 rounded-full flex-shrink-0"
-                        style={{ background: advisor.ativo ? "#1F8A70" : "#94a3b8" }}
-                        title={advisor.ativo ? "Ativo" : "Inativo"}
-                      />
-                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex gap-2 flex-wrap mb-4">
-                {advisor.areas.map((area) => (
-                  <span key={area} className="px-2 py-1 rounded-lg" style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "11px" }}>
-                    {area}
-                  </span>
-                ))}
-              </div>
+                <div className="flex gap-2 flex-wrap mb-4">
+                  <span className="px-2 py-1 rounded-lg" style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontSize: "11px" }}>{advisor.programa_id}</span>
+                  {advisor.lattes && <a href={advisor.lattes} target="_blank" rel="noreferrer" className="px-2 py-1 rounded-lg" style={{ background: "#eef3fc", color: "#123C7A", fontSize: "11px" }}>Lattes</a>}
+                </div>
 
-              <div className="grid grid-cols-3 gap-3 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <Users size={13} style={{ color: "#123C7A" }} />
-                    <p style={{ fontSize: "16px", fontWeight: 800, color: "#123C7A" }}>{advisor.orientandos}</p>
+                <div className="grid grid-cols-3 gap-3 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+                  <Metric icon={<Users size={13} />} label="Orientandos" value={`${advisor.orientandos_ativos}/${advisor.limite_orientandos}`} color="#123C7A" />
+                  <Metric icon={<BookOpen size={13} />} label="Programa" value={advisor.programa_id} color="#1F8A70" />
+                  <div className="flex flex-col gap-1 items-center justify-center">
+                    {!isSelf && (
+                      <button onClick={() => openEditForm(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1.5 rounded-lg transition-colors" style={{ background: "#eef3fc", color: "#123C7A", fontSize: "12px", fontWeight: 600 }}>
+                        <Eye size={13} /> Editar
+                      </button>
+                    )}
+                    {role === "coordenacao" && advisor.uid && !isSelf && (
+                      <button onClick={() => setConfirmTransferAdvisor(advisor)} className="flex w-full items-center justify-center gap-1 px-3 py-1 rounded-lg transition-colors" style={{ background: "#fef3c7", color: "#92400e", fontSize: "11px", fontWeight: 600 }}>
+                        <ArrowRightLeft size={11} /> Coordenação
+                      </button>
+                    )}
                   </div>
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Orientandos</p>
-                </div>
-                <div className="text-center">
-                  <div className="flex items-center justify-center gap-1 mb-1">
-                    <BookOpen size={13} style={{ color: "#1F8A70" }} />
-                    <p style={{ fontSize: "16px", fontWeight: 800, color: "#1F8A70" }}>{advisor.producoes}</p>
-                  </div>
-                  <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>Produções</p>
-                </div>
-                <div className="text-center">
-                  <button
-                    className="flex items-center justify-center gap-1 mx-auto px-3 py-1.5 rounded-lg transition-colors"
-                    style={{ background: "#eef3fc", color: "#123C7A", fontSize: "12px", fontWeight: 600 }}
-                    onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#123C7A"; (e.currentTarget as HTMLElement).style.color = "#fff"; }}
-                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#eef3fc"; (e.currentTarget as HTMLElement).style.color = "#123C7A"; }}
-                  >
-                    <Eye size={13} /> Perfil
-                  </button>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+          {filtered.length === 0 && <div className="rounded-2xl p-8 text-center" style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--muted-foreground)" }}>Nenhum orientador encontrado</div>}
+        </div>
+      )}
 
       {showForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
-          <div className="rounded-2xl p-6 w-full max-w-lg mx-4" style={{ background: "var(--card)" }}>
+          <form onSubmit={handleSubmit} className="rounded-2xl p-6 w-full max-w-lg mx-4" style={{ background: "var(--card)" }}>
             <div className="flex justify-between items-center mb-6">
-              <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>Cadastrar Orientador</h2>
-              <button onClick={() => setShowForm(false)} style={{ color: "var(--muted-foreground)", fontSize: "20px" }}>✕</button>
+              <h2 style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>{editingAdvisor ? "Editar Orientador" : "Cadastrar Orientador"}</h2>
+              <button type="button" onClick={() => { setShowForm(false); setEditingAdvisor(null); setError(null); }} style={{ color: "var(--muted-foreground)", fontSize: "20px" }}>x</button>
             </div>
+            {error && <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px" }}>{error}</div>}
             <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Nome Completo", col: "col-span-2" },
-                { label: "E-mail", col: "" },
-                { label: "Departamento", col: "" },
-                { label: "Titulação", col: "" },
-                { label: "Maior Qualis", col: "" },
-                { label: "Lattes URL", col: "col-span-2" },
-                { label: "Áreas de Atuação", col: "col-span-2" },
-              ].map((f) => (
-                <div key={f.label} className={f.col}>
-                  <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>{f.label}</label>
-                  <input className="w-full rounded-xl px-3 py-2.5 outline-none" style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }} onFocus={(e) => { e.currentTarget.style.borderColor = "#123C7A"; }} onBlur={(e) => { e.currentTarget.style.borderColor = "var(--border)"; }} />
-                </div>
-              ))}
+              <Field label="Nome Completo" className="col-span-2"><input required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              <Field label="E-mail"><input required disabled={Boolean(editingAdvisor)} type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              {/* Departamento não é mais informado aqui — é derivado do programa (ADR-0004 / issue #249). */}
+              <Field label="Programa"><select required disabled={Boolean(editingAdvisor)} value={form.programa_id} onChange={(e) => setForm({ ...form, programa_id: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle}><option value="">Selecione um programa</option>{programs.map((program) => <option key={program.id} value={program.id}>{program.nome ?? program.id}</option>)}</select></Field>
+              <Field label="Limite"><input required type="number" min={0} value={form.limite_orientandos} onChange={(e) => setForm({ ...form, limite_orientandos: Number(e.target.value) })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
+              <Field label="Lattes URL" className="col-span-2"><input value={form.lattes ?? ""} onChange={(e) => setForm({ ...form, lattes: e.target.value })} className="w-full rounded-xl px-3 py-2.5 outline-none" style={fieldStyle} /></Field>
             </div>
             <div className="flex gap-3 mt-6">
-              <button onClick={() => setShowForm(false)} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
-              <button onClick={() => setShowForm(false)} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600 }}>Cadastrar</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditingAdvisor(null); setError(null); }} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
+              <button disabled={saving} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>{saving ? "Salvando..." : editingAdvisor ? "Salvar" : "Cadastrar"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {confirmTransferAdvisor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.4)" }}>
+          <div className="rounded-2xl p-6 w-full max-w-sm mx-4" style={{ background: "var(--card)" }}>
+            <h2 className="mb-4" style={{ fontSize: "18px", fontWeight: 700, color: "var(--foreground)" }}>Confirmar Transferência</h2>
+            <p className="mb-6" style={{ fontSize: "14px", color: "var(--muted-foreground)" }}>
+              Tem certeza que deseja solicitar a transferência de coordenação para <strong>{confirmTransferAdvisor.nome}</strong>? Se o receptor aceitar, essa ação é irreversível.
+            </p>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setConfirmTransferAdvisor(null)} className="flex-1 rounded-xl py-2.5" style={{ background: "var(--muted)", color: "var(--foreground)", fontWeight: 600 }}>Cancelar</button>
+              <button onClick={handleTransferCoordination} disabled={saving} className="flex-1 rounded-xl py-2.5" style={{ background: "#123C7A", color: "#fff", fontWeight: 600, opacity: saving ? 0.7 : 1 }}>{saving ? "Enviando..." : "Confirmar Solicitação"}</button>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+  return (
+    <div className="rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+      <p style={{ fontSize: "28px", fontWeight: 800, color }}>{value}</p>
+      <p style={{ fontSize: "13px", color: "var(--muted-foreground)" }}>{label}</p>
+    </div>
+  );
+}
+
+function Metric({ icon, label, value, color }: { icon: JSX.Element; label: string; value: string; color: string }) {
+  return (
+    <div className="text-center">
+      <div className="flex items-center justify-center gap-1 mb-1" style={{ color }}>
+        {icon}
+        <p style={{ fontSize: "16px", fontWeight: 800 }}>{value}</p>
+      </div>
+      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{label}</p>
+    </div>
+  );
+}
+
+function Field({ label, className = "", children }: { label: string; className?: string; children: JSX.Element }) {
+  return (
+    <div className={className}>
+      <label style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", display: "block", marginBottom: "6px" }}>{label}</label>
+      {children}
     </div>
   );
 }

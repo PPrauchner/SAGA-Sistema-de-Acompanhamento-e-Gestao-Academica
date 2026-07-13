@@ -1,0 +1,379 @@
+{
+  "modulo": "Aspectos AOP — Programação Orientada a Aspectos",
+  "versao": "1.0.0-MVP",
+  "descricao": "5 aspectos implementados com recursos nativos do Python (decoradores, metaclasse, descritor, inspect). Cada aspecto encapsula uma preocupação transversal que se repete em múltiplas operações sem duplicação de código. A lógica de negócio permanece livre dessas preocupações.",
+  "localizacao": "backend/app/aspects/",
+
+  "arquivos_python": [
+    "backend/app/aspects/__init__.py",
+    "backend/app/aspects/aspect_config.py",
+    "backend/app/aspects/authorization.py",
+    "backend/app/aspects/audit.py",
+    "backend/app/aspects/history.py",
+    "backend/app/aspects/deadline_validation.py",
+    "backend/app/aspects/alerts.py"
+  ],
+
+  "requisitos_fundo": [
+    "Apenas mecanismos nativos do Python: decoradores, metaclasses, descritores, __init_subclass__, inspect",
+    "Nenhuma biblioteca externa de AOP (proibido pelo enunciado)",
+    "Um mesmo aspecto deve ser reutilizável em múltiplas operações sem duplicação",
+    "Adicionar nova operação não exige reescrever autorização, auditoria ou histórico",
+    "Ativação configurável via flags em aspect_config.py — ligar/desligar sem alterar lógica de negócio",
+    "Docstrings obrigatórias em cada módulo descrevendo: preocupação encapsulada, join points, advice, weaving"
+  ],
+
+  "aspect_config": {
+    "arquivo": "backend/app/aspects/aspect_config.py",
+    "descricao": "Flags booleanas consultadas pelos aspectos antes de executar o advice. Permitem ativar/desativar aspectos sem alterar lógica de negócio.",
+    "flags": {
+      "AUTHORIZATION_ENABLED": true,
+      "AUDIT_ENABLED": true,
+      "HISTORY_ENABLED": true,
+      "DEADLINE_VALIDATION_ENABLED": true,
+      "ALERTS_ENABLED": true
+    }
+  },
+
+  "aspectos": [
+    {
+      "id": "A01",
+      "nome": "Autorização por Papel",
+      "arquivo": "authorization.py",
+      "preocupacao_transversal": "Garantir que apenas usuários com o papel correto executem operações sensíveis",
+      "mecanismo_python": "Decorador @requires_role(*roles)",
+      "tipo_advice": "Before",
+
+      "join_points": [
+        "POST   /api/v1/transfers/direct            - apenas coordenacao",
+        "POST   /api/v1/transfers                   - apenas orientador",
+        "GET    /api/v1/transfers                   - orientador (suas solicitacoes) ou coordenacao (fila do programa)",
+        "POST   /api/v1/transfers/{id}/approve      - apenas coordenacao",
+        "POST   /api/v1/transfers/{id}/reject       - apenas coordenacao",
+        "POST   /api/v1/transfers/{id}/cancel       - apenas solicitante orientador",
+        "POST   /api/v1/coordination-transfers      - apenas coordenacao",
+        "GET    /api/v1/coordination-transfers      - coordenacao ou orientador sucessor",
+        "POST   /api/v1/coordination-transfers/{id}/accept - apenas orientador sucessor",
+        "POST   /api/v1/coordination-transfers/{id}/reject - apenas orientador sucessor",
+        "POST   /api/v1/coordination-transfers/{id}/cancel - apenas coordenacao iniciadora",
+        "POST   /api/v1/students                    — apenas coordenacao",
+        "PUT    /api/v1/students/{id}               — apenas coordenacao",
+        "DELETE /api/v1/students/{id}               — apenas coordenacao",
+        "PATCH  /api/v1/students/{id}/qualificacao  — apenas coordenacao",
+        "PATCH  /api/v1/students/{id}/proficiencia  — apenas coordenacao",
+        "POST   /api/v1/advisors                    — apenas coordenacao",
+        "POST   /api/v1/work-plan/{id}/stages       — apenas orientador (próprios orientandos)",
+        "POST   /api/v1/work-plan/{id}/tasks        — apenas orientador (próprios orientandos)",
+        "POST   /api/v1/tasks/{id}/updates          — apenas aluno (própria task)",
+        "POST   /api/v1/activity-types              — apenas coordenacao",
+        "PUT    /api/v1/activity-types/{id}         — apenas coordenacao",
+        "POST   /api/v1/activities                  — apenas aluno",
+        "PATCH  /api/v1/activities/{id}/validate    — coordenacao (aprovação final) ou orientador (parecer)",
+        "POST   /api/v1/productions                 — apenas aluno",
+        "POST   /api/v1/extensions                  — apenas aluno",
+        "PATCH  /api/v1/extensions/{id}/approve     — apenas coordenacao",
+        "GET    /api/v1/reports/*                   — apenas coordenacao",
+        "GET    /api/v1/inference/{student_id}      — aluno (próprio), orientador (orientandos), coordenacao"
+      ],
+
+      "advice_descricao": [
+        "1. Verifica flag AUTHORIZATION_ENABLED em aspect_config; se False, passa direto",
+        "2. Extrai token JWT do header Authorization: Bearer <token>",
+        "3. Verifica token com Firebase Admin Auth (verify_id_token)",
+        "4. Lê custom claim 'role' do token decodificado",
+        "5. Se role não está em *roles: lança HTTPException(403, 'Papel insuficiente')",
+        "6. Para join points com restrição de propriedade (aluno próprio, orientandos): verifica relação no Firestore",
+        "7. Se autorizado: executa a função original com os mesmos argumentos"
+      ],
+
+      "weaving": "Decorador aplicado explicitamente sobre cada função de endpoint FastAPI ou service. Ex: @requires_role('coordenacao') acima de def create_student(...).",
+
+      "exemplo_codigo_esquematico": "@requires_role('coordenacao') async def create_student(body: StudentCreate, user=Depends(get_current_user)): ..."
+    },
+
+    {
+      "id": "A02",
+      "nome": "Auditoria das Operações",
+      "arquivo": "audit.py",
+      "preocupacao_transversal": "Registrar imutavelmente quem realizou qual operação, quando, em qual entidade e com qual resultado",
+      "mecanismo_python": "Decorador @audit_operation combinado com módulo inspect para captura de metadados em tempo de execução",
+      "tipo_advice": "Around (captura entrada antes + resultado depois)",
+
+      "join_points": [
+        "POST            /api/v1/coordination-transfers/*",
+        "POST            /api/v1/transfers/*",
+        "POST/PUT/DELETE /api/v1/students/*",
+        "POST/PUT/DELETE /api/v1/advisors/*",
+        "POST/PUT/DELETE /api/v1/work-plan/*",
+        "POST            /api/v1/tasks/{id}/updates",
+        "POST/PUT/DELETE /api/v1/activity-types/*",
+        "POST            /api/v1/activities",
+        "PATCH           /api/v1/activities/{id}/validate",
+        "POST            /api/v1/productions",
+        "POST/PATCH      /api/v1/extensions/*",
+        "PATCH           /api/v1/students/{id}/qualificacao",
+        "PATCH           /api/v1/students/{id}/proficiencia"
+      ],
+
+      "advice_descricao": [
+        "Before (captura): usa inspect.signature(func) para obter nomes dos parâmetros",
+        "Before: usa inspect.currentframe() ou bind(*args, **kwargs) para extrair valores dos argumentos",
+        "Before: registra timestamp_inicio, usuario_id, role, nome_operacao, entidade_afetada_id",
+        "Executa a função original (await func(*args, **kwargs))",
+        "After (persiste): monta documento AuditLog com {usuario_id, role, operacao, modulo, recurso_id, valor_entrada, resultado, timestamp, duracao_ms}",
+        "After: persiste AuditLog no Firestore em audit_logs/{auto_id} via repositório assíncrono",
+        "Em caso de exceção: registra erro no AuditLog e re-lança a exceção"
+      ],
+
+      "uso_do_inspect": [
+        "inspect.signature(func).bind(*args, **kwargs).arguments — extrai dict de parâmetros nomeados",
+        "inspect.getmodule(func).__name__ — descobre o módulo onde a função está definida (campo 'modulo' do log)",
+        "func.__name__ — nome da operação auditada"
+      ],
+
+      "weaving": "Decorador @audit_operation aplicado explicitamente sobre funções de service (não de router) para manter o advice próximo à lógica de negócio.",
+
+      "documento_firestore": {
+        "colecao": "audit_logs",
+        "campos": {
+          "usuario_id": "string",
+          "role": "string",
+          "operacao": "string (nome da função)",
+          "modulo": "string (nome do módulo Python)",
+          "recurso": "string (ex: 'students/aluno_001')",
+          "valor_entrada": "map (argumentos capturados via inspect)",
+          "resultado_status": "string: 'sucesso' | 'erro'",
+          "erro_mensagem": "string | null",
+          "timestamp": "Firestore Timestamp",
+          "duracao_ms": "int"
+        }
+      }
+    },
+
+    {
+      "id": "A03",
+      "nome": "Histórico de Alterações das Entidades",
+      "arquivo": "history.py",
+      "preocupacao_transversal": "Preservar versões anteriores das entidades que mudam ao longo do tempo, evidenciando que regras institucionais evoluem",
+      "mecanismo_python": "Metaclasse HistoryMeta (ou __init_subclass__) aplicada automaticamente a subclasses de EntityService",
+      "tipo_advice": "Before + After (captura estado anterior e persiste snapshot)",
+
+      "entidades_cobertas": [
+        "PlanoTrabalho — qualquer atualização de campos do plano",
+        "TipoAtividadeCreditavel — qualquer alteração em pontuação, limite ou status ativo",
+        "ChecklistConfig — alteração de requisitos mínimos de integralização no programa",
+        "SituacaoRegistrada do Aluno — qualquer mudança manual no campo situacaoRegistrada"
+      ],
+
+      "join_points": [
+        "TransferService.direct_transfer(student_id, orientador_destino_id)",
+        "TransferService.approve_request(transfer_id)",
+        "StudentService.update_situacao_registrada(student_id, nova_situacao)",
+        "WorkPlanService.update_plan(plan_id, data)",
+        "ActivityTypeService.update_type(type_id, data)",
+        "ProgramService.update_checklist_config(programa_id, data)"
+      ],
+
+      "advice_descricao": [
+        "Before: lê o estado atual da entidade no Firestore via repositório (valor_anterior)",
+        "Executa o método original de update (persiste o novo estado)",
+        "After: monta documento HistorySnapshot com {entidade_tipo, entidade_id, valor_anterior, valor_novo, usuario_id, timestamp}",
+        "After: persiste snapshot em sub-coleção history/ da entidade. Ex: students/{id}/history/{snap_id}"
+      ],
+
+      "weaving": [
+        "Metaclasse HistoryMeta sobrescreve __init_subclass__: ao definir uma subclasse de EntityService, envolve automaticamente todos os métodos cujo nome começa com 'update_' com o advice de histórico",
+        "Resultado: subclasse StudentService herda de EntityService e os métodos update_* ganham histórico sem decorator explícito",
+        "Alternativa (mais explícita): decorador @track_history aplicado manualmente nos 4 join points acima — válido para MVP"
+      ],
+
+      "documento_firestore": {
+        "localizacao": "Sub-coleção history/ dentro de cada entidade principal. Ex: students/{id}/history/{snap_id}",
+        "campos": {
+          "entidade_tipo": "string (ex: 'PlanoTrabalho')",
+          "entidade_id": "string",
+          "valor_anterior": "map (snapshot do documento antes da alteração)",
+          "valor_novo": "map (snapshot depois)",
+          "usuario_id": "string (quem alterou)",
+          "role": "string",
+          "timestamp": "Firestore Timestamp"
+        }
+      }
+    },
+
+    {
+      "id": "A04",
+      "nome": "Validação de Prazos",
+      "arquivo": "deadline_validation.py",
+      "preocupacao_transversal": "Verificar prazos críticos antes ou após operações e atualizar a situação do aluno quando prazos estão em risco",
+      "mecanismo_python": "Decorador @check_deadlines",
+      "tipo_advice": "Before + After (verifica antes de operar; atualiza fato de risco depois)",
+
+      "join_points": [
+        "POST /api/v1/tasks/{id}/updates        — verifica se task está dentro do prazo",
+        "POST /api/v1/activities                — verifica se atividade está dentro do período do curso",
+        "POST /api/v1/extensions                — verifica se aluno ainda pode solicitar prorrogação",
+        "GET  /api/v1/students (listagem)       — recalcula status de prazo de todos os alunos retornados",
+        "GET  /api/v1/inference/{student_id}    — garante que fatos de prazo estão atualizados antes da inferência"
+      ],
+
+      "advice_descricao": [
+        "Before: extrai aluno_id do contexto da request (path param ou body)",
+        "Before: carrega prazoFinal, dataIngresso e status do aluno do Firestore",
+        "Before: calcula dias_restantes = prazoFinal - date.today()",
+        "Before: se dias_restantes < 0 → insere fato prazo_estourado no contexto da inferência e marca situacaoInferida para atualização",
+        "Before: se dias_restantes < 90 → insere fato prazo_qualificacao_proximo no contexto",
+        "Executa função original",
+        "After: se situacaoInferida mudou → persiste atualização em students/{id} via repositório",
+        "After: se prazo crítico detectado → delega criação de notificação ao aspecto de alertas"
+      ],
+
+      "weaving": "Decorador @check_deadlines aplicado sobre endpoints e métodos de service que operam sobre dados temporalmente sensíveis.",
+
+      "configuracao": {
+        "dias_para_alerta_prazo_qualificacao": 90,
+        "dias_para_alerta_prazo_final": 60,
+        "fonte": "Constantes em aspect_config.py — alteráveis sem tocar no aspecto"
+      }
+    },
+
+    {
+      "id": "A05",
+      "nome": "Geração de Alertas e Notificações",
+      "arquivo": "alerts.py",
+      "preocupacao_transversal": "Disparar notificações para usuários corretos após operações relevantes, sem que a lógica de negócio conheça o sistema de alertas",
+      "mecanismo_python": "Decorador @trigger_alerts",
+      "tipo_advice": "After",
+
+      "join_points_e_alertas": [
+        {
+          "join_point": "POST /api/v1/coordination-transfers",
+          "destinatario": "orientador sucessor",
+          "mensagem": "Convite para assumir a coordenacao do programa"
+        },
+        {
+          "join_point": "POST /api/v1/coordination-transfers/{id}/accept",
+          "destinatario": "ex-coordenador iniciador",
+          "mensagem": "Transferencia de coordenacao aceita"
+        },
+        {
+          "join_point": "POST /api/v1/coordination-transfers/{id}/reject",
+          "destinatario": "coordenador iniciador",
+          "mensagem": "Transferencia de coordenacao rejeitada"
+        },
+        {
+          "join_point": "POST /api/v1/coordination-transfers/{id}/cancel",
+          "destinatario": "orientador sucessor",
+          "mensagem": "Transferencia de coordenacao cancelada"
+        },
+        {
+          "join_point": "POST /api/v1/transfers/direct (coordenacao move orientando same-program)",
+          "destinatario": "orientador origem + orientador destino + aluno",
+          "mensagem": "Transferencia de orientador efetivada"
+        },
+        {
+          "join_point": "POST /api/v1/transfers (orientador solicita transferencia)",
+          "destinatario": "coordenacao",
+          "mensagem": "Nova solicitacao de transferencia pendente"
+        },
+        {
+          "join_point": "POST /api/v1/transfers/{id}/approve",
+          "destinatario": "orientador origem + orientador destino + aluno",
+          "mensagem": "Transferencia de orientador aprovada"
+        },
+        {
+          "join_point": "POST /api/v1/transfers/{id}/reject",
+          "destinatario": "orientador origem",
+          "mensagem": "Transferencia de orientador rejeitada com motivo"
+        },
+        {
+          "join_point": "POST /api/v1/transfers/{id}/cancel",
+          "destinatario": "coordenacao",
+          "mensagem": "Solicitacao de transferencia cancelada"
+        },
+        {
+          "join_point": "POST /api/v1/tasks/{id}/updates (aluno registra progresso)",
+          "destinatario": "orientador do aluno",
+          "mensagem": "Aluno {nome} registrou progresso na task '{task_titulo}'"
+        },
+        {
+          "join_point": "PATCH /api/v1/activities/{id}/validate (coordenação valida/rejeita)",
+          "destinatario": "aluno dono da atividade",
+          "mensagem": "Sua atividade '{nome}' foi {aprovada|rejeitada}. Motivo: {observacao}"
+        },
+        {
+          "join_point": "PATCH /api/v1/extensions/{id}/approve (coordenação aprova/rejeita prorrogação)",
+          "destinatario": "aluno solicitante",
+          "mensagem": "Sua solicitação de prorrogação foi {aprovada|rejeitada}"
+        },
+        {
+          "join_point": "check_deadlines detecta prazo crítico (delegação do A04)",
+          "destinatario": "aluno + orientador",
+          "mensagem": "Atenção: prazo de {qualificação|entrega} em {N} dias"
+        },
+        {
+          "join_point": "POST /api/v1/activities (aluno submete atividade para validação)",
+          "destinatario": "orientador",
+          "mensagem": "Aluno {nome} submeteu atividade '{nome_atividade}' para validação"
+        }
+      ],
+
+      "advice_descricao": [
+        "After: verifica flag ALERTS_ENABLED em aspect_config; se False, retorna",
+        "After: extrai resultado da função original (status da operação, IDs relevantes)",
+        "After: determina destinatários a partir do contexto (aluno_id → orientador_id via Firestore lookup)",
+        "After: monta documento Notification com {tipo, titulo, mensagem, destinatario_id, entidade_id, lida: false, timestamp}",
+        "After: persiste em notifications/{auto_id} no Firestore",
+        "After: Frontend usa onSnapshot na coleção notifications filtrada por destinatario_id para receber em tempo real"
+      ],
+
+      "weaving": "Decorador @trigger_alerts aplicado após @requires_role e @audit_operation nos endpoints de operação relevantes. Ordem de decoradores: @requires_role → @audit_operation → @trigger_alerts → função.",
+
+      "documento_firestore": {
+        "colecao": "notifications",
+        "campos": {
+          "tipo": "string (ex: 'progresso_task', 'atividade_validada', 'prazo_critico', 'transferencia_orientador', 'transferencia_coordenacao')",
+          "titulo": "string",
+          "mensagem": "string",
+          "destinatario_id": "string (uid Firebase Auth)",
+          "entidade_tipo": "string",
+          "entidade_id": "string",
+          "lida": "boolean (default: false)",
+          "timestamp": "Firestore Timestamp",
+          "programa_id": "string"
+        }
+      },
+
+      "integracao_frontend": "React usa onSnapshot(collection(db, 'notifications'), where('destinatario_id', '==', currentUser.uid), where('lida', '==', false)) para badge de notificações em tempo real"
+    }
+  ],
+
+  "paradigmas_aplicados": {
+    "programacao_logica": {
+      "regras_declarativas": [],
+      "base_fatos_necessaria": [],
+      "nota": "Aspectos não interagem com o motor lógico diretamente. O aspecto A04 (Prazos) insere fatos de contexto que o InferenceService usa para popular a FactBase."
+    },
+    "aop_aspectos": {
+      "join_points": [
+        "Todos os endpoints de mutação do sistema (ver listas por aspecto acima)",
+        "Métodos update_* de subclasses de EntityService (histórico via metaclasse)"
+      ],
+      "advice": [
+        "A01 Autorização — Before: verifica JWT claim antes de qualquer operação",
+        "A02 Auditoria — Around: captura entrada + resultado; persiste AuditLog",
+        "A03 Histórico — Before+After: lê estado anterior; persiste snapshot imutável",
+        "A04 Prazos — Before+After: verifica datas; atualiza situacaoInferida",
+        "A05 Alertas — After: dispara notificações baseadas no resultado da operação"
+      ],
+      "weaving": [
+        "A01, A02, A05: decoradores aplicados explicitamente sobre funções de endpoint/service",
+        "A03: metaclasse HistoryMeta aplicada por herança em EntityService — all update_* methods wrapped automaticamente",
+        "A04: decorador @check_deadlines aplicado sobre endpoints temporalmente sensíveis",
+        "Ordem canônica de decoradores quando combinados: @requires_role → @audit_operation → @check_deadlines → @trigger_alerts → def endpoint_func(...)"
+      ]
+    }
+  },
+
+  "contratos_api": []
+}

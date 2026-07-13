@@ -1,0 +1,58 @@
+"""
+Modelos Pydantic para a entidade Advisor (orientador).
+
+Responsabilidades:
+- Definir AdvisorBase com campos: uid, nome, email, lattes, programa_id,
+  limite_orientandos.
+- Definir AdvisorCreate para POST /api/v1/advisors.
+- Definir AdvisorUpdate para PUT /api/v1/advisors/{id} (campos opcionais).
+- Definir AdvisorResponse para leitura, incluindo orientandos_ativos (calculado por query
+  na coleção students/ filtrando por orientador_id) e departamento (derivado de
+  programa_id -> programs.departamento_id -> departments.nome, nunca armazenado —
+  ADR-0004 / issue #249).
+- Mapear o documento Firestore da coleção advisors/.
+"""
+
+from __future__ import annotations
+
+from pydantic import BaseModel
+from pydantic import ConfigDict
+from pydantic import Field
+
+
+class AdvisorCreateRequest(BaseModel):
+    uid: str | None = None
+    nome: str
+    email: str
+
+    lattes: str | None = None
+    programa_id: str
+
+    limite_orientandos: int = 5
+
+
+class AdvisorUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    nome: str | None = None
+
+    lattes: str | None = None
+    limite_orientandos: int | None = Field(default=None, ge=0)
+
+
+class AdvisorResponse(BaseModel):
+    id: str
+    uid: str
+
+    nome: str
+    email: str
+
+    # Derivado em leitura via programa_id -> departments (issue #249); None se a
+    # cadeia estiver quebrada (programa sem departamento_id ou departamento removido).
+    departamento: str | None = None
+    programa_id: str
+
+    lattes: str | None = None
+
+    limite_orientandos: int
+    orientandos_ativos: int
