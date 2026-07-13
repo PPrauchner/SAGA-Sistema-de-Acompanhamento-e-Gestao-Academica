@@ -5,10 +5,6 @@ Responsabilidades:
 - Expor as rotas de solicitação, parecer, decisão e listagem, delegando toda a
   lógica ao ExtensionService.
 - Aplicar os aspectos AOP nos join points da Spec 08, na ordem canônica.
-
-Nota sobre A04: `@check_deadlines` não é aplicado aqui. O aspecto A04 é específico
-do fluxo de tasks do plano de trabalho (`WorkPlanService.add_progress_update`) —
-depende de `_repo.get_task_context(task_id)`, inexistente no domínio de prorrogações.
 """
 
 from typing import Annotated
@@ -21,9 +17,10 @@ from backend.app.aspects.authorization import requires_role
 from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.extension import (
-    DecisionRequest,
+    ApproveRequest,
     ExtensionCreateRequest,
     ExtensionResponse,
+    RejectRequest,
     ReviewRequest,
 )
 from backend.app.services.extension_service import ExtensionService
@@ -93,22 +90,44 @@ async def review_extension(
     )
 
 
-@router.patch(
+@router.post(
     "/{extension_id}/approve",
     response_model=ExtensionResponse,
-    summary="Homologar decisão (coordenação)",
+    summary="Aprovar prorrogação (coordenação)",
 )
 @requires_role("coordenacao")
 @audit_operation
 @trigger_alerts(build_extension_alert)
-async def decide_extension(
+async def approve_extension(
     extension_id: str,
-    payload: DecisionRequest,
+    payload: ApproveRequest,
     current_user: AuthUser,
     service: Service,
 ) -> ExtensionResponse:
-    """Homologa a decisão (aprovar/rejeitar); na aprovação recalcula o prazo."""
-    return await service.process_decision(
+    """Aprova a prorrogação e recalcula o prazo final do aluno."""
+    return await service.approve_extension(
+        extension_id=extension_id,
+        payload=payload,
+        coordinator=current_user,
+    )
+
+
+@router.post(
+    "/{extension_id}/reject",
+    response_model=ExtensionResponse,
+    summary="Rejeitar prorrogação (coordenação)",
+)
+@requires_role("coordenacao")
+@audit_operation
+@trigger_alerts(build_extension_alert)
+async def reject_extension(
+    extension_id: str,
+    payload: RejectRequest,
+    current_user: AuthUser,
+    service: Service,
+) -> ExtensionResponse:
+    """Rejeita a prorrogação com motivo obrigatório; não altera o prazo."""
+    return await service.reject_extension(
         extension_id=extension_id,
         payload=payload,
         coordinator=current_user,
