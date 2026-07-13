@@ -21,17 +21,18 @@ Identidade dos parâmetros:
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from enum import Enum
 
 from fastapi import HTTPException, status
 
 from backend.app.core.auth import CurrentUser
 from backend.app.models.extension import (
-    DecisionRequest,
+    ApproveRequest,
     ExtensionCreateRequest,
     ExtensionDocument,
     ExtensionResponse,
     ExtensionStatus,
+    ExtensionTipo,
+    RejectRequest,
     ReviewRequest,
 )
 from backend.app.repositories.advisor_repository import AdvisorRepository
@@ -42,6 +43,12 @@ from backend.app.repositories.student_repository import StudentRepository
 DEFAULT_MAX_PRORROGACOES = 1
 DEFAULT_PROGRAMA_ID = "prog_default"
 SITUACAO_EM_PRORROGACAO = "em_prorrogacao"
+
+# Só a prorrogação de prazo coloca o aluno em `em_prorrogacao`; trancamento e
+# mudança de nível são deferidos sem alterar a situação registrada (Spec 08).
+TIPOS_DE_PRORROGACAO: frozenset[str] = frozenset(
+    {ExtensionTipo.PRAZO_DEFESA.value, ExtensionTipo.PRAZO_QUALIFICACAO.value}
+)
 
 
 def _dump_for_firestore(doc: ExtensionDocument) -> dict:
@@ -209,30 +216,25 @@ class ExtensionService:
         await self._repo.update_extension(extension_id, {"parecer_orientador": payload.parecer_orientador})
         return _to_response({**ext, "parecer_orientador": payload.parecer_orientador})
 
-    async def process_decision(
+    async def _get_pending_extension(
         self,
         extension_id: str,
-        payload: DecisionRequest,
         coordinator: CurrentUser,
-    ) -> ExtensionResponse:
-        """Homologa a decisão da coordenação (aprovar/rejeitar).
-
-        Na aprovação, recalcula `students.prazo_final` = `nova_data` solicitada
-        (idempotente, pois é valor absoluto) e marca o aluno em prorrogação.
+    ) -> dict:
+        """Carrega a prorrogação e aplica os gates comuns à deliberação.
 
         Args:
             extension_id: Doc id da prorrogação.
-            payload: Decisão (aprovar/rejeitar) e observação opcional, persistida
-                em `observacao_coordenacao` em ambos os desfechos.
             coordinator: Coordenação autenticada; `programa_id` delimita o
                 tenant sobre o qual ela pode deliberar.
 
         Returns:
-            A prorrogação deliberada (aprovada ou rejeitada).
+            O documento da prorrogação, garantidamente pendente e do programa
+            da coordenação.
 
         Raises:
-            HTTPException: 404 se a prorrogação/aluno não existir; 403 se a
-                prorrogação for de outro programa; 400 se não estiver pendente.
+            HTTPException: 404 se não existir; 403 se for de outro programa;
+                400 se não estiver pendente.
         """
         ext = await self._repo.get_extension(extension_id)
         if ext is None:
@@ -251,33 +253,85 @@ class ExtensionService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Apenas prorrogações pendentes podem ser deliberadas.",
             )
+        return ext
+
+    async def approve_extension(
+        self,
+        extension_id: str,
+        payload: ApproveRequest,
+        coordinator: CurrentUser,
+    ) -> ExtensionResponse:
+        """Aprova a prorrogação e recalcula o prazo do aluno (Spec 08).
+
+        `students.prazo_final` recebe a `nova_data` solicitada — valor absoluto,
+        portanto idempotente. `situacao_registrada` só passa a `em_prorrogacao`
+        quando o tipo é de fato uma prorrogação de prazo; `trancamento` e
+        `mudanca_nivel` não alteram a situação do aluno (Spec 08).
+
+        Args:
+            extension_id: Doc id da prorrogação.
+            payload: Observação opcional da coordenação.
+            coordinator: Coordenação autenticada.
+
+        Returns:
+            A prorrogação aprovada.
+
+        Raises:
+            HTTPException: 404 se a prorrogação/aluno não existir; 403 se for de
+                outro programa; 400 se não estiver pendente.
+        """
+        ext = await self._get_pending_extension(extension_id, coordinator)
 
         student = await self._students.get(ext["student_id"])
         if student is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Aluno não encontrado.")
 
-        now = datetime.now(tz=timezone.utc)
+        nova_data = ext["nova_data"]
+        student_updates: dict = {"prazo_final": nova_data}
+        if ext.get("tipo") in TIPOS_DE_PRORROGACAO:
+            student_updates["situacao_registrada"] = SITUACAO_EM_PRORROGACAO
+        await self._students.update(ext["student_id"], student_updates)
 
-        if payload.acao == "aprovar":
-            nova_data = ext["nova_data"]
-            # Idempotente: prazo_final absoluto (= nova_data), não incremental.
-            await self._students.update(
-                ext["student_id"],
-                {"prazo_final": nova_data, "situacao_registrada": SITUACAO_EM_PRORROGACAO},
-            )
-            updates = {
-                "status": ExtensionStatus.APROVADA.value,
-                "prazo_novo": nova_data,
-                "aprovado_por": coordinator.uid,
-                "aprovado_em": now,
-            }
-        else:
-            updates = {"status": ExtensionStatus.REJEITADA.value}
+        updates = {
+            "status": ExtensionStatus.APROVADA.value,
+            "prazo_novo": nova_data,
+            "aprovado_por": coordinator.uid,
+            "aprovado_em": datetime.now(tz=timezone.utc),
+            "observacao_coordenacao": payload.observacao,
+        }
+        await self._repo.update_extension(extension_id, updates)
+        return _to_response({**ext, **updates})
 
-        # Fora do if/else: a observação justifica tanto o deferimento quanto o
-        # indeferimento, e o indeferimento não tem outro campo que o registre.
-        updates["observacao_coordenacao"] = payload.observacao
+    async def reject_extension(
+        self,
+        extension_id: str,
+        payload: RejectRequest,
+        coordinator: CurrentUser,
+    ) -> ExtensionResponse:
+        """Rejeita a prorrogação, com motivo obrigatório (Spec 08).
 
+        Não altera `prazo_final` nem `situacao_registrada` do aluno.
+
+        Args:
+            extension_id: Doc id da prorrogação.
+            payload: Motivo da rejeição (obrigatório).
+            coordinator: Coordenação autenticada.
+
+        Returns:
+            A prorrogação rejeitada.
+
+        Raises:
+            HTTPException: 404 se não existir; 403 se for de outro programa;
+                400 se não estiver pendente.
+        """
+        ext = await self._get_pending_extension(extension_id, coordinator)
+
+        updates = {
+            "status": ExtensionStatus.REJEITADA.value,
+            "motivo_rejeicao": payload.motivo,
+            "rejeitado_por": coordinator.uid,
+            "rejeitado_em": datetime.now(tz=timezone.utc),
+        }
         await self._repo.update_extension(extension_id, updates)
         return _to_response({**ext, **updates})
 
