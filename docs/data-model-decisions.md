@@ -102,7 +102,7 @@ Caso de borda: usuário **só coordenador** que perde a coordenação → desati
 
 ### Q12 — `extensions` (prorrogações) e `students.prazo_final`
 
-> **⚠️ Estrutura reconciliada por [ADR-0006](./adr/0006-extensions-colecao-raiz.md) (ver R5).**
+> **⚠️ Estrutura reconciliada por [ADR-0008](./adr/0008-extensions-colecao-raiz.md) (ver R5).**
 > A "composição (1:N)" abaixo é a notação **lógica** do ER, não sub-coleção física: `extensions`
 > é **coleção raiz** com `student_id`/`programa_id` como campos. As invariantes de `prazo_final`
 > e a contagem de prorrogações permanecem válidas.
@@ -185,7 +185,7 @@ specs 01 e 03, e nos casos RL05 dos testes. R1 deixa de ter pendência.
 
 ### R5 — `extensions` é coleção raiz (reconcilia Q12)
 
-> Formalizada em [ADR-0006](./adr/0006-extensions-colecao-raiz.md) (revisão do PR #174, achado M3).
+> Formalizada em [ADR-0008](./adr/0008-extensions-colecao-raiz.md) (revisão do PR #174, achado M3).
 
 **Contexto:** a Q12 descreveu `extensions` como "composição (1:N)" a partir de `students`,
 lida por parte da implementação (PR #174) como sub-coleção `students/{id}/extensions/`. Já o
