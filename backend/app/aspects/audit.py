@@ -69,7 +69,7 @@ class FirebaseRepository:
             _, doc_ref = db.collection(self.collection).add(data)
             return doc_ref.id
         except Exception as exc:
-            logger.error("[A02] Falha ao gravar audit_log: %s", exc)
+            logger.critical("[A02] Falha ao gravar audit_log: %s", exc)
             return ""
 
 
