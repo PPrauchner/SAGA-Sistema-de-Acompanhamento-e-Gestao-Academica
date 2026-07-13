@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { Download, FileSpreadsheet, Loader2, Table } from "lucide-react";
-import { downloadBlob, sanitizeFileName, toCsv, toXlsx, type ExportColumn } from "@/utils/exportData";
+import { Download, FileSpreadsheet, FileText, Loader2, Table } from "lucide-react";
+import { downloadBlob, sanitizeFileName, toCsv, toXlsx, getCellValue, formatCell, type ExportColumn } from "@/utils/exportData";
+import { PdfBuilder, formatDateTime } from "@/utils/exportChecklistPdf";
 
-type ExportFormat = "csv" | "xlsx";
+type ExportFormat = "pdf" | "csv" | "xlsx";
 
 interface TableExportMenuProps<T> {
   title: string;
@@ -12,8 +13,9 @@ interface TableExportMenuProps<T> {
 }
 
 const OPTIONS: Array<{ format: ExportFormat; label: string; icon: typeof Table }> = [
+  { format: "pdf", label: "PDF", icon: FileText as typeof Table },
   { format: "csv", label: "CSV", icon: Table },
-  { format: "xlsx", label: "Excel", icon: FileSpreadsheet },
+  { format: "xlsx", label: "Excel", icon: FileSpreadsheet as typeof Table },
 ];
 
 export function TableExportMenu<T>({ title, fileName, rows, columns }: TableExportMenuProps<T>) {
@@ -28,8 +30,26 @@ export function TableExportMenu<T>({ title, fileName, rows, columns }: TableExpo
     try {
       if (format === "csv") {
         downloadBlob(new Blob([toCsv(rows, columns)], { type: "text/csv;charset=utf-8" }), `${baseName}.csv`);
-      } else {
+      } else if (format === "xlsx") {
         downloadBlob(toXlsx(rows, columns, title), `${baseName}.xlsx`);
+      } else if (format === "pdf") {
+        const pdf = new PdfBuilder();
+        const generatedAt = new Date();
+        
+        pdf.text(title, 18, { bold: true, gapAfter: 2 });
+        pdf.text(`Gerado em ${formatDateTime(generatedAt.toISOString())}`, 9, { gapAfter: 4 });
+        pdf.rule();
+
+        rows.forEach((row, index) => {
+          pdf.text(`Item ${index + 1}`, 11, { bold: true, gapAfter: 1 });
+          columns.forEach((col) => {
+            const val = getCellValue(row, col);
+            pdf.text(`${col.label}: ${formatCell(val)}`, 9, { indent: 12 });
+          });
+          pdf.gap(6);
+        });
+
+        downloadBlob(pdf.build(), `${baseName}.pdf`);
       }
       setOpen(false);
     } catch (err) {
