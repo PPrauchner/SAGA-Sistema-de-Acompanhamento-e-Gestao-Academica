@@ -2,8 +2,7 @@ import html2canvas from "html2canvas";
 import { downloadBlob } from "./exportData";
 
 function escapePdfText(value: string): string {
-  const withoutAccents = value.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  return withoutAccents.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+  return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 }
 
 function binaryFromDataUrl(dataUrl: string): string {
@@ -28,7 +27,7 @@ function createPdf(title: string, imageDataUrl: string, imageWidth: number, imag
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 5 0 R >> >> /Contents 6 0 R >>`,
-    "<< /Type /Font /Subtype /Helvetica /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     `<< /Type /XObject /Subtype /Image /Width ${Math.round(imageWidth)} /Height ${Math.round(imageHeight)} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBinary.length} >>\nstream\n${imageBinary}\nendstream`,
   ];
 
