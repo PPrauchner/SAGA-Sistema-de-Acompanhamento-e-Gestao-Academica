@@ -33,7 +33,7 @@ _FIRESTORE_SAFE = (str, int, float, bool, bytes, datetime)
 
 
 def _reject_raw_models(value: Any) -> None:
-    """Recusa valores não-serializáveis, como o SDK do Firestore em runtime real.
+    """Recusa o que o SDK do Firestore recusa em runtime real.
 
     Um objeto Pydantic cru (issue #151), um `date` puro (issue #332 — o encoder do
     Firestore só aceita `datetime`) ou uma dependência injetada via `Depends`
@@ -49,7 +49,7 @@ def _reject_raw_models(value: Any) -> None:
         for item in value:
             _reject_raw_models(item)
     else:
-        raise TypeError("valor não serializável no Firestore")
+        raise TypeError(f"{type(value).__name__} não é serializável no Firestore")
 
 
 class _FirestoreLikeAuditRepo(_AuditRepo):
@@ -188,40 +188,52 @@ async def test_audit_operation_serializa_payload_pydantic_e_persiste(
     assert not isinstance(log["valor_entrada"]["body"], BaseModel)
 
 
-async def test_audit_serializa_dependencia_injetada_sem_quebrar(
+async def test_audit_operation_ignora_colaborador_injetado_e_persiste(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Bloqueador C1 (PR 304): dependência injetada via Depends não pode quebrar o audit.
+    """Um service injetado por Depends não pode abortar a gravação do audit_log.
 
-    O endpoint `create_extension` recebe `service: ExtensionService = Depends(...)`.
-    Esse objeto entra em `valor_entrada` e, cru, faz o Firestore levantar — engolido
-    silenciosamente pelo `except` de `FirebaseRepository.create`. Com um repo que
-    recusa não-serializáveis (como o Firestore real), o log só persiste se o aspecto
-    tiver coagido o objeto a `repr()`.
+    Endpoints que recebem o service como parâmetro (`service: Service = Depends(...)`)
+    colocavam o objeto em `valor_entrada`. O Firestore levanta ao serializá-lo e o
+    `create` engole a exceção: o endpoint respondia 200 e nenhum log era gravado.
+    O `valor_entrada` deve conter só os dados de entrada — sem o colaborador.
     """
     _FirestoreLikeAuditRepo.store = {}
     _FirestoreLikeAuditRepo.counter = 0
     monkeypatch.setattr(audit_module, "FirebaseRepository", _FirestoreLikeAuditRepo)
 
-    class _FakeService:
-        """Dependência não-serializável (não é BaseModel/dict/list)."""
+    class _DecisionBody(BaseModel):
+        acao: str
+        observacao: str | None = None
+
+    class _ExtensionServiceStub:
+        """Colaborador injetado: não é BaseModel nem escalar."""
+
+        async def process_decision(self, **_: Any) -> dict[str, str]:
+            return {"id": "ext1"}
 
     @audit_operation
-    async def create_extension(
-        body: dict[str, str],
-        service: _FakeService,
+    async def decide_extension(
+        extension_id: str,
+        payload: _DecisionBody,
         user: CurrentUser,
+        service: _ExtensionServiceStub,
     ) -> dict[str, str]:
-        return {"id": "ext_new"}
+        return await service.process_decision()
 
-    await create_extension({"tipo": "prazo_defesa"}, _FakeService(), _user())
+    body = _DecisionBody(acao="rejeitar", observacao="Plano insuficiente")
+    await decide_extension("ext1", body, _user(), _ExtensionServiceStub())
 
     assert list(_FirestoreLikeAuditRepo.store) == ["log1"]
     log = next(iter(_FirestoreLikeAuditRepo.store.values()))
     assert log["resultado_status"] == "sucesso"
-    assert log["valor_entrada"]["body"] == {"tipo": "prazo_defesa"}
-    assert log["valor_entrada"]["service"].startswith("<")
-    assert "_FakeService" in log["valor_entrada"]["service"]
+    assert "service" not in log["valor_entrada"]
+    assert log["valor_entrada"]["extension_id"] == "ext1"
+    # A observação da coordenação chega ao audit_log pelo payload serializado.
+    assert log["valor_entrada"]["payload"] == {
+        "acao": "rejeitar",
+        "observacao": "Plano insuficiente",
+    }
 
 
 async def test_audit_serializa_date_cru_sem_quebrar(

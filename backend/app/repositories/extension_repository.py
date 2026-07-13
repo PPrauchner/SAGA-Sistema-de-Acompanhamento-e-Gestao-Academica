@@ -1,4 +1,18 @@
-"""Repositorio da colecao raiz extensions/."""
+"""
+Repositório concreto para a coleção raiz `extensions/` (prorrogações).
+
+Responsabilidades:
+- Herdar FirebaseRepository e especializar operações para a coleção raiz
+  `extensions/` (ADR-0006 — não é sub-coleção de students).
+- create_extension / get_extension / update_extension: CRUD do documento.
+- list_by_student / list_by_status / list_pending_by_students: consultas de
+  leitura para as telas de aluno, orientador e coordenação.
+- has_pending / count_approved: gates de negócio consumidos pelo service.
+
+Sem lógica de negócio: apenas acesso ao Firestore. A resolução de aluno,
+orientador e configuração do programa fica nos repositórios das respectivas
+coleções (Student/Advisor/Program), consumidos pelo ExtensionService.
+"""
 
 from __future__ import annotations
 
@@ -6,67 +20,73 @@ from typing import Any
 
 from backend.app.repositories.firebase_repository import FirebaseRepository
 
-STATUS_PENDING = "pendente"
-STATUS_APPROVED = "aprovada"
+_COLLECTION = "extensions"
+_STATUS_PENDENTE = "pendente"
+_STATUS_APROVADA = "aprovada"
+
+
+def _sort_by_created_desc(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Ordena por created_at desc em memória (evita índice composto no Firestore)."""
+    return sorted(items, key=lambda d: d.get("created_at") or "", reverse=True)
 
 
 class ExtensionRepository(FirebaseRepository):
-    def __init__(self) -> None:
-        super().__init__("extensions")
+    """Repositório da coleção raiz `extensions/`."""
 
-    async def list_by_program(
-        self, programa_id: str, status: str | None = None
+    def __init__(self) -> None:
+        super().__init__(_COLLECTION)
+
+    async def create_extension(self, data: dict[str, Any]) -> str:
+        """Cria uma prorrogação com auto-id e retorna o doc id gerado."""
+        return await self.create(data)
+
+    async def get_extension(self, extension_id: str) -> dict[str, Any] | None:
+        """Lê uma prorrogação por id (inclui o campo `id`), ou None."""
+        return await self.get(extension_id)
+
+    async def update_extension(self, extension_id: str, data: dict[str, Any]) -> bool:
+        """Atualiza parcialmente os campos de uma prorrogação."""
+        return await self.update(extension_id, data)
+
+    async def list_by_student(self, student_id: str) -> list[dict[str, Any]]:
+        """Lista as prorrogações de um aluno, mais recentes primeiro."""
+        items = await self.query(filters=[("student_id", "==", student_id)])
+        return _sort_by_created_desc(items)
+
+    async def list_by_status(self, status: str) -> list[dict[str, Any]]:
+        """Lista todas as prorrogações com um dado status, mais recentes primeiro."""
+        items = await self.query(filters=[("status", "==", status)])
+        return _sort_by_created_desc(items)
+
+    async def list_pending_by_students(
+        self,
+        student_ids: list[str],
     ) -> list[dict[str, Any]]:
-        """Lista prorrogações de um programa via consulta filtrada no Firestore.
+        """Lista prorrogações pendentes restritas a um conjunto de alunos.
 
         Args:
-            programa_id: Programa cujas prorrogações devem ser retornadas.
-            status: Quando informado, restringe ao status correspondente
-                (ex.: 'pendente'); caso contrário retorna todos os status.
+            student_ids: Doc ids dos alunos (ex.: orientandos de um orientador).
 
         Returns:
-            Documentos de extensions/ do programa (com id injetado), filtrados por status
-            quando solicitado — sem ler a coleção inteira e filtrar em memória.
+            Prorrogações pendentes desses alunos, mais recentes primeiro.
         """
-        filters: list[tuple] = [("programa_id", "==", programa_id)]
-        if status is not None:
-            filters.append(("status", "==", status))
-        return await self.query(filters=filters)
-
-    async def list_by_student_ids(self, student_ids: set[str]) -> list[dict[str, Any]]:
         if not student_ids:
             return []
-        extensions = await self.list_all()
-        return [
-            extension
-            for extension in extensions
-            if extension.get("student_id") in student_ids
-        ]
+        allowed = set(student_ids)
+        pending = await self.list_by_status(_STATUS_PENDENTE)
+        return [ext for ext in pending if ext.get("student_id") in allowed]
 
-    async def has_pending_for_student(self, student_id: str) -> bool:
-        matches = await self.query(
-            filters=[
-                ("student_id", "==", student_id),
-                ("status", "==", STATUS_PENDING),
-            ],
+    async def has_pending(self, student_id: str) -> bool:
+        """Indica se o aluno já possui uma solicitação pendente."""
+        items = await self.query(
+            filters=[("student_id", "==", student_id), ("status", "==", _STATUS_PENDENTE)],
             limit=1,
         )
-        return bool(matches)
+        return bool(items)
 
-    async def count_approved_for_student(self, student_id: str) -> int:
-        """Conta as prorrogações já aprovadas de um aluno.
-
-        Args:
-            student_id: Aluno cujas prorrogações aprovadas devem ser contadas.
-
-        Returns:
-            Quantidade de documentos em extensions/ do aluno com status 'aprovada'
-            — base para comparar com programs.max_prorrogacoes (sem contador persistido).
-        """
-        matches = await self.query(
-            filters=[
-                ("student_id", "==", student_id),
-                ("status", "==", STATUS_APPROVED),
-            ],
+    async def count_approved(self, student_id: str) -> int:
+        """Conta as prorrogações já aprovadas do aluno (prorrogações usadas)."""
+        items = await self.query(
+            filters=[("student_id", "==", student_id), ("status", "==", _STATUS_APROVADA)],
         )
-        return len(matches)
+        return len(items)

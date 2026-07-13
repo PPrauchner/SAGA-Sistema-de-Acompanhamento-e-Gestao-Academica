@@ -2,23 +2,26 @@
  * Hook React para a fila de prorrogações pendentes do programa (dashboard da coordenação).
  *
  * Responsabilidades:
- * - usePendingExtensions(): carrega GET /extensions/pending e expõe loading/error/data.
+ * - usePendingExtensions(): carrega GET /extensions e expõe apenas as pendentes.
  * - O token de autenticação vem do useAuth() via AppContext; exclusivo da coordenação.
+ *
+ * O backend já restringe GET /extensions ao programa do coordenador autenticado, então
+ * o filtro por status aqui basta para reproduzir a fila de decisão.
  */
 
 import { useEffect, useState } from "react";
 import { useAuth } from "./useAuth";
-import { solicitacoesApi, type Solicitacao } from "@/api/solicitacoesApi";
+import { extensionsApi, type Extension } from "@/api/extensions";
 
 interface UsePendingExtensionsResult {
-  data: Solicitacao[] | null;
+  data: Extension[] | null;
   loading: boolean;
   error: string | null;
 }
 
 export function usePendingExtensions(): UsePendingExtensionsResult {
   const { token } = useAuth();
-  const [data, setData] = useState<Solicitacao[] | null>(null);
+  const [data, setData] = useState<Extension[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,10 +33,10 @@ export function usePendingExtensions(): UsePendingExtensionsResult {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    solicitacoesApi
-      .listPending(token)
+    extensionsApi
+      .list(token)
       .then((result) => {
-        if (!cancelled) setData(result);
+        if (!cancelled) setData(result.filter((ext) => ext.status === "pendente"));
       })
       .catch((err: Error) => {
         if (!cancelled) setError(err.message);

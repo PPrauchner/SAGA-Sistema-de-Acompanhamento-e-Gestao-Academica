@@ -713,6 +713,7 @@ erDiagram
 | `plano_atualizado` | string\|null | | descrição ou link, quando aplicável |
 | `parecer_orientador` | string\|null | | |
 | `parecer` | string\|null | | alias de compatibilidade para `parecer_orientador` |
+| `observacao_coordenacao` | string\|null | | observação da coordenação ao deliberar; gravada tanto no deferimento quanto no indeferimento |
 | `semestres_solicitados` | int\|null | | campo legado; o fluxo atual usa `nova_data` |
 | `status` | string | | `pendente`\|`em_analise`\|`aprovada`\|`rejeitada` |
 | `nova_data` | timestamp | | data solicitada pelo aluno/orientador |

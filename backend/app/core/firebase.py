@@ -83,10 +83,22 @@ def is_initialized() -> bool:
     return _get_default_app() is not None
 
 
-def get_firestore_client() -> Client:
-    """Retorna o cliente Firestore reutilizando a app Firebase inicializada."""
+def get_firestore_client(app: App | None = None) -> Client:
+    """Retorna o cliente Firestore associado à app informada.
 
-    return firestore.client(app=init_firebase())
+    Seam de injeção para testes: passe uma app Firebase nomeada (ex: a app de
+    integração criada pela fixture `firestore_client`) para obter um client
+    apontando para o projeto de teste, sem tocar na app default. Sem argumento,
+    reutiliza/inicializa a app default via `init_firebase()`.
+
+    Args:
+        app: App Firebase a usar; None usa a app default.
+
+    Returns:
+        Cliente Firestore da app escolhida.
+    """
+
+    return firestore.client(app=app or init_firebase())
 
 
 def get_auth_client() -> auth.Client:

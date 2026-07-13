@@ -13,9 +13,12 @@ from typing import Any
 
 import pytest
 
+from datetime import datetime, timezone
+
 from backend.app.aspects import alerts as alerts_module
 from backend.app.aspects import aspect_config
-from backend.app.aspects.alerts import trigger_alerts
+from backend.app.aspects.alerts import build_extension_alert, trigger_alerts
+from backend.app.models.extension import ExtensionResponse
 
 
 class _NotifRepo:
@@ -218,3 +221,56 @@ async def test_trigger_alerts_envia_quando_preferencia_habilitada(
     await op()
 
     assert len(_NotifRepo.created) == 1
+
+
+# ---------------------------------------------------------------------------
+# build_extension_alert — notificação da decisão de prorrogação (Spec 08)
+# ---------------------------------------------------------------------------
+
+def _extension(status: str, **overrides: Any) -> ExtensionResponse:
+    campos: dict[str, Any] = {
+        "id": "ext1",
+        "student_id": "student1",
+        "requester_id": "uid-aluno",
+        "programa_id": "prog",
+        "tipo": "prazo_defesa",
+        "motivo": "Motivo longo o suficiente",
+        "plano_atualizado": "http://plano.test/doc.pdf",
+        "status": status,
+        "nova_data": datetime(2027, 3, 10, tzinfo=timezone.utc),
+        "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+    campos.update(overrides)
+    return ExtensionResponse(**campos)
+
+
+def test_build_extension_alert_notifica_aluno_com_novo_prazo() -> None:
+    aprovada = _extension("aprovada", prazo_novo=datetime(2027, 3, 10, tzinfo=timezone.utc))
+
+    spec = build_extension_alert(aprovada, (), {})
+
+    assert spec is not None
+    assert spec["tipo"] == "prorrogacao_aprovada"
+    assert spec["destinatario_id"] == "uid-aluno"
+    assert spec["entidade_tipo"] == "extensions"
+    assert spec["entidade_id"] == "ext1"
+    # A notificação é multi-tenant: sem programa_id ela não é atribuível ao programa.
+    assert spec["programa_id"] == "prog"
+    assert "10/03/2027" in spec["mensagem"]
+
+
+def test_build_extension_alert_notifica_indeferimento() -> None:
+    rejeitada = _extension("rejeitada", motivo_rejeicao="Sem justificativa suficiente")
+
+    spec = build_extension_alert(rejeitada, (), {})
+
+    assert spec is not None
+    assert spec["destinatario_id"] == "uid-aluno"
+    assert spec["programa_id"] == "prog"
+    assert "indeferida" in spec["mensagem"]
+
+
+def test_build_extension_alert_ignora_solicitacao_pendente() -> None:
+    """Só a decisão notifica: uma prorrogação ainda pendente não emite alerta."""
+    assert build_extension_alert(_extension("pendente"), (), {}) is None
+    assert build_extension_alert(None, (), {}) is None

@@ -196,6 +196,7 @@
             "justificativa": "string (alias de compatibilidade para motivo)",
             "parecer_orientador": "string | null",
             "parecer": "string | null (alias de compatibilidade para parecer_orientador)",
+            "observacao_coordenacao": "string | null (observacao da coordenacao ao deliberar)",
             "status": "string ('pendente'|'em_analise'|'aprovada'|'rejeitada')",
             "nova_data": "Timestamp (data solicitada)",
             "prazo_novo": "Timestamp (alias de compatibilidade para nova_data)",

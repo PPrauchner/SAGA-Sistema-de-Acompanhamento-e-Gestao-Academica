@@ -213,3 +213,56 @@ async def disparar_alerta_prazo(
         )
     except Exception as exc:
         logger.error("[A05] Falha ao gravar alerta de prazo: %s", exc)
+
+
+def _format_extension_date(value: Any) -> str:
+    """Formata a data do novo prazo para a mensagem de notificação."""
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y")
+    return "a definir"
+
+
+def build_extension_alert(result: Any, args: tuple, kwargs: dict) -> dict | None:
+    """Builder A05 para a decisão de prorrogação (extensions).
+
+    Join Point: POST /api/v1/extensions/{extension_id}/approve (approve_extension)
+        e POST /api/v1/extensions/{extension_id}/reject (reject_extension).
+    Advice: After — notifica o aluno com o resultado e, na aprovação, o novo prazo.
+
+    Args:
+        result: ExtensionResponse retornada pelo endpoint de decisão.
+        args: Args posicionais do endpoint (não usados).
+        kwargs: Kwargs do endpoint (não usados).
+
+    Returns:
+        Documento de notificação destinado ao aluno, ou None se não houver decisão.
+    """
+    status_field = getattr(result, "status", None)
+    status_value = status_field.value if hasattr(status_field, "value") else str(status_field)
+    if status_value not in ("aprovada", "rejeitada"):
+        return None
+
+    # requester_id é o uid do aluno (notifications.destinatario_id → users.uid).
+    destinatario_id = getattr(result, "requester_id", None)
+    if not destinatario_id:
+        logger.warning("[A05] requester_id ausente no result; notificação suprimida.")
+        return None
+
+    if status_value == "aprovada":
+        prazo = _format_extension_date(getattr(result, "prazo_novo", None))
+        mensagem = (
+            "Sua solicitação de prorrogação foi deferida pela coordenação. "
+            f"Novo prazo final: {prazo}."
+        )
+    else:
+        mensagem = "Sua solicitação de prorrogação foi indeferida pela coordenação."
+
+    return {
+        "tipo": "prorrogacao_aprovada",  # único tipo de prorrogação no enum (data-model §4)
+        "titulo": "Decisão sobre sua prorrogação",
+        "mensagem": mensagem,
+        "destinatario_id": destinatario_id,
+        "programa_id": getattr(result, "programa_id", None),
+        "entidade_tipo": "extensions",
+        "entidade_id": getattr(result, "id", ""),
+    }

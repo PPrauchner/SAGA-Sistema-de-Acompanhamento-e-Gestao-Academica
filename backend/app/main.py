@@ -88,13 +88,9 @@ app.include_router(activities.router, prefix=_PREFIX, tags=["activities"])
 app.include_router(activity_types.router, prefix=_PREFIX, tags=["activity-types"])
 app.include_router(productions.router, prefix=_PREFIX, tags=["productions"])
 app.include_router(vehicles.router, prefix=_PREFIX, tags=["vehicles"])
-app.include_router(extensions.router, prefix=_PREFIX, tags=["extensions"])
+app.include_router(extensions.router, prefix=_PREFIX, tags=["Prorrogações"])
 app.include_router(checklist.router, prefix=_PREFIX, tags=["checklist"])
-app.include_router(
-    coordination_transfers.router,
-    prefix=_PREFIX,
-    tags=["coordination-transfers"],
-)
+app.include_router(coordination_transfers.router, prefix=_PREFIX, tags=["coordination-transfers"])
 app.include_router(programs.router, prefix=_PREFIX, tags=["programs"])
 app.include_router(qualis_weights.router, prefix=_PREFIX, tags=["qualis-weights"])
 app.include_router(

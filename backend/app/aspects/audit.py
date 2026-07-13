@@ -17,7 +17,7 @@ from __future__ import annotations
 import functools
 import inspect
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable
 
 from pydantic import BaseModel
@@ -39,6 +39,14 @@ _REDACTED = "***"
 # Qualquer valor fora desta lista (e que não seja BaseModel/dict/list) é coagido a
 # repr() em _serializar_modelos.
 _FIRESTORE_SAFE_SCALARS: tuple[type, ...] = (str, int, float, bool, bytes, datetime)
+
+# Tipos de *valor* que são entrada legítima, ainda que o Firestore não os encode
+# nativamente — `_serializar_modelos` os coage a repr(). Distinguem-se do colaborador
+# injetado por `Depends` (service, repositório, UploadFile), que é ruído e é descartado.
+# Sem esta distinção, o filtro de colaboradores engoliria o `date` cru da issue #332.
+# `datetime` é subclasse de `date`, então a entrada cobre ambos.
+_ESCALARES_DE_ENTRADA: tuple[type, ...] = _FIRESTORE_SAFE_SCALARS + (date,)
+
 
 def _redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
     """Substitui valores de campos sensíveis por '***' em valor_entrada.
@@ -133,6 +141,33 @@ def _serializar_modelos(value: Any) -> Any:
     return repr(value)
 
 
+def _e_dado_de_entrada(valor: Any) -> bool:
+    """Indica se o argumento é um dado de entrada que o Firestore aceita.
+
+    Endpoints recebem, além do payload, colaboradores injetados por `Depends`
+    (services, repositórios) e objetos de transporte (`UploadFile`). Nenhum
+    deles é dado de entrada, e o Firestore levanta `TypeError` ao serializá-los
+    — o que abortaria a gravação do audit_log inteiro.
+
+    Args:
+        valor: Argumento vindo de `bound.arguments`.
+
+    Returns:
+        True se o valor for um dado de entrada — escalar de valor (incluindo `date`,
+        coagido a repr() por `_serializar_modelos`), modelo Pydantic, ou coleção
+        deles. False para colaboradores injetados, que são descartados.
+    """
+    if valor is None or isinstance(valor, _ESCALARES_DE_ENTRADA):
+        return True
+    if isinstance(valor, BaseModel):
+        return True
+    if isinstance(valor, dict):
+        return all(_e_dado_de_entrada(item) for item in valor.values())
+    if isinstance(valor, (list, tuple, set)):
+        return all(_e_dado_de_entrada(item) for item in valor)
+    return False
+
+
 def _extrair_valor_entrada(
     sig: inspect.Signature,
     bound: inspect.BoundArguments,
@@ -142,6 +177,10 @@ def _extrair_valor_entrada(
         if isinstance(valor, dict) and "role" in valor:
             continue
         if hasattr(valor, "role") and hasattr(valor, "uid"):
+            continue
+        # Colaboradores injetados (service, repositório, UploadFile) não são
+        # entrada e quebram a serialização do Firestore — ver _e_dado_de_entrada.
+        if not _e_dado_de_entrada(valor):
             continue
         resultado[nome] = _serializar_modelos(valor)
     # Redação A02 (portada da development): nunca persistir segredos no audit_log.

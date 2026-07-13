@@ -1,118 +1,134 @@
-"""Router FastAPI para solicitacoes de prorrogacao."""
+"""
+Router FastAPI para os endpoints de prorrogação de prazo (Spec 08).
 
-from typing import Any
+Responsabilidades:
+- Expor as rotas de solicitação, parecer, decisão e listagem, delegando toda a
+  lógica ao ExtensionService.
+- Aplicar os aspectos AOP nos join points da Spec 08, na ordem canônica.
+"""
 
-from fastapi import APIRouter, Depends, Query, status
+from typing import Annotated
 
-from backend.app.aspects.alerts import trigger_alerts
+from fastapi import APIRouter, Depends, status
+
+from backend.app.aspects.alerts import trigger_alerts, build_extension_alert
 from backend.app.aspects.audit import audit_operation
 from backend.app.aspects.authorization import requires_role
 from backend.app.aspects.deadline_validation import check_deadlines
 from backend.app.core.auth import CurrentUser, get_current_user
 from backend.app.models.extension import (
+    ApproveRequest,
     ExtensionCreateRequest,
-    ExtensionRejectRequest,
     ExtensionResponse,
+    RejectRequest,
+    ReviewRequest,
 )
 from backend.app.services.extension_service import ExtensionService
 
-router = APIRouter()
-
-service = ExtensionService()
+router = APIRouter(prefix="/extensions", tags=["Prorrogações"])
 
 
-def _get_service() -> ExtensionService:
-    return service
+async def get_extension_service() -> ExtensionService:
+    return ExtensionService()
 
 
-def _build_notificacao_aprovacao(
-    result: Any, args: tuple, kwargs: dict
-) -> dict[str, Any] | None:
-    """Notifica o aluno após a aprovação da prorrogação/trancamento (A05 — After advice).
-
-    Lê o uid do aluno e o novo prazo do resultado do service e compõe a mensagem. Retorna
-    None quando o aluno não pode ser resolvido — nesse caso nenhuma notificação é emitida.
-    """
-    if not isinstance(result, dict):
-        return None
-    aluno_uid = result.get("aluno_uid")
-    if not aluno_uid:
-        return None
-    label = "trancamento" if result.get("tipo") == "trancamento" else "prorrogação"
-    nova_data = result.get("nova_data")
-    if nova_data is not None and hasattr(nova_data, "strftime"):
-        mensagem = f"Sua solicitação de {label} foi aprovada. Novo prazo: {nova_data.strftime('%d/%m/%Y')}."
-    else:
-        mensagem = f"Sua solicitação de {label} foi aprovada."
-    return {
-        "tipo": "prorrogacao_aprovada",
-        "titulo": "Solicitação aprovada",
-        "mensagem": mensagem,
-        "destinatario_id": aluno_uid,
-        "entidade_tipo": "extensions",
-        "entidade_id": result.get("id", ""),
-        "programa_id": result.get("programa_id"),
-    }
-
-
-@router.get("/extensions", response_model=list[ExtensionResponse])
-@requires_role("aluno", "orientador", "coordenacao")
-async def list_extensions(
-    user: CurrentUser = Depends(get_current_user),
-) -> list[ExtensionResponse]:
-    """Lista prorrogacoes visiveis para o usuario autenticado."""
-    return await service.list_extensions(user)
-
-
-@router.get("/extensions/pending", response_model=list[ExtensionResponse])
-@requires_role("coordenacao")
-async def list_pending_extensions(
-    status_filtro: str = Query("pendente", alias="status"),
-    user: CurrentUser = Depends(get_current_user),
-) -> list[ExtensionResponse]:
-    """Lista as prorrogacoes do programa da coordenacao (fila de aprovacao)."""
-    return await service.list_pending_for_coordination(user, status_filtro)
+AuthUser = Annotated[CurrentUser, Depends(get_current_user)]
+Service = Annotated[ExtensionService, Depends(get_extension_service)]
 
 
 @router.post(
-    "/extensions",
+    "",
     response_model=ExtensionResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Solicitar prorrogação (aluno)",
 )
-@requires_role("aluno", "orientador")
+@requires_role("aluno")
 @audit_operation
 @check_deadlines
 async def create_extension(
-    body: ExtensionCreateRequest,
-    user: CurrentUser = Depends(get_current_user),
-    service: ExtensionService = Depends(_get_service),
+    payload: ExtensionCreateRequest,
+    current_user: AuthUser,
+    service: Service,
 ) -> ExtensionResponse:
-    """Cria uma solicitacao de prorrogacao para aluno ou orientando."""
-    return await service.create_extension(body, user)
+    """Cria uma solicitação de prorrogação com status 'pendente'."""
+    return await service.create_extension(payload=payload, requester_uid=current_user.uid)
 
 
-@router.post("/extensions/{extension_id}/approve", response_model=ExtensionResponse)
+@router.get(
+    "",
+    response_model=list[ExtensionResponse],
+    summary="Listar prorrogações (escopo por papel)",
+)
+@requires_role("aluno", "orientador", "coordenacao")
+async def list_extensions(
+    current_user: AuthUser,
+    service: Service,
+) -> list[ExtensionResponse]:
+    """Lista prorrogações conforme o papel: aluno (próprias), orientador
+    (orientandos), coordenação (programa)."""
+    return await service.list_for_user(current_user)
+
+
+@router.patch(
+    "/{extension_id}/review",
+    response_model=ExtensionResponse,
+    summary="Emitir parecer técnico (orientador)",
+)
+@requires_role("orientador")
+@audit_operation
+async def review_extension(
+    extension_id: str,
+    payload: ReviewRequest,
+    current_user: AuthUser,
+    service: Service,
+) -> ExtensionResponse:
+    """Registra o parecer técnico do orientador sobre a solicitação."""
+    return await service.add_review(
+        extension_id=extension_id,
+        payload=payload,
+        orientador_uid=current_user.uid,
+    )
+
+
+@router.post(
+    "/{extension_id}/approve",
+    response_model=ExtensionResponse,
+    summary="Aprovar prorrogação (coordenação)",
+)
 @requires_role("coordenacao")
 @audit_operation
-@trigger_alerts(_build_notificacao_aprovacao)
+@trigger_alerts(build_extension_alert)
 async def approve_extension(
     extension_id: str,
-    user: CurrentUser = Depends(get_current_user),
+    payload: ApproveRequest,
+    current_user: AuthUser,
+    service: Service,
 ) -> ExtensionResponse:
-    """Aprova prorrogacao/trancamento pendente e recalcula o prazo do aluno.
+    """Aprova a prorrogação e recalcula o prazo final do aluno."""
+    return await service.approve_extension(
+        extension_id=extension_id,
+        payload=payload,
+        coordinator=current_user,
+    )
 
-    Aplica @trigger_alerts (A05) para notificar o aluno do resultado e do novo prazo.
-    """
-    return await service.approve_extension(extension_id, user)
 
-
-@router.post("/extensions/{extension_id}/reject", response_model=ExtensionResponse)
+@router.post(
+    "/{extension_id}/reject",
+    response_model=ExtensionResponse,
+    summary="Rejeitar prorrogação (coordenação)",
+)
 @requires_role("coordenacao")
 @audit_operation
+@trigger_alerts(build_extension_alert)
 async def reject_extension(
     extension_id: str,
-    body: ExtensionRejectRequest,
-    user: CurrentUser = Depends(get_current_user),
+    payload: RejectRequest,
+    current_user: AuthUser,
+    service: Service,
 ) -> ExtensionResponse:
-    """Rejeita prorrogacao/trancamento pendente, com motivo obrigatorio."""
-    return await service.reject_extension(extension_id, body.motivo, user)
+    """Rejeita a prorrogação com motivo obrigatório; não altera o prazo."""
+    return await service.reject_extension(
+        extension_id=extension_id,
+        payload=payload,
+        coordinator=current_user,
+    )

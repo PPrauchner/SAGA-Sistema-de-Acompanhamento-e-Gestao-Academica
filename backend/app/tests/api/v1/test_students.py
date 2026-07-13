@@ -59,12 +59,12 @@ class _FakeStudentService:
     async def update_proficiencia(self, student_id: str, body: Any, user: CurrentUser) -> dict[str, Any]:
         self.body = body
         self.user = user
-        return {"message": "ok", "student_id": student_id}
+        return {"message": "Proficiência registrada", "student_id": student_id}
 
     async def update_qualificacao(self, student_id: str, body: Any, user: CurrentUser) -> dict[str, Any]:
         self.body = body
         self.user = user
-        return {"message": "ok", "student_id": student_id}
+        return {"message": "Qualificação registrada", "student_id": student_id}
 
 
 def _coord() -> CurrentUser:
@@ -251,6 +251,7 @@ def test_patch_proficiencia_coordena_com_comprovante(client: TestClient) -> None
     students_router.service = original_service
 
     assert response.status_code == 200
+    assert response.json()["message"] == "Proficiência registrada"
     assert fake_service.body.comprovante_url == "https://example.com/prof.pdf"
     assert fake_service.user is not None
     assert fake_service.user.role == "coordenacao"
@@ -273,6 +274,7 @@ def test_patch_qualificacao_coordena_com_comprovante(client: TestClient) -> None
     students_router.service = original_service
 
     assert response.status_code == 200
+    assert response.json()["message"] == "Qualificação registrada"
     assert fake_service.body.comprovante_url == "https://example.com/qual.pdf"
 
 

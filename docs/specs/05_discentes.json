@@ -220,7 +220,7 @@
         "data_qualificacao": "string (ISO8601)",
         "comprovante_url": "string | null (opcional)"
       },
-      "response_200": {"message": "Qualificação registrada", "situacao_inferida_atualizada": "boolean"}
+      "response_200": {"message": "Qualificação registrada", "situacao_inferida": "string | null", "situacao_inferida_atualizada": "boolean"}
     },
     {
       "path": "/api/v1/students/{student_id}/proficiencia",
@@ -233,7 +233,7 @@
         "data_proficiencia": "string (ISO8601) | null",
         "comprovante_url": "string | null (opcional)"
       },
-      "response_200": {"message": "Proficiência registrada"}
+      "response_200": {"message": "Proficiência registrada", "situacao_inferida": "string | null", "situacao_inferida_atualizada": "boolean"}
     },
     {
       "path": "/api/v1/students/{student_id}/situacao",
