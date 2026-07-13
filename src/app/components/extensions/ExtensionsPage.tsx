@@ -20,7 +20,8 @@ const formatDate = (value?: string | null): string =>
   value ? new Date(value).toLocaleDateString("pt-BR") : "—";
 
 export function ExtensionsPage() {
-  const { extensions, loading, role, createRequest, submitReview, submitDecision } = useExtensionsApi();
+  const { extensions, loading, role, createRequest, submitReview, submitApproval, submitRejection } =
+    useExtensionsApi();
 
   const [showForm, setShowForm] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -31,6 +32,12 @@ export function ExtensionsPage() {
   const [motivo, setMotivo] = useState("");
   const [planoAtualizado, setPlanoAtualizado] = useState("");
   const [parecerTexto, setParecerTexto] = useState("");
+
+  // Deliberação da coordenação: o indeferimento exige motivo (Spec 08); a
+  // observação do deferimento é opcional.
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [motivoRejeicao, setMotivoRejeicao] = useState("");
+  const [observacao, setObservacao] = useState("");
 
   const handleCreateRequest = async () => {
     if (!motivo.trim() || motivo.trim().length < 10) {
@@ -76,10 +83,26 @@ export function ExtensionsPage() {
     }
   };
 
-  const handleDecision = async (extensionId: string, acao: "aprovar" | "rejeitar") => {
+  const handleApprove = async (extensionId: string) => {
     try {
-      await submitDecision(extensionId, acao);
-      toast.success(acao === "aprovar" ? "Prorrogação deferida." : "Prorrogação indeferida.");
+      await submitApproval(extensionId, observacao.trim() || undefined);
+      setObservacao("");
+      toast.success("Prorrogação deferida.");
+    } catch {
+      toast.error("Erro ao homologar a decisão.");
+    }
+  };
+
+  const handleReject = async (extensionId: string) => {
+    if (!motivoRejeicao.trim()) {
+      toast.error("Informe o motivo do indeferimento.");
+      return;
+    }
+    try {
+      await submitRejection(extensionId, motivoRejeicao.trim());
+      setRejectingId(null);
+      setMotivoRejeicao("");
+      toast.success("Prorrogação indeferida.");
     } catch {
       toast.error("Erro ao homologar a decisão.");
     }
@@ -200,6 +223,28 @@ export function ExtensionsPage() {
                       </div>
                     )}
 
+                    {ext.motivo_rejeicao && (
+                      <div>
+                        <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>
+                          Motivo do Indeferimento
+                        </p>
+                        <p style={{ fontSize: "13px", color: "var(--foreground)", lineHeight: 1.6, padding: "12px", background: "#fee2e2", borderRadius: "8px", borderLeft: "3px solid #dc2626" }}>
+                          {ext.motivo_rejeicao}
+                        </p>
+                      </div>
+                    )}
+
+                    {ext.observacao_coordenacao && (
+                      <div>
+                        <p style={{ fontSize: "12px", fontWeight: 600, color: "var(--muted-foreground)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "8px" }}>
+                          Observação da Coordenação
+                        </p>
+                        <p style={{ fontSize: "13px", color: "var(--foreground)", lineHeight: 1.6, padding: "12px", background: "var(--muted)", borderRadius: "8px" }}>
+                          {ext.observacao_coordenacao}
+                        </p>
+                      </div>
+                    )}
+
                     {ext.status === "pendente" && (
                       <div className="flex flex-col gap-2 pt-2">
                         {role === "orientador" && !ext.parecer_orientador && (
@@ -222,14 +267,54 @@ export function ExtensionsPage() {
                           </div>
                         )}
 
-                        {role === "coordenacao" && (
-                          <div className="flex gap-3">
-                            <button onClick={() => handleDecision(ext.id, "aprovar")} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#dcfce7", color: "#1F8A70", fontWeight: 600, fontSize: "13px" }}>
-                              <CheckCircle size={14} /> Deferir (Aprovar)
-                            </button>
-                            <button onClick={() => handleDecision(ext.id, "rejeitar")} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#fee2e2", color: "#dc2626", fontWeight: 600, fontSize: "13px" }}>
-                              <XCircle size={14} /> Indeferir (Rejeitar)
-                            </button>
+                        {role === "coordenacao" && rejectingId !== ext.id && (
+                          <div className="w-full">
+                            <input
+                              type="text"
+                              placeholder="Observação da coordenação (opcional)..."
+                              className="w-full rounded-xl px-3 py-2 outline-none mb-2"
+                              style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}
+                              value={observacao}
+                              onChange={(e) => setObservacao(e.target.value)}
+                            />
+                            <div className="flex gap-3">
+                              <button onClick={() => handleApprove(ext.id)} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#dcfce7", color: "#1F8A70", fontWeight: 600, fontSize: "13px" }}>
+                                <CheckCircle size={14} /> Deferir (Aprovar)
+                              </button>
+                              <button onClick={() => setRejectingId(ext.id)} className="flex items-center gap-2 px-4 py-2 rounded-xl" style={{ background: "#fee2e2", color: "#dc2626", fontWeight: 600, fontSize: "13px" }}>
+                                <XCircle size={14} /> Indeferir (Rejeitar)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {role === "coordenacao" && rejectingId === ext.id && (
+                          <div className="w-full">
+                            <input
+                              type="text"
+                              placeholder="Motivo do indeferimento (obrigatório)..."
+                              className="w-full rounded-xl px-3 py-2 outline-none mb-2"
+                              style={{ border: "1px solid var(--border)", background: "var(--input-background)", fontSize: "13px" }}
+                              value={motivoRejeicao}
+                              onChange={(e) => setMotivoRejeicao(e.target.value)}
+                            />
+                            <div className="flex gap-3">
+                              <button
+                                onClick={() => handleReject(ext.id)}
+                                disabled={!motivoRejeicao.trim()}
+                                className="flex items-center gap-2 px-4 py-2 rounded-xl disabled:opacity-50"
+                                style={{ background: "#fee2e2", color: "#dc2626", fontWeight: 600, fontSize: "13px" }}
+                              >
+                                <XCircle size={14} /> Confirmar Indeferimento
+                              </button>
+                              <button
+                                onClick={() => { setRejectingId(null); setMotivoRejeicao(""); }}
+                                className="flex items-center gap-2 px-4 py-2 rounded-xl"
+                                style={{ background: "var(--muted)", color: "var(--muted-foreground)", fontWeight: 600, fontSize: "13px" }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
