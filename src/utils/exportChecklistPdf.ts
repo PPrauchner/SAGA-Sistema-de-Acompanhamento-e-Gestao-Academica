@@ -24,7 +24,7 @@ const STATUS_LABEL: Record<RequisitoStatus, string> = {
   em_risco: "Em risco",
 };
 
-function formatDateTime(value?: string | null): string {
+export function formatDateTime(value?: string | null): string {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return value ?? "Nao informado";
   return date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
@@ -158,7 +158,7 @@ function wrapText(text: string, maxChars: number): string[] {
   return lines.length ? lines : [""];
 }
 
-class PdfBuilder {
+export class PdfBuilder {
   private pages: string[] = [""];
   private y = PAGE_HEIGHT - MARGIN;
 

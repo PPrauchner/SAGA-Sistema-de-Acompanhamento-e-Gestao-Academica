@@ -20,13 +20,13 @@ export function sanitizeSheetName(value: string): string {
   return clean.slice(0, 31);
 }
 
-function getCellValue<T>(row: T, column: ExportColumn<T>): ExportCell {
+export function getCellValue<T>(row: T, column: ExportColumn<T>): ExportCell {
   if (column.value) return column.value(row);
   const record = row as Record<string, ExportCell>;
   return record[String(column.key)];
 }
 
-function formatCell(value: ExportCell): string {
+export function formatCell(value: ExportCell): string {
   if (value == null) return "";
   if (value instanceof Date) return value.toISOString();
   return String(value);
