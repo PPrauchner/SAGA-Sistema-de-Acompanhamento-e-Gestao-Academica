@@ -771,7 +771,7 @@ Presente sob `students/`, `work_plan/`, `activity_types/` e `users/`. Uma entida
 
 | Campo | Tipo | Notas |
 |-------|------|-------|
-| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador`\|`transferencia_coordenacao` |
+| `tipo` | string | `progresso_task`\|`atividade_validada`\|`prorrogacao_aprovada`\|`prorrogacao_rejeitada`\|`prazo_critico`\|`atividade_submetida`\|`transferencia_orientador`\|`transferencia_coordenacao` |
 | `tipo="transferencia_orientador"` | uso | fluxo `transfer_requests`: criacao de solicitacao, aprovacao, rejeicao, cancelamento e transferencia direta pela coordenacao |
 | `titulo` / `mensagem` | string | |
 | `destinatario_id` | string | →`users.uid` (soft) |

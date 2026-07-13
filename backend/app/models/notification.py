@@ -3,8 +3,8 @@ Modelos Pydantic para a entidade Notification (aspecto A05).
 
 Responsabilidades:
 - Definir NotificationTipo com os tipos válidos de notificação emitidos pelo aspecto
-  @trigger_alerts (progresso_task, atividade_validada, prorrogacao_aprovada, prazo_critico,
-  atividade_submetida).
+  @trigger_alerts (progresso_task, atividade_validada, prorrogacao_aprovada,
+  prorrogacao_rejeitada, prazo_critico, atividade_submetida).
 - Definir NotificationResponse mapeando o documento da coleção notifications/ — schema
   canônico produzido pelo aspecto e lido em tempo real pelo frontend via onSnapshot.
 - Definir MarkReadResponse, retorno do PATCH /notifications/{id}/read.
@@ -23,6 +23,7 @@ NotificationTipo = Literal[
     "progresso_task",
     "atividade_validada",
     "prorrogacao_aprovada",
+    "prorrogacao_rejeitada",
     "prazo_critico",
     "atividade_submetida",
 ]
