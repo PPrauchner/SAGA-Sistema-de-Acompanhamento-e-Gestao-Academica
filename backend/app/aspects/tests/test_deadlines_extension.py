@@ -54,7 +54,10 @@ def _user() -> CurrentUser:
 
 def _body() -> ExtensionCreateRequest:
     return ExtensionCreateRequest(
-        tipo="prazo_defesa", nova_data=date(2030, 1, 1), motivo="Ajuste"
+        tipo="prazo_defesa",
+        nova_data=date(2030, 1, 1),
+        motivo="Ajuste no cronograma da defesa",
+        plano_atualizado="http://plano.test/doc.pdf",
     )
 
 

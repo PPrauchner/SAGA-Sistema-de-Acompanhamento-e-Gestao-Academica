@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
@@ -29,7 +29,7 @@ class _AuditRepo:
         return doc_id
 
 
-_SERIALIZAVEIS_FIRESTORE = (str, int, float, bool, bytes, datetime)
+_SERIALIZAVEIS_FIRESTORE = (str, int, float, bool, bytes, datetime, date)
 
 
 def _reject_raw_models(value: Any) -> None:
@@ -44,7 +44,7 @@ def _reject_raw_models(value: Any) -> None:
     `valor_entrada` passava aqui e falhava só em produção — silenciosamente, porque
     `FirebaseRepository.create` engole a exceção.
     """
-    if value is None or isinstance(value, _FIRESTORE_SAFE):
+    if value is None or isinstance(value, _SERIALIZAVEIS_FIRESTORE):
         return
     if isinstance(value, dict):
         for item in value.values():
@@ -52,7 +52,7 @@ def _reject_raw_models(value: Any) -> None:
     elif isinstance(value, (list, tuple)):
         for item in value:
             _reject_raw_models(item)
-    elif not (value is None or isinstance(value, _SERIALIZAVEIS_FIRESTORE)):
+    else:
         raise TypeError(f"{type(value).__name__} não é serializável no Firestore")
 
 
