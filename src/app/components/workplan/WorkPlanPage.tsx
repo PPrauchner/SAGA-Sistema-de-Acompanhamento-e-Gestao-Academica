@@ -285,8 +285,8 @@ export function WorkPlanPage() {
                     style={{
                       fontSize: 13,
                       fontWeight: s.id === targetStudentId ? 700 : 400,
-                      color: s.id === targetStudentId ? "#123C7A" : "var(--foreground)",
-                      background: s.id === targetStudentId ? "#eef3fc" : "transparent",
+                      color: s.id === targetStudentId ? "var(--tint-blue-text)" : "var(--foreground)",
+                      background: s.id === targetStudentId ? "var(--tint-blue-bg)" : "transparent",
                     }}
                   >
                     {s.label}
@@ -368,8 +368,8 @@ export function WorkPlanPage() {
     <div className="space-y-5">
       {header}
       {error && (
-        <div className="rounded-lg p-3" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
-          <p style={{ color: "#b91c1c", fontSize: 13, fontWeight: 700 }}>{error}</p>
+        <div className="rounded-lg p-3" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+          <p style={{ color: "var(--tint-danger-text)", fontSize: 13, fontWeight: 700 }}>{error}</p>
         </div>
       )}
       <section className="rounded-lg p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
@@ -391,10 +391,10 @@ export function WorkPlanPage() {
               <span>{Math.round(plan.progresso_percentual)}%</span>
             </div>
             <div className="mt-2 h-2 overflow-hidden rounded-full" style={{ background: "var(--muted)" }}>
-              <div className="h-full rounded-full" style={{ width: `${plan.progresso_percentual}%`, background: "#1F8A70" }} />
+              <div className="h-full rounded-full" style={{ width: `${plan.progresso_percentual}%`, background: "var(--status-active)" }} />
             </div>
             {plan.fato_plano_concluido && (
-              <p className="mt-2 flex items-center gap-1.5" style={{ fontSize: 12, color: "#047857", fontWeight: 700 }}>
+              <p className="mt-2 flex items-center gap-1.5" style={{ fontSize: 12, color: "var(--tint-teal-text)", fontWeight: 700 }}>
                 <CheckCircle2 size={14} /> {plan.fato_plano_concluido}
               </p>
             )}
@@ -456,7 +456,7 @@ export function WorkPlanPage() {
                 )}
               </div>
               <div className="mt-3 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
-                <div className="h-full rounded-full" style={{ width: `${stage.progresso_percentual}%`, background: "#123C7A" }} />
+                <div className="h-full rounded-full" style={{ width: `${stage.progresso_percentual}%`, background: "var(--brand-blue)" }} />
               </div>
             </div>
           ))}
@@ -518,7 +518,7 @@ function KanbanColumn({
       className="flex max-h-[560px] min-h-[420px] flex-col rounded-lg p-3"
       style={{
         background: "var(--card)",
-        border: `1px solid ${active ? "#123C7A" : "var(--border)"}`,
+        border: `1px solid ${active ? "var(--brand-blue)" : "var(--border)"}`,
         boxShadow: active ? "0 0 0 2px rgba(18,60,122,0.18)" : "none",
       }}
     >
@@ -594,7 +594,7 @@ function TaskCard({
           <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 4 }}>{stage.nome}</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "#123C7A", background: "#eef3fc" }}>
+          <span className="rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "var(--tint-blue-text)", background: "var(--tint-blue-bg)" }}>
             {PRIORITY_LABEL[task.prioridade]}
           </span>
           {canDelete && (
@@ -603,7 +603,7 @@ function TaskCard({
               disabled={disabled}
               onClick={onDelete}
               className="flex h-7 w-7 items-center justify-center rounded-md"
-              style={{ background: "var(--card)", border: "1px solid var(--border)", color: "#dc2626" }}
+              style={{ background: "var(--card)", border: "1px solid var(--border)", color: "var(--status-danger)" }}
               aria-label="Excluir task"
             >
               <Trash2 size={14} />
@@ -617,12 +617,12 @@ function TaskCard({
         <span>{Math.round(task.progresso_percentual)}%</span>
       </div>
       {overdue && (
-        <span className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "#dc2626", background: "#fef2f2" }}>
+        <span className="mt-2 inline-flex items-center gap-1 rounded-md px-2 py-1" style={{ fontSize: 10, fontWeight: 800, color: "var(--tint-danger-text)", background: "var(--tint-danger-bg)" }}>
           <AlertCircle size={11} /> Atrasado
         </span>
       )}
       <div className="mt-2 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--muted)" }}>
-        <div className="h-full rounded-full" style={{ width: `${task.progresso_percentual}%`, background: overdue ? "#dc2626" : "#1F8A70" }} />
+        <div className="h-full rounded-full" style={{ width: `${task.progresso_percentual}%`, background: overdue ? "var(--status-danger)" : "var(--status-active)" }} />
       </div>
       {task.ultima_atualizacao && (
         <p style={{ fontSize: 11, color: "var(--muted-foreground)", marginTop: 8 }}>
@@ -787,7 +787,7 @@ function ProgressModal({
             step={5}
             value={percentual}
             onChange={(event) => setPercentual(Number(event.target.value))}
-            style={{ width: "100%", accentColor: "#123C7A" }}
+            style={{ width: "100%", accentColor: "var(--brand-blue)" }}
           />
         </div>
         <button

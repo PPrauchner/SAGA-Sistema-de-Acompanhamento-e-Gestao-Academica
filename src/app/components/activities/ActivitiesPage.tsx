@@ -47,10 +47,10 @@ interface StatusConfig {
 }
 
 const STATUS_CFG: Record<string, StatusConfig> = {
-  rascunho: { label: "Rascunho", color: "#64748b", bg: "#f1f5f9", icon: <Circle size={11} /> },
-  enviado: { label: "Enviado", color: "#0891b2", bg: "#e0f7fa", icon: <Clock size={11} /> },
-  aprovado: { label: "Aprovado", color: "#1F8A70", bg: "#dcfce7", icon: <CheckCircle2 size={11} /> },
-  rejeitado: { label: "Rejeitado", color: "#dc2626", bg: "#fee2e2", icon: <XCircle size={11} /> },
+  rascunho: { label: "Rascunho", color: "var(--muted-foreground)", bg: "var(--muted)", icon: <Circle size={11} /> },
+  enviado: { label: "Enviado", color: "var(--tint-blue-text)", bg: "var(--tint-blue-bg)", icon: <Clock size={11} /> },
+  aprovado: { label: "Aprovado", color: "var(--tint-teal-text)", bg: "var(--tint-teal-bg)", icon: <CheckCircle2 size={11} /> },
+  rejeitado: { label: "Rejeitado", color: "var(--tint-danger-text)", bg: "var(--tint-danger-bg)", icon: <XCircle size={11} /> },
 };
 
 const CATEGORIA_LABEL: Record<string, string> = {
@@ -440,12 +440,12 @@ export function ActivitiesPage() {
       </div>
 
       {error && (
-        <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#fee2e2", color: "#991b1b", fontSize: "13px" }}>
+        <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "var(--tint-danger-bg)", color: "var(--tint-danger-text)", fontSize: "13px" }}>
           {error}
         </div>
       )}
       {feedback && (
-        <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "#dcfce7", color: "#166534", fontSize: "13px" }}>
+        <div className="rounded-xl px-4 py-3 mb-4" style={{ background: "var(--tint-teal-bg)", color: "var(--tint-teal-text)", fontSize: "13px" }}>
           {feedback}
         </div>
       )}
@@ -709,7 +709,7 @@ export function ActivitiesPage() {
                   {typeof activity.elegivel === "boolean" && (
                     <div className="flex justify-between">
                       <span style={{ color: "var(--muted-foreground)" }}>Elegível (RL04)</span>
-                      <span style={{ color: activity.elegivel ? "#1F8A70" : "#dc2626", fontWeight: 600 }}>
+                      <span style={{ color: activity.elegivel ? "var(--status-active)" : "var(--status-danger)", fontWeight: 600 }}>
                         {activity.elegivel ? "Sim" : "Não"}
                       </span>
                     </div>
@@ -731,7 +731,7 @@ export function ActivitiesPage() {
                 {activity.parecer_orientador && (
                   <div
                     className="mt-3 rounded-xl px-3 py-2.5"
-                    style={{ background: "#f1f5f9", border: "1px solid var(--border)" }}
+                    style={{ background: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     <p
                       className="flex items-center gap-1.5 mb-1"
@@ -748,7 +748,7 @@ export function ActivitiesPage() {
                 {activity.observacao_coordenacao && (
                   <div
                     className="mt-3 rounded-xl px-3 py-2.5"
-                    style={{ background: "#f1f5f9", border: "1px solid var(--border)" }}
+                    style={{ background: "var(--muted)", border: "1px solid var(--border)" }}
                   >
                     <p
                       className="flex items-center gap-1.5 mb-1"

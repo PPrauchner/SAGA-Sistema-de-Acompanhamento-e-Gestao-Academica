@@ -29,22 +29,18 @@ class _AuditRepo:
         return doc_id
 
 
-_SERIALIZAVEIS_FIRESTORE = (str, int, float, bool, bytes, datetime, date)
+_FIRESTORE_SAFE = (str, int, float, bool, bytes, datetime)
 
 
 def _reject_raw_models(value: Any) -> None:
     """Recusa o que o SDK do Firestore recusa em runtime real.
 
-    Um objeto Pydantic cru em `valor_entrada` faz o Firestore levantar — a falha que a
-    issue #151 descreve. Datetime é aceito pelo Firestore e não é rejeitado aqui.
-
-    Qualquer outro objeto arbitrário (service injetado por Depends, UploadFile) também
-    é recusado: o `encode_value` do SDK levanta `TypeError: Cannot convert to a
-    Firestore Value`. Enquanto este helper só recusava BaseModel, um service em
-    `valor_entrada` passava aqui e falhava só em produção — silenciosamente, porque
-    `FirebaseRepository.create` engole a exceção.
+    Um objeto Pydantic cru (issue #151), um `date` puro (issue #332 — o encoder do
+    Firestore só aceita `datetime`) ou uma dependência injetada via `Depends`
+    (bloqueador C1 do PR 304) em `valor_entrada` faz o Firestore levantar. Escalares
+    Firestore-safe (str/int/float/bool/bytes/datetime) e coleções deles passam.
     """
-    if value is None or isinstance(value, _SERIALIZAVEIS_FIRESTORE):
+    if value is None or isinstance(value, _FIRESTORE_SAFE):
         return
     if isinstance(value, dict):
         for item in value.values():
@@ -238,6 +234,38 @@ async def test_audit_operation_ignora_colaborador_injetado_e_persiste(
         "acao": "rejeitar",
         "observacao": "Plano insuficiente",
     }
+
+
+async def test_audit_serializa_date_cru_sem_quebrar(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Issue #332: um `date` puro em `valor_entrada` não pode quebrar o audit.
+
+    O encoder do google-cloud-firestore rejeita `datetime.date` (só aceita
+    `datetime`). Um `date` cru chegando como argumento de topo de um endpoint
+    auditado faria o Firestore levantar — engolido silenciosamente pelo `except`
+    de `FirebaseRepository.create` (mesma classe do bloqueador C1). Com um repo que
+    recusa não-serializáveis (como o Firestore real), o log só persiste se o aspecto
+    tiver coagido o `date` a `repr()`.
+    """
+    _FirestoreLikeAuditRepo.store = {}
+    _FirestoreLikeAuditRepo.counter = 0
+    monkeypatch.setattr(audit_module, "FirebaseRepository", _FirestoreLikeAuditRepo)
+
+    @audit_operation
+    async def registrar_prazo(
+        student_id: str,
+        prazo: date,
+        user: CurrentUser,
+    ) -> dict[str, str]:
+        return {"id": student_id, "message": "ok"}
+
+    await registrar_prazo("s1", date(2030, 1, 1), _user())
+
+    assert list(_FirestoreLikeAuditRepo.store) == ["log1"]
+    log = next(iter(_FirestoreLikeAuditRepo.store.values()))
+    assert log["resultado_status"] == "sucesso"
+    assert log["valor_entrada"]["prazo"] == repr(date(2030, 1, 1))
 
 
 async def test_audit_operation_deriva_recurso_do_id_no_resultado(

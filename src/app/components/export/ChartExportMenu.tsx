@@ -30,9 +30,10 @@ export function ChartExportMenu<T>({ title, fileName, chartRef, data, columns }:
     setBusy(format);
     setError(null);
     try {
+      if (data.length === 0) throw new Error("Não há dados disponíveis para exportação.");
       if (format === "png" || format === "pdf") {
         const element = chartRef.current;
-        if (!element) throw new Error("Grafico indisponivel para exportacao.");
+        if (!element) throw new Error("Gráfico indisponível para exportação.");
         if (format === "png") await exportChartAsPng(element, `${baseName}.png`);
         else await exportChartAsPdf(element, title, `${baseName}.pdf`);
       } else if (format === "csv") {
@@ -49,7 +50,7 @@ export function ChartExportMenu<T>({ title, fileName, chartRef, data, columns }:
   }
 
   return (
-    <div className="relative">
+    <div className="relative" data-html2canvas-ignore="true">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}

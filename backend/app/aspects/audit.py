@@ -34,9 +34,19 @@ SENSITIVE_FIELDS: frozenset[str] = frozenset(
 
 _REDACTED = "***"
 
-# Tipos escalares que o Firestore persiste diretamente. Qualquer valor fora desta
-# lista (e que não seja BaseModel/dict/list) é coagido a repr() em _serializar_modelos.
-_FIRESTORE_SAFE_SCALARS: tuple[type, ...] = (str, int, float, bool, bytes, datetime, date)
+# Tipos escalares que o Firestore persiste diretamente. `date` puro NÃO entra: o
+# encoder do google-cloud-firestore só aceita `datetime` (rejeita `datetime.date`).
+# Qualquer valor fora desta lista (e que não seja BaseModel/dict/list) é coagido a
+# repr() em _serializar_modelos.
+_FIRESTORE_SAFE_SCALARS: tuple[type, ...] = (str, int, float, bool, bytes, datetime)
+
+# Tipos de *valor* que são entrada legítima, ainda que o Firestore não os encode
+# nativamente — `_serializar_modelos` os coage a repr(). Distinguem-se do colaborador
+# injetado por `Depends` (service, repositório, UploadFile), que é ruído e é descartado.
+# Sem esta distinção, o filtro de colaboradores engoliria o `date` cru da issue #332.
+# `datetime` é subclasse de `date`, então a entrada cobre ambos.
+_ESCALARES_DE_ENTRADA: tuple[type, ...] = _FIRESTORE_SAFE_SCALARS + (date,)
+
 
 def _redact_sensitive(data: dict[str, Any]) -> dict[str, Any]:
     """Substitui valores de campos sensíveis por '***' em valor_entrada.
@@ -114,10 +124,11 @@ def _serializar_modelos(value: Any) -> Any:
     """Converte valores para uma forma que o Firestore aceita gravar.
 
     Desfaz modelos Pydantic (crus, o Firestore rejeita — regressão #151),
-    preservando datetimes/date intactos (o Firestore os aceita). Qualquer valor
-    fora dos tipos serializáveis — ex.: uma dependência injetada via `Depends`
-    que caia em `valor_entrada` — é coagido a `repr()`, evitando que o encoder do
-    Firestore levante e a gravação do `audit_log` falhe silenciosamente.
+    preservando `datetime` intacto (o Firestore o aceita). Qualquer valor fora dos
+    tipos serializáveis — ex.: um `date` puro (rejeitado pelo encoder do Firestore)
+    ou uma dependência injetada via `Depends` que caia em `valor_entrada` — é
+    coagido a `repr()`, evitando que o encoder do Firestore levante e a gravação do
+    `audit_log` falhe silenciosamente.
     """
     if isinstance(value, BaseModel):
         return value.model_dump(mode="json")
@@ -142,10 +153,11 @@ def _e_dado_de_entrada(valor: Any) -> bool:
         valor: Argumento vindo de `bound.arguments`.
 
     Returns:
-        True se o valor for serializável pelo Firestore, direta ou
-        recursivamente (modelos Pydantic são convertidos por `_serializar_modelos`).
+        True se o valor for um dado de entrada — escalar de valor (incluindo `date`,
+        coagido a repr() por `_serializar_modelos`), modelo Pydantic, ou coleção
+        deles. False para colaboradores injetados, que são descartados.
     """
-    if valor is None or isinstance(valor, _FIRESTORE_SAFE_SCALARS):
+    if valor is None or isinstance(valor, _ESCALARES_DE_ENTRADA):
         return True
     if isinstance(valor, BaseModel):
         return True

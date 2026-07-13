@@ -47,9 +47,9 @@ export function PasswordRecoveryPage() {
         type="button"
         onClick={() => setCurrentPage("login")}
         className="flex items-center gap-2 mb-8 rounded-xl px-3 py-2 transition-all"
-        style={{ background: "#f1f5f9", color: "#374151", fontSize: "13px", fontWeight: 600, border: "none" }}
-        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "#e2e8f0"; }}
-        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "#f1f5f9"; }}
+        style={{ background: "var(--muted)", color: "var(--foreground)", fontSize: "13px", fontWeight: 600, border: "none" }}
+        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--border)"; }}
+        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "var(--muted)"; }}
       >
         <ArrowLeft size={15} />
         Voltar ao Login
@@ -61,13 +61,13 @@ export function PasswordRecoveryPage() {
           {/* Icon header */}
           <div className="mb-7">
             <div className="flex items-center justify-center mb-5 rounded-2xl mx-auto"
-              style={{ width: 68, height: 68, background: "#eef3fc", border: "2px solid #c7d9f5" }}>
-              <Mail size={30} style={{ color: "#123C7A" }} />
+              style={{ width: 68, height: 68, background: "var(--tint-blue-bg)", border: "2px solid var(--tint-blue-border)" }}>
+              <Mail size={30} style={{ color: "var(--brand-blue)" }} />
             </div>
-            <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginBottom: "6px", textAlign: "center" }}>
+            <h2 style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", marginBottom: "6px", textAlign: "center" }}>
               Recuperar Senha
             </h2>
-            <p style={{ fontSize: "14px", color: "#64748b", textAlign: "center", lineHeight: 1.6 }}>
+            <p style={{ fontSize: "14px", color: "var(--muted-foreground)", textAlign: "center", lineHeight: 1.6 }}>
               Informe seu e-mail institucional e enviaremos um link para redefinir sua senha.
             </p>
           </div>
@@ -75,12 +75,12 @@ export function PasswordRecoveryPage() {
           <form onSubmit={handleEmailSubmit} noValidate>
             <div className="mb-5">
               <label htmlFor="email-recovery"
-                style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}>
+                style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "6px" }}>
                 E-mail Institucional
               </label>
               <div className="relative">
                 <Mail size={15} className="absolute top-1/2 -translate-y-1/2 left-3.5"
-                  style={{ color: "#94a3b8", pointerEvents: "none" }} />
+                  style={{ color: "var(--muted-foreground)", pointerEvents: "none" }} />
                 <input
                   id="email-recovery"
                   type="email"
@@ -90,19 +90,19 @@ export function PasswordRecoveryPage() {
                   autoComplete="email"
                   className="w-full rounded-xl pl-10 pr-4 py-3 outline-none transition-all"
                   style={{
-                    border: `2px solid ${emailError ? "#ef4444" : "#e2e8f0"}`,
-                    background: "#f8fafc",
+                    border: `2px solid ${emailError ? "var(--destructive)" : "var(--border)"}`,
+                    background: "var(--input-background)",
                     fontSize: "14px",
-                    color: "#0f172a",
+                    color: "var(--foreground)",
                   }}
-                  onFocus={(e) => { e.currentTarget.style.borderColor = emailError ? "#ef4444" : "#123C7A"; e.currentTarget.style.background = "#fff"; }}
-                  onBlur={(e) => { e.currentTarget.style.borderColor = emailError ? "#ef4444" : "#e2e8f0"; e.currentTarget.style.background = "#f8fafc"; }}
+                  onFocus={(e) => { e.currentTarget.style.borderColor = emailError ? "var(--destructive)" : "var(--ring)"; e.currentTarget.style.background = "var(--card)"; }}
+                  onBlur={(e) => { e.currentTarget.style.borderColor = emailError ? "var(--destructive)" : "var(--border)"; e.currentTarget.style.background = "var(--input-background)"; }}
                 />
               </div>
               {emailError && (
                 <div className="flex items-center gap-1.5 mt-1.5">
-                  <AlertCircle size={13} style={{ color: "#ef4444", flexShrink: 0 }} />
-                  <p style={{ fontSize: "12px", color: "#ef4444" }}>{emailError}</p>
+                  <AlertCircle size={13} style={{ color: "var(--destructive)", flexShrink: 0 }} />
+                  <p style={{ fontSize: "12px", color: "var(--destructive)" }}>{emailError}</p>
                 </div>
               )}
             </div>
@@ -129,10 +129,10 @@ export function PasswordRecoveryPage() {
           </form>
 
           {/* Info box */}
-          <div className="mt-6 rounded-xl p-3.5" style={{ background: "#f0f9ff", border: "1px solid #bae6fd" }}>
+          <div className="mt-6 rounded-xl p-3.5" style={{ background: "var(--tint-blue-bg)", border: "1px solid var(--tint-blue-border)" }}>
             <div className="flex items-start gap-2">
-              <Shield size={13} style={{ color: "#0284c7", flexShrink: 0, marginTop: 2 }} />
-              <p style={{ fontSize: "11px", color: "#0369a1", lineHeight: 1.5 }}>
+              <Shield size={13} style={{ color: "var(--tint-blue-text)", flexShrink: 0, marginTop: 2 }} />
+              <p style={{ fontSize: "11px", color: "var(--tint-blue-text)", lineHeight: 1.5 }}>
                 Por segurança, o link expira em algumas horas. Se não receber o e-mail,
                 verifique a pasta de spam ou entre em contato com a secretaria.
               </p>
@@ -145,17 +145,17 @@ export function PasswordRecoveryPage() {
       {stage === "sent" && (
         <div className="text-center py-4">
           <div className="flex items-center justify-center mx-auto mb-6 rounded-full"
-            style={{ width: 80, height: 80, background: "#dcfce7", border: "3px solid #bbf7d0" }}>
-            <CheckCircle2 size={40} style={{ color: "#16a34a" }} />
+            style={{ width: 80, height: 80, background: "var(--tint-teal-bg)", border: "3px solid var(--tint-teal-border)" }}>
+            <CheckCircle2 size={40} style={{ color: "var(--tint-teal-text)" }} />
           </div>
-          <h2 style={{ fontSize: "24px", fontWeight: 800, color: "#0f172a", marginBottom: "12px" }}>
+          <h2 style={{ fontSize: "24px", fontWeight: 800, color: "var(--foreground)", marginBottom: "12px" }}>
             E-mail Enviado!
           </h2>
-          <p style={{ fontSize: "14px", color: "#64748b", lineHeight: 1.65, marginBottom: "8px" }}>
-            Se houver uma conta associada a <strong style={{ color: "#123C7A" }}>{maskedEmail}</strong>,
+          <p style={{ fontSize: "14px", color: "var(--muted-foreground)", lineHeight: 1.65, marginBottom: "8px" }}>
+            Se houver uma conta associada a <strong style={{ color: "var(--brand-blue)" }}>{maskedEmail}</strong>,
             você receberá um link para redefinir sua senha.
           </p>
-          <p style={{ fontSize: "13px", color: "#94a3b8", lineHeight: 1.6, marginBottom: "32px" }}>
+          <p style={{ fontSize: "13px", color: "var(--muted-foreground)", lineHeight: 1.6, marginBottom: "32px" }}>
             Abra o link no e-mail para criar uma nova senha e depois retorne para fazer login.
           </p>
           <button

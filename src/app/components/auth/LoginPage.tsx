@@ -65,10 +65,10 @@ export function LoginPage() {
   return (
     <AuthLayout noScroll>
       <div className="mb-5">
-        <h2 style={{ fontSize: "26px", fontWeight: 800, color: "#0f172a", lineHeight: 1.2, marginBottom: "6px" }}>
+        <h2 style={{ fontSize: "26px", fontWeight: 800, color: "var(--foreground)", lineHeight: 1.2, marginBottom: "6px" }}>
           Acesse sua conta
         </h2>
-        <p style={{ fontSize: "14px", color: "#64748b", lineHeight: 1.5 }}>
+        <p style={{ fontSize: "14px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
           Entre com suas credenciais institucionais para continuar.
         </p>
       </div>
@@ -77,7 +77,7 @@ export function LoginPage() {
         <div className="mb-4">
           <label
             htmlFor="email"
-            style={{ fontSize: "13px", fontWeight: 600, color: "#374151", display: "block", marginBottom: "6px" }}
+            style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)", display: "block", marginBottom: "6px" }}
           >
             E-mail Institucional
           </label>
@@ -85,7 +85,7 @@ export function LoginPage() {
             <Mail
               size={15}
               className="absolute top-1/2 -translate-y-1/2 left-3.5"
-              style={{ color: "#94a3b8", pointerEvents: "none" }}
+              style={{ color: "var(--muted-foreground)", pointerEvents: "none" }}
             />
             <input
               id="email"
@@ -100,18 +100,18 @@ export function LoginPage() {
               disabled={isLoading || isSuccess}
               className="w-full rounded-xl pl-10 pr-4 py-3 outline-none transition-all duration-150"
               style={{
-                border: errorMsg && !password ? "2px solid #ef4444" : "2px solid #e2e8f0",
-                background: "#f8fafc",
+                border: errorMsg && !password ? "2px solid var(--destructive)" : "2px solid var(--border)",
+                background: "var(--input-background)",
                 fontSize: "14px",
-                color: "#0f172a",
+                color: "var(--foreground)",
               }}
               onFocus={(e) => {
-                e.currentTarget.style.borderColor = "#123C7A";
-                e.currentTarget.style.background = "#fff";
+                e.currentTarget.style.borderColor = "var(--ring)";
+                e.currentTarget.style.background = "var(--card)";
               }}
               onBlur={(e) => {
-                e.currentTarget.style.borderColor = "#e2e8f0";
-                e.currentTarget.style.background = "#f8fafc";
+                e.currentTarget.style.borderColor = "var(--border)";
+                e.currentTarget.style.background = "var(--input-background)";
               }}
             />
           </div>
@@ -119,13 +119,13 @@ export function LoginPage() {
 
         <div className="mb-4">
           <div className="flex items-center justify-between mb-1.5">
-            <label htmlFor="password" style={{ fontSize: "13px", fontWeight: 600, color: "#374151" }}>
+            <label htmlFor="password" style={{ fontSize: "13px", fontWeight: 600, color: "var(--foreground)" }}>
               Senha
             </label>
             <button
               type="button"
               onClick={() => setCurrentPage("password-recovery")}
-              style={{ fontSize: "12px", color: "#123C7A", fontWeight: 600, background: "none", border: "none" }}
+              style={{ fontSize: "12px", color: "var(--brand-blue)", fontWeight: 600, background: "none", border: "none" }}
               className="hover:underline"
             >
               Esqueci minha senha
@@ -135,7 +135,7 @@ export function LoginPage() {
             <Lock
               size={15}
               className="absolute top-1/2 -translate-y-1/2 left-3.5"
-              style={{ color: "#94a3b8", pointerEvents: "none" }}
+              style={{ color: "var(--muted-foreground)", pointerEvents: "none" }}
             />
             <input
               id="password"
@@ -150,31 +150,31 @@ export function LoginPage() {
               disabled={isLoading || isSuccess}
               className="w-full rounded-xl pl-10 pr-12 py-3 outline-none transition-all duration-150"
               style={{
-                border: "2px solid #e2e8f0",
-                background: "#f8fafc",
+                border: "2px solid var(--border)",
+                background: "var(--input-background)",
                 fontSize: "14px",
-                color: "#0f172a",
+                color: "var(--foreground)",
               }}
               onFocus={(e) => {
-                e.currentTarget.style.borderColor = "#123C7A";
-                e.currentTarget.style.background = "#fff";
+                e.currentTarget.style.borderColor = "var(--ring)";
+                e.currentTarget.style.background = "var(--card)";
               }}
               onBlur={(e) => {
-                e.currentTarget.style.borderColor = "#e2e8f0";
-                e.currentTarget.style.background = "#f8fafc";
+                e.currentTarget.style.borderColor = "var(--border)";
+                e.currentTarget.style.background = "var(--input-background)";
               }}
             />
             <button
               type="button"
               onClick={() => setShowPw(!showPw)}
               className="absolute top-1/2 -translate-y-1/2 right-3.5 p-1 rounded transition-colors"
-              style={{ color: "#94a3b8" }}
+              style={{ color: "var(--muted-foreground)" }}
               aria-label={showPw ? "Ocultar senha" : "Mostrar senha"}
               onMouseEnter={(e) => {
-                e.currentTarget.style.color = "#123C7A";
+                e.currentTarget.style.color = "var(--brand-blue)";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.color = "#94a3b8";
+                e.currentTarget.style.color = "var(--muted-foreground)";
               }}
             >
               {showPw ? <EyeOff size={17} /> : <Eye size={17} />}
@@ -190,8 +190,8 @@ export function LoginPage() {
             style={{
               width: 18,
               height: 18,
-              background: rememberMe ? "#123C7A" : "#f1f5f9",
-              border: `2px solid ${rememberMe ? "#123C7A" : "#cbd5e1"}`,
+              background: rememberMe ? "var(--brand-blue)" : "var(--muted)",
+              border: `2px solid ${rememberMe ? "var(--brand-blue)" : "var(--border)"}`,
             }}
             aria-checked={rememberMe}
             role="checkbox"
@@ -202,20 +202,20 @@ export function LoginPage() {
               </svg>
             )}
           </button>
-          <span style={{ fontSize: "13px", color: "#374151" }}>Manter conectado(a)</span>
+          <span style={{ fontSize: "13px", color: "var(--foreground)" }}>Manter conectado(a)</span>
         </div>
 
         {errorMsg && (
-          <div className="flex items-start gap-2.5 rounded-xl p-3 mb-4" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
-            <AlertCircle size={15} style={{ color: "#dc2626", flexShrink: 0, marginTop: 1 }} />
-            <p style={{ fontSize: "13px", color: "#dc2626", lineHeight: 1.4 }}>{errorMsg}</p>
+          <div className="flex items-start gap-2.5 rounded-xl p-3 mb-4" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+            <AlertCircle size={15} style={{ color: "var(--tint-danger-text)", flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", lineHeight: 1.4 }}>{errorMsg}</p>
           </div>
         )}
 
         {isSuccess && (
-          <div className="flex items-center gap-2.5 rounded-xl p-3 mb-4" style={{ background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
-            <CheckCircle2 size={16} style={{ color: "#16a34a", flexShrink: 0 }} />
-            <p style={{ fontSize: "13px", color: "#16a34a", fontWeight: 600 }}>Autenticado! Redirecionando...</p>
+          <div className="flex items-center gap-2.5 rounded-xl p-3 mb-4" style={{ background: "var(--tint-teal-bg)", border: "1px solid var(--tint-teal-border)" }}>
+            <CheckCircle2 size={16} style={{ color: "var(--tint-teal-text)", flexShrink: 0 }} />
+            <p style={{ fontSize: "13px", color: "var(--tint-teal-text)", fontWeight: 600 }}>Autenticado! Redirecionando...</p>
           </div>
         )}
 
@@ -262,9 +262,9 @@ export function LoginPage() {
       </form>
 
       <div className="flex items-center gap-3 my-3">
-        <div className="flex-1 h-px" style={{ background: "#e2e8f0" }} />
-        <span style={{ fontSize: "12px", color: "#94a3b8" }}>ou</span>
-        <div className="flex-1 h-px" style={{ background: "#e2e8f0" }} />
+        <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
+        <span style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>ou</span>
+        <div className="flex-1 h-px" style={{ background: "var(--border)" }} />
       </div>
 
       <button
@@ -273,27 +273,27 @@ export function LoginPage() {
         disabled={googleLoading || isLoading || isSuccess}
         className="w-full rounded-xl py-3 flex items-center justify-center gap-3 transition-all duration-150 mb-2"
         style={{
-          background: "#fff",
-          border: "2px solid #e2e8f0",
+          background: "var(--card)",
+          border: "2px solid var(--border)",
           fontSize: "14px",
           fontWeight: 600,
-          color: "#374151",
+          color: "var(--foreground)",
           cursor: googleLoading || isLoading || isSuccess ? "not-allowed" : "pointer",
           opacity: isLoading || isSuccess ? 0.6 : 1,
         }}
         onMouseEnter={(e) => {
           if (!googleLoading && !isLoading && !isSuccess) {
-            e.currentTarget.style.borderColor = "#cbd5e1";
-            e.currentTarget.style.background = "#f8fafc";
+            e.currentTarget.style.borderColor = "var(--border)";
+            e.currentTarget.style.background = "var(--muted)";
           }
         }}
         onMouseLeave={(e) => {
-          e.currentTarget.style.borderColor = "#e2e8f0";
-          e.currentTarget.style.background = "#fff";
+          e.currentTarget.style.borderColor = "var(--border)";
+          e.currentTarget.style.background = "var(--card)";
         }}
       >
         {googleLoading ? (
-          <Loader2 size={18} className="animate-spin" style={{ color: "#94a3b8" }} />
+          <Loader2 size={18} className="animate-spin" style={{ color: "var(--muted-foreground)" }} />
         ) : (
           <svg width="18" height="18" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
@@ -306,41 +306,41 @@ export function LoginPage() {
       </button>
 
       {googleErrorMsg && (
-        <div className="flex items-start gap-2.5 rounded-xl p-3 mb-4" style={{ background: "#fef2f2", border: "1px solid #fecaca" }}>
-          <AlertCircle size={15} style={{ color: "#dc2626", flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: "13px", color: "#dc2626", lineHeight: 1.4 }}>{googleErrorMsg}</p>
+        <div className="flex items-start gap-2.5 rounded-xl p-3 mb-4" style={{ background: "var(--tint-danger-bg)", border: "1px solid var(--tint-danger-border)" }}>
+          <AlertCircle size={15} style={{ color: "var(--tint-danger-text)", flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: "13px", color: "var(--tint-danger-text)", lineHeight: 1.4 }}>{googleErrorMsg}</p>
         </div>
       )}
 
-      <p style={{ fontSize: "14px", color: "#64748b", textAlign: "center" }}>
+      <p style={{ fontSize: "14px", color: "var(--muted-foreground)", textAlign: "center" }}>
         Não tem acesso?{" "}
         <button
           type="button"
           onClick={() => setCurrentPage("register")}
-          style={{ color: "#123C7A", fontWeight: 700, background: "none", border: "none" }}
+          style={{ color: "var(--brand-blue)", fontWeight: 700, background: "none", border: "none" }}
           className="hover:underline"
         >
           Solicitar cadastro
         </button>
       </p>
 
-      <p style={{ fontSize: "13px", color: "#94a3b8", textAlign: "center", marginTop: "8px" }}>
+      <p style={{ fontSize: "13px", color: "var(--muted-foreground)", textAlign: "center", marginTop: "8px" }}>
         Primeiro acesso?{" "}
         <button
           type="button"
           onClick={() => setCurrentPage("first-access")}
-          style={{ color: "#1F8A70", fontWeight: 600, background: "none", border: "none" }}
+          style={{ color: "var(--brand-teal)", fontWeight: 600, background: "none", border: "none" }}
           className="hover:underline"
         >
           Configure sua conta aqui
         </button>
       </p>
 
-      <div className="mt-3 rounded-xl p-3.5" style={{ background: "#f8fafc", border: "1px solid #e2e8f0" }}>
+      <div className="mt-3 rounded-xl p-3.5" style={{ background: "var(--muted)", border: "1px solid var(--border)" }}>
         <div className="flex items-start gap-2.5">
-          <Shield size={13} style={{ color: "#94a3b8", flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: "11px", color: "#94a3b8", lineHeight: 1.5 }}>
-            <strong style={{ color: "#64748b" }}>Aviso de seguranca:</strong> Este sistema e de uso exclusivo de usuarios autorizados.
+          <Shield size={13} style={{ color: "var(--muted-foreground)", flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: "11px", color: "var(--muted-foreground)", lineHeight: 1.5 }}>
+            <strong style={{ color: "var(--foreground)" }}>Aviso de seguranca:</strong> Este sistema e de uso exclusivo de usuarios autorizados.
             Acessos não autorizados sao registrados.
           </p>
         </div>

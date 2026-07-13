@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from backend.app.models.program_config import DEFAULT_PROGRAM_CREDIT_CONFIG
 from backend.app.repositories import firebase_repository
 from backend.app.repositories.inference_repository import InferenceRepository
 from backend.app.tests.fake_firestore import FakeFirestore
@@ -99,6 +100,68 @@ async def test_get_plan_tasks_delega_ao_work_plan(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(repo._work_plan, "get_plan_tasks", AsyncMock(return_value=tasks))
 
     assert await repo.get_plan_tasks("s1") == tasks
+
+
+async def test_get_program_inexistente_usa_defaults_canonicos(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = InferenceRepository()
+    monkeypatch.setattr(repo._programs, "get", AsyncMock(return_value=None))
+
+    result = await repo.get_program("prog_default")
+
+    assert result == {
+        "id": "prog_default",
+        **DEFAULT_PROGRAM_CREDIT_CONFIG,
+        "max_prorrogacoes": 1,
+        "meses_ate_qualificacao": 12,
+    }
+    assert "min_creditos_total" not in result
+
+
+async def test_get_program_parcial_usa_default_apenas_da_chave_ausente(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo = InferenceRepository()
+    monkeypatch.setattr(
+        repo._programs,
+        "get",
+        AsyncMock(
+            return_value={
+                "creditos_grupo_basico_min": 14,
+                "creditos_grupo_especifico_min": 9,
+                "creditos_total_min": 30,
+                "max_prorrogacoes": 3,
+                "meses_ate_qualificacao": 18,
+            }
+        ),
+    )
+
+    result = await repo.get_program("prog_custom")
+
+    assert result["creditos_grupo_basico_min"] == 14
+    assert result["creditos_grupo_especifico_min"] == 9
+    assert (
+        result["creditos_grupo_tecnologico_max"]
+        == DEFAULT_PROGRAM_CREDIT_CONFIG["creditos_grupo_tecnologico_max"]
+    )
+    assert result["creditos_total_min"] == 30
+    assert result["max_prorrogacoes"] == 3
+    assert result["meses_ate_qualificacao"] == 18
+
+
+async def test_get_program_preserva_creditos_configurados(monkeypatch: pytest.MonkeyPatch) -> None:
+    repo = InferenceRepository()
+    configured = {
+        "creditos_grupo_basico_min": 16,
+        "creditos_grupo_especifico_min": 11,
+        "creditos_grupo_tecnologico_max": 6,
+        "creditos_total_min": 35,
+    }
+    monkeypatch.setattr(repo._programs, "get", AsyncMock(return_value=configured))
+
+    result = await repo.get_program("prog_custom")
+
+    for key, value in configured.items():
+        assert result[key] == value
 
 
 async def test_get_approved_productions_marca_bibliografica(monkeypatch: pytest.MonkeyPatch) -> None:

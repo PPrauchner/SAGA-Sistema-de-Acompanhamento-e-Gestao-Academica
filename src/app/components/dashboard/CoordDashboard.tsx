@@ -11,11 +11,12 @@ import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
 import { usePendingExtensions } from "@/hooks/usePendingExtensions";
 import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
 import type { Extension } from "@/api/extensions";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
-  BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
+  BookOpen, Award, X, ChevronRight, Eye,
   BarChart2, Filter, Bell, GraduationCap,
-  FileSpreadsheet, Loader2,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -25,7 +26,6 @@ import {
 
 
 type ReportType = "status" | "orientador" | "producao" | "integralizacao" | null;
-type ExportFormat = "pdf" | "excel" | "csv";
 
 interface AlertItem {
   id: string;
@@ -130,20 +130,6 @@ const ALERT_CFG = {
   info: { color: "#123C7A", bg: "#eef3fc", border: "#c7d9f5", icon: <Bell size={16} /> },
 };
 
-function handleExport(format: ExportFormat, section: string) {
-  const msg = `Exportando ${section} como ${format.toUpperCase()}...`;
-  const el = document.createElement("div");
-  el.textContent = msg;
-  Object.assign(el.style, {
-    position: "fixed", bottom: "24px", right: "24px", zIndex: "9999",
-    background: "#123C7A", color: "#fff", padding: "12px 20px",
-    borderRadius: "12px", fontSize: "13px", fontWeight: "600",
-    boxShadow: "0 8px 24px rgba(0,0,0,0.2)", transition: "opacity 0.3s",
-  });
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; }, 1800);
-  setTimeout(() => { document.body.removeChild(el); }, 2100);
-}
 
 
 function KpiCard({ icon, label, value, sub, color, trend }: {
@@ -178,29 +164,6 @@ function KpiCard({ icon, label, value, sub, color, trend }: {
   );
 }
 
-function ExportBar({ section }: { section: string }) {
-  return (
-    <div className="flex items-center gap-1.5 flex-wrap badge-shrink">
-      {(["pdf", "excel", "csv"] as ExportFormat[]).map((fmt) => (
-        <button
-          key={fmt}
-          onClick={() => handleExport(fmt, section)}
-          title={`Exportar ${fmt.toUpperCase()}`}
-          aria-label={`Exportar ${fmt.toUpperCase()}`}
-          className="flex items-center gap-1 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg transition-opacity hover:opacity-80 flex-shrink-0"
-          style={{
-            background: fmt === "pdf" ? "var(--tint-danger-bg)" : fmt === "excel" ? "var(--tint-teal-bg)" : "var(--muted)",
-            color: fmt === "pdf" ? "var(--tint-danger-text)" : fmt === "excel" ? "var(--tint-teal-text)" : "var(--muted-foreground)",
-            fontSize: "10px", fontWeight: 700, border: `1px solid ${fmt === "pdf" ? "var(--tint-danger-border)" : fmt === "excel" ? "var(--tint-teal-border)" : "var(--border)"}`,
-          }}
-        >
-          {fmt === "pdf" ? <FileText size={11} /> : fmt === "excel" ? <FileSpreadsheet size={11} /> : <Download size={11} />}
-          <span className="hidden sm:inline">{fmt.toUpperCase()}</span>
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function SectionHeader({ title, sub, section, onReport, exportMenu }: {
   title: string; sub?: string; section: string; onReport?: () => void; exportMenu?: React.ReactNode;
@@ -250,6 +213,7 @@ interface ReportModalData {
 }
 
 function ReportModal({ type, onClose, statusData, advisorData, completionData, productionsData }: { type: ReportType; onClose: () => void; statusData: StatusDataProp[] } & ReportModalData) {
+  const contentRef = useRef<HTMLDivElement>(null);
   useEscapeClose(true, onClose);
   if (!type) return null;
 
@@ -404,6 +368,18 @@ function ReportModal({ type, onClose, statusData, advisorData, completionData, p
 
   const cfg = configs[type];
 
+  // Helper to determine the export menu props based on type
+  const getModalExportMenuProps = () => {
+    switch (type) {
+      case "status": return { title: "Distribuição de Status", fileName: "distribuicao-status", rows: statusData, columns: [{ key: "name", label: "Situação" }, { key: "value", label: "Alunos" }] };
+      case "orientador": return { title: "Desempenho dos Orientadores", fileName: "desempenho-orientadores", rows: advisorList, columns: [{ key: "nomeCompleto", label: "Orientador" }, { key: "orientandos", label: "Orientandos" }, { key: "regulares", label: "Regulares" }, { key: "risco", label: "Em risco" }] };
+      case "producao": return { title: "Produção por Nível", fileName: "producao-por-nivel", rows: productionByLevel, columns: [{ key: "nivel", label: "Nível" }, { key: "total", label: "Produções" }] };
+      case "integralizacao": return { title: "Integralização por Ano", fileName: "integralizacao-por-ano", rows: completionYears, columns: [{ key: "ano", label: "Ano" }, { key: "meses", label: "Média em meses" }, { key: "concluidos", label: "Concluídos" }] };
+    }
+  };
+
+  const exportProps = type ? getModalExportMenuProps() : null;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -425,11 +401,15 @@ function ReportModal({ type, onClose, statusData, advisorData, completionData, p
           </button>
         </div>
         <div className="p-5">
-          {cfg.content}
-          <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-            <span style={{ fontSize: "12px", color: "var(--muted-foreground)", marginRight: "auto" }}>Exportar relatório:</span>
-            <ExportBar section={cfg.title} />
+          <div ref={contentRef}>
+            {cfg.content}
           </div>
+          {exportProps && (
+            <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <span style={{ fontSize: "12px", color: "var(--muted-foreground)", marginRight: "auto" }}>Exportar dados do relatório:</span>
+              <ChartExportMenu chartRef={contentRef} data={exportProps.rows as any} columns={exportProps.columns as any} title={exportProps.title} fileName={exportProps.fileName} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -460,8 +440,8 @@ function StatusDistribChart({ onReport, statusData }: { onReport: () => void; st
           />
         }
       />
-      <div className="flex items-center gap-4">
-        <div ref={chartRef} style={{ flexShrink: 0 }}>
+      <div ref={chartRef} className="flex items-center gap-4" style={{ background: "var(--card)", padding: "4px" }}>
+        <div style={{ flexShrink: 0 }}>
           <PieChart width={160} height={160}>
             <Pie data={statusData} cx={75} cy={75} innerRadius={48} outerRadius={72} paddingAngle={2} dataKey="value" isAnimationActive={false}>
               {statusData.map((d, i) => <Cell key={`status-cell-${i}`} fill={d.color} />)}
@@ -635,17 +615,30 @@ function IntegralizacaoChart({ onReport, data, loading, error }: {
 function ValidationQueue({ items, loading, error }: { items: ValidationQueueItem[]; loading: boolean; error: string | null }) {
   const [filter, setFilter] = useState<"todos" | ValidationQueueItem["tipo"]>("todos");
   const [expanded, setExpanded] = useState<string | null>(null);
+  const queueRef = useRef<HTMLDivElement>(null);
 
   const filtered = items.filter((v) => filter === "todos" || v.tipo === filter);
 
   return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+    <div ref={queueRef} className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Fila de Validação</h3>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{loading ? "Carregando…" : `${items.length} ${items.length === 1 ? "item aguardando" : "itens aguardando"} aprovação`}</p>
         </div>
-        <ExportBar section="Fila de Validação" />
+        <ChartExportMenu 
+          chartRef={queueRef}
+          title="Fila de Validação" 
+          fileName="fila-de-validacao" 
+          data={filtered} 
+          columns={[
+            { key: "aluno", label: "Aluno" },
+            { key: "tipo", label: "Tipo" },
+            { key: "descricao", label: "Descrição" },
+            { key: "orientador", label: "Orientador" },
+            { key: "data", label: "Data", value: (r: any) => formatDataBR(r.data) },
+          ]} 
+        />
       </div>
 
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -733,15 +726,28 @@ function ValidationQueue({ items, loading, error }: { items: ValidationQueueItem
 
 function ExtensionRequestsSection({ extensions, loading, error }: { extensions: Extension[]; loading: boolean; error: string | null }) {
   const total = extensions.length;
+  const extRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
+    <div ref={extRef} className="rounded-2xl p-4 md:p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 style={{ fontSize: "15px", fontWeight: 700, color: "var(--foreground)" }}>Solicitações de Prorrogação</h3>
           <p style={{ fontSize: "12px", color: "var(--muted-foreground)" }}>{loading ? "Carregando…" : `${total} pendente${total !== 1 ? "s" : ""} de decisão`}</p>
         </div>
-        <ExportBar section="Prorrogações" />
+        <ChartExportMenu 
+          chartRef={extRef}
+          title="Solicitações de Prorrogação" 
+          fileName="prorrogacoes" 
+          data={extensions} 
+          columns={[
+            { key: "aluno", label: "Aluno", value: (r: any) => r.aluno_nome || r.aluno || "—" },
+            { key: "status", label: "Status", value: (r: any) => EXT_STATUS_CFG[r.status]?.label || r.status },
+            { key: "motivo", label: "Motivo", value: (r: any) => r.motivo || r.justificativa || "—" },
+            { key: "prazo_atual", label: "Prazo Atual", value: (r: any) => formatDataBR(r.prazo_atual || r.data_atual) },
+            { key: "nova_data", label: "Novo Prazo", value: (r: any) => formatDataBR(r.nova_data || r.prazo_novo) },
+          ]} 
+        />
       </div>
 
       {error ? (
@@ -810,7 +816,18 @@ function AlertsCenter() {
             {" · "}{ALERTS.filter(a => a.nivel === "atencao").length} atenção · {ALERTS.filter(a => a.nivel === "info").length} informativos
           </p>
         </div>
-        <ExportBar section="Alertas" />
+        <TableExportMenu 
+          title="Central de Alertas" 
+          fileName="central-de-alertas" 
+          rows={ALERTS} 
+          columns={[
+            { key: "titulo", label: "Alerta" },
+            { key: "nivel", label: "Nível" },
+            { key: "descricao", label: "Descrição" },
+            { key: "data", label: "Data" },
+            { key: "afetados", label: "Afetados" },
+          ]} 
+        />
       </div>
       <div className="space-y-2">
         {visible.map((alert) => {

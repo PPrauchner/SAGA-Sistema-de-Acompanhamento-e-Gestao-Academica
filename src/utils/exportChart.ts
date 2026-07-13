@@ -1,67 +1,5 @@
+import html2canvas from "html2canvas";
 import { downloadBlob } from "./exportData";
-
-function getChartSvg(element: HTMLElement): SVGSVGElement {
-  const svg = element.querySelector("svg");
-  if (!svg) throw new Error("Nenhum grafico SVG foi encontrado para exportacao.");
-  return svg;
-}
-
-function svgToDataUrl(svg: SVGSVGElement): { dataUrl: string; width: number; height: number } {
-  const clone = svg.cloneNode(true) as SVGSVGElement;
-  const box = svg.getBoundingClientRect();
-  const width = Math.max(1, Math.round(box.width || Number(svg.getAttribute("width")) || 800));
-  const height = Math.max(1, Math.round(box.height || Number(svg.getAttribute("height")) || 450));
-
-  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
-  clone.setAttribute("width", String(width));
-  clone.setAttribute("height", String(height));
-  clone.setAttribute("viewBox", clone.getAttribute("viewBox") || `0 0 ${width} ${height}`);
-
-  const background = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-  background.setAttribute("width", "100%");
-  background.setAttribute("height", "100%");
-  background.setAttribute("fill", getComputedStyle(document.body).getPropertyValue("--card").trim() || "#ffffff");
-  clone.insertBefore(background, clone.firstChild);
-
-  const serialized = new XMLSerializer().serializeToString(clone);
-  return {
-    dataUrl: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(serialized)}`,
-    width,
-    height,
-  };
-}
-
-async function svgToCanvas(element: HTMLElement, scale = 2): Promise<HTMLCanvasElement> {
-  const { dataUrl, width, height } = svgToDataUrl(getChartSvg(element));
-  const image = new Image();
-  image.crossOrigin = "anonymous";
-
-  await new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve();
-    image.onerror = () => reject(new Error("Nao foi possivel preparar a imagem do grafico."));
-    image.src = dataUrl;
-  });
-
-  const canvas = document.createElement("canvas");
-  canvas.width = width * scale;
-  canvas.height = height * scale;
-  const context = canvas.getContext("2d");
-  if (!context) throw new Error("Canvas nao esta disponivel neste navegador.");
-
-  context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  return canvas;
-}
-
-function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error("Nao foi possivel gerar o arquivo de imagem."));
-    }, type, quality);
-  });
-}
 
 function escapePdfText(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
@@ -89,7 +27,7 @@ function createPdf(title: string, imageDataUrl: string, imageWidth: number, imag
     "<< /Type /Catalog /Pages 2 0 R >>",
     "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
     `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> /XObject << /Im1 5 0 R >> >> /Contents 6 0 R >>`,
-    "<< /Type /Font /Subtype /Helvetica /BaseFont /Helvetica >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
     `<< /Type /XObject /Subtype /Image /Width ${Math.round(imageWidth)} /Height ${Math.round(imageHeight)} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${imageBinary.length} >>\nstream\n${imageBinary}\nendstream`,
   ];
 
@@ -115,14 +53,23 @@ q ${drawWidth.toFixed(2)} 0 0 ${drawHeight.toFixed(2)} ${x.toFixed(2)} ${y.toFix
   return new Blob([bytes], { type: "application/pdf" });
 }
 
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality?: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Nao foi possivel gerar o arquivo de imagem."));
+    }, type, quality);
+  });
+}
+
 export async function exportChartAsPng(element: HTMLElement, fileName: string): Promise<void> {
-  const canvas = await svgToCanvas(element);
+  const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" });
   const blob = await canvasToBlob(canvas, "image/png");
   downloadBlob(blob, fileName);
 }
 
 export async function exportChartAsPdf(element: HTMLElement, title: string, fileName: string): Promise<void> {
-  const canvas = await svgToCanvas(element);
+  const canvas = await html2canvas(element, { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" });
   const imageDataUrl = canvas.toDataURL("image/jpeg", 0.92);
   const pdf = createPdf(title, imageDataUrl, canvas.width, canvas.height);
   downloadBlob(pdf, fileName);
