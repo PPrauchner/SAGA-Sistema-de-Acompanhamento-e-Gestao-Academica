@@ -23,6 +23,7 @@ import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from backend.app.models.program_config import DEFAULT_PROGRAM_CREDIT_CONFIG
 from backend.app.models.vehicle import PESO_POR_NIVEL
 
 _TODAY = date.today()
@@ -35,10 +36,7 @@ def _iso(days_from_today: int) -> str:
 
 _PROGRAM: dict[str, Any] = {
     "id": "prog_default",
-    "creditos_grupo_basico_min": 12,
-    "creditos_grupo_especifico_min": 8,
-    "creditos_grupo_tecnologico_max": 4,
-    "creditos_total_min": 24,
+    **DEFAULT_PROGRAM_CREDIT_CONFIG,
     "max_prorrogacoes": 2,
     "relevancia_pesos": dict(PESO_POR_NIVEL),
 }
@@ -167,12 +165,12 @@ _ACTIVITIES: dict[str, list[dict[str, Any]]] = {
     ],
     "aluno_recem": [],
     "aluno_credito_risco": [],
-    # 15 básico + 9 específico = 24 créditos (≥ min_total=24 e > expected ~19.2 com fracao ~0.80).
+    # Créditos suficientes para o mínimo total default e para o progresso esperado.
     "aluno_qual_risco": [
         {"id": "atv_qr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": _iso(-650)},
         {"id": "atv_qr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": _iso(-600)},
     ],
-    # 15 básico + 9 específico = 24 créditos (≥ min_total=24 e > expected ~18 com fracao ~0.75).
+    # Créditos suficientes para o mínimo total default e para o progresso esperado.
     "aluno_plano_risco": [
         {"id": "atv_pr_b", "grupo": "basico", "creditos": 15, "comprovante": "url/b", "tipo_ativo": True, "data": _iso(-500)},
         {"id": "atv_pr_e", "grupo": "especifico", "creditos": 9, "comprovante": "url/e", "tipo_ativo": True, "data": _iso(-450)},

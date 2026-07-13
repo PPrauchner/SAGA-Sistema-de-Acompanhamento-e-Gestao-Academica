@@ -44,6 +44,7 @@ from backend.app.models.inference import (
     SituacaoInferida,
     StatusItem,
 )
+from backend.app.models.program_config import DEFAULT_PROGRAM_CREDIT_CONFIG
 from backend.app.models.vehicle import PESO_POR_NIVEL
 from backend.app.services.qualis_weights_service import resolve_weights_at
 
@@ -105,6 +106,10 @@ def _add_months(start: date, months: int) -> date:
     month = month_index % 12 + 1
     day = min(start.day, monthrange(year, month)[1])
     return start.replace(year=year, month=month, day=day)
+
+
+def _program_credit(program: dict[str, Any], key: str) -> int:
+    return int(program.get(key, DEFAULT_PROGRAM_CREDIT_CONFIG[key]))
 
 
 class InferenceService:
@@ -224,10 +229,10 @@ class InferenceService:
         facts.append(Compound("total_creditos", [sid, Atom(total)]))
 
         # M2 Correção: Alinhamento exato de chaves com o data-model gerado pelas seeds do banco
-        min_basico = int(program.get("creditos_grupo_basico_min", 12))
-        min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
-        max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
-        min_total = int(program.get("creditos_total_min", 24))
+        min_basico = _program_credit(program, "creditos_grupo_basico_min")
+        min_especifico = _program_credit(program, "creditos_grupo_especifico_min")
+        max_tecnologico = _program_credit(program, "creditos_grupo_tecnologico_max")
+        min_total = _program_credit(program, "creditos_total_min")
 
         facts.append(Compound("min_creditos_basico", [prog, Atom(min_basico)]))
         facts.append(Compound("min_creditos_especifico", [prog, Atom(min_especifico)]))
@@ -426,10 +431,10 @@ class InferenceService:
         risk_flags: dict[str, bool],
     ) -> InferenceChecklist:
         # M2 Correção: Sincronização de chaves no checklist de saída
-        min_basico = int(program.get("creditos_grupo_basico_min", 12))
-        min_especifico = int(program.get("creditos_grupo_especifico_min", 8))
-        max_tecnologico = int(program.get("creditos_grupo_tecnologico_max", 4))
-        min_total = int(program.get("creditos_total_min", 24))
+        min_basico = _program_credit(program, "creditos_grupo_basico_min")
+        min_especifico = _program_credit(program, "creditos_grupo_especifico_min")
+        max_tecnologico = _program_credit(program, "creditos_grupo_tecnologico_max")
+        min_total = _program_credit(program, "creditos_total_min")
 
         risco_creditos = risk_flags["creditos_insuficientes"]
         risco_qualificacao = risk_flags["qualificacao_prazo_proximo"]
@@ -497,7 +502,7 @@ class InferenceService:
         if risk_flags["creditos_insuficientes"]:
             # M2 Correção: Chave de exibição da mensagem de log sincronizada
             messages.append(
-                f"Créditos insuficientes ({totals['total']}/{program.get('creditos_total_min', 24)})"
+                f"Créditos insuficientes ({totals['total']}/{_program_credit(program, 'creditos_total_min')})"
             )
         if risk_flags["qualificacao_prazo_proximo"]:
             messages.append("Qualificação pendente com prazo próximo")
