@@ -142,7 +142,11 @@ erDiagram
 - Um `users` é **aluno** (tem `students`), **orientador** (tem `advisors`),
   **coordenador**, ou **coordenador + orientador** (mesmo `uid`, acumula). Aluno nunca acumula.
 - `role` é **valor único** = papel de maior privilégio. A capacidade de **orientar** vem da
-  **existência do doc `advisors`**, não de `role`. Coordenação engloba as permissões de orientador.
+  **existência do doc `advisors`**, não de `role`. Coordenação engloba as permissões de orientador
+  **para leitura e supervisão** (dashboards, listagens, relatórios), mas **não** para atos que
+  dependem do **vínculo de orientação** — editar o plano de trabalho de um aluno exige ser seu
+  orientador/coorientador, mesmo para a coordenação (ver
+  [R6](./data-model-decisions.md#r6--coordenação-engloba-orientador-só-na-leitura-o-vínculo-manda-na-edição)).
   O *toggle* "Orientador | Coordenador" é filtro de visão no **frontend**, não fronteira de
   segurança ([ADR-0002](./adr/0002-papel-unico-com-toggle-de-visao.md)).
 - O papel `adm` ([ADR-0001](./adr/0001-papel-adm-global.md)) é um **superusuário global**, fora

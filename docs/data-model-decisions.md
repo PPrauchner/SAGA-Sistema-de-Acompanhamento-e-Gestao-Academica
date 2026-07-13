@@ -52,6 +52,9 @@
 **Decisão:** 1:1 opcional. `users.uid` é a âncora de identidade; `students.uid` e `advisors.uid` são a FK lógica. `student_id`/`advisor_id` em `UserResponse` são o caminho inverso resolvido em leitura (não persistido). ER: `users ||--o| students` e `users ||--o| advisors`.
 
 ### Q2/Q3 — Papéis acumuláveis e o `role` do JWT
+
+> **⚠️ Qualificada pela [R6](#r6--coordenação-engloba-orientador-só-na-leitura-o-vínculo-manda-na-edição).** "Coordenação engloba as permissões de orientador" vale para **leitura e supervisão**, não para atos que dependem do vínculo de orientação (editar o plano de trabalho).
+
 **Contexto:** um usuário pode ser *só aluno*, *só orientador*, *só coordenador*, ou *coordenador + orientador* (mesmo `uid`). Aluno nunca acumula. `role` é valor único (`Literal`), então não cabe "os dois".
 **Decisão (opção a):** `role` continua **único** = papel de maior privilégio. A capacidade de **orientar** vem da **existência do doc `advisors`**, não do valor de `role`. Coordenação engloba as permissões de orientador. "É orientador?" ⟺ "tem doc em `advisors/{x}` com `uid == users.uid`".
 
@@ -195,3 +198,42 @@ schema canônico (`03_firebase_schema.json`: "na coleção raiz `extensions/`"),
 `requester_id` e `programa_id` como campos. Análogo à R3 (`productions` raiz): a "composição" do
 ER é notação lógica, não sub-coleção física. O código do PR #174 (sub-coleção +
 `collection_group`) deve ser ajustado à estrutura raiz.
+
+### R6 — "Coordenação engloba orientador" só na leitura; o vínculo manda na edição
+
+> Ratifica a política de autorização herdada do PR #335 e mantida pelo PR #341 (issues #340/#362).
+
+**Contexto:** o PR #341 manteve três restrições de autorização, mas a ratificação vivia só no corpo
+do PR e na tabela de testes. Uma delas colide de frente com a Q2/Q3 e com o `data-model.md §Papéis
+e identidade`, que afirmavam sem ressalva: *"Coordenação engloba as permissões de orientador"*.
+
+As três não são o mesmo tipo de mudança — e a distinção é o cerne da decisão:
+
+| Mudança | O que faz | Contradiz a Q2/Q3? |
+|---|---|---|
+| `POST /students` → só `coordenacao` | tira do **orientador** o poder de criar alunos | **Não** — coordenação continua tendo tudo |
+| `GET /reports/productions` → só `coordenacao` | tira do **orientador** o relatório do programa | **Não** — idem |
+| `check_work_plan_ownership(access="edit")` → exige `is_advisor` | tira da **coordenação** a edição do plano de um aluno que ela não orienta | **Sim** — é a única contradição real |
+
+Ou seja, só a terceira é uma decisão de arquitetura; as duas primeiras são política de escopo do
+orientador e nunca conflitaram com o texto. A base já era inconsistente consigo mesma:
+`check_dashboard_ownership` mantém o bypass `role == "coordenacao"`, enquanto
+`check_work_plan_ownership(access="edit")` o recusa.
+
+**Decisão (opção a — a política vence):** "coordenação engloba as permissões de orientador" passa a
+valer **com exceção explícita**, e a exceção é o critério, não um caso especial:
+
+- **Leitura e supervisão** (dashboards, listagens, relatórios, `access="read"`): coordenação é
+  superconjunto do orientador. É o papel que autoriza. `check_dashboard_ownership` mantém o bypass —
+  **coerente**, não bug.
+- **Atos que dependem do vínculo de orientação** (hoje: `access="edit"` no plano de trabalho): o
+  direito vem da **relação de orientação** (doc `advisors` ligado ao aluno), **não do papel**. Um
+  coordenador que também orienta o aluno edita normalmente — via ownership, não via `role`. Um
+  coordenador sem vínculo recebe 403. Alinha-se à Q2/Q3: a capacidade de **orientar** sempre veio da
+  existência do doc `advisors`; editar o plano é um ato de orientar.
+
+**Consequências:**
+- `data-model.md §Papéis e identidade` qualificado com a exceção (feito nesta issue).
+- Nenhuma alteração de código ou de teste: o runtime já implementa esta decisão.
+- Novos atos que exijam vínculo de orientação devem usar ownership (`advisors` ↔ aluno), não
+  ampliar a lista de papéis do `@requires_role`.
