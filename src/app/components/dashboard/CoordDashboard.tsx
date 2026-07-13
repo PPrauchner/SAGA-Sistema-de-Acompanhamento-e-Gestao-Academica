@@ -14,9 +14,9 @@ import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
 import { TableExportMenu } from "@/app/components/export/TableExportMenu";
 import {
   Users, UserCheck, AlertTriangle, Clock, CheckCircle2, TrendingUp, TrendingDown,
-  BookOpen, Award, FileText, Download, X, ChevronRight, Eye,
+  BookOpen, Award, X, ChevronRight, Eye,
   BarChart2, Filter, Bell, GraduationCap,
-  FileSpreadsheet, Loader2,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -26,7 +26,6 @@ import {
 
 
 type ReportType = "status" | "orientador" | "producao" | "integralizacao" | null;
-type ExportFormat = "pdf" | "excel" | "csv";
 
 interface AlertItem {
   id: string;
@@ -379,6 +378,7 @@ function ReportModal({ type, onClose, statusData, advisorData, completionData, p
     }
   };
 
+  const exportProps = type ? getModalExportMenuProps() : null;
 
   return (
     <div
@@ -404,10 +404,12 @@ function ReportModal({ type, onClose, statusData, advisorData, completionData, p
           <div ref={contentRef}>
             {cfg.content}
           </div>
-          <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
-            <span style={{ fontSize: "12px", color: "var(--muted-foreground)", marginRight: "auto" }}>Exportar dados do relatório:</span>
-            {type && <ChartExportMenu chartRef={contentRef} data={getModalExportMenuProps().rows as any} columns={getModalExportMenuProps().columns as any} title={getModalExportMenuProps().title} fileName={getModalExportMenuProps().fileName} />}
-          </div>
+          {exportProps && (
+            <div className="flex items-center gap-2 mt-4 pt-4" style={{ borderTop: "1px solid var(--border)" }}>
+              <span style={{ fontSize: "12px", color: "var(--muted-foreground)", marginRight: "auto" }}>Exportar dados do relatório:</span>
+              <ChartExportMenu chartRef={contentRef} data={exportProps.rows as any} columns={exportProps.columns as any} title={exportProps.title} fileName={exportProps.fileName} />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -740,7 +742,6 @@ function ExtensionRequestsSection({ extensions, loading, error }: { extensions: 
           data={extensions} 
           columns={[
             { key: "aluno", label: "Aluno", value: (r: any) => r.aluno_nome || r.aluno || "—" },
-            { key: "matricula", label: "Matrícula", value: (r: any) => r.matricula || "—" },
             { key: "status", label: "Status", value: (r: any) => EXT_STATUS_CFG[r.status]?.label || r.status },
             { key: "motivo", label: "Motivo", value: (r: any) => r.motivo || r.justificativa || "—" },
             { key: "prazo_atual", label: "Prazo Atual", value: (r: any) => formatDataBR(r.prazo_atual || r.data_atual) },
@@ -818,7 +819,7 @@ function AlertsCenter() {
         <TableExportMenu 
           title="Central de Alertas" 
           fileName="central-de-alertas" 
-          rows={visible} 
+          rows={ALERTS} 
           columns={[
             { key: "titulo", label: "Alerta" },
             { key: "nivel", label: "Nível" },
