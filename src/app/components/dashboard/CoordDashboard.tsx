@@ -7,6 +7,7 @@ import {
   type StudentsByAdvisorResponse, type CompletionTimeResponse,
   type ProductionsReportResponse,
 } from "@/api/reportsApi";
+import { ChartExportMenu } from "@/app/components/export/ChartExportMenu";
 import { usePendingExtensions } from "@/hooks/usePendingExtensions";
 import { useValidationQueue, type ValidationQueueItem } from "@/hooks/useValidationQueue";
 import type { Extension } from "@/api/extensions";
