@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
-  Download, Users, TrendingUp, Calendar, Clock,
+  Users, TrendingUp, Calendar, Clock,
   BookOpen, Award, X, ChevronDown, ChevronUp, Search, AlertTriangle,
-  GraduationCap, BarChart3, ArrowUpDown, Eye, FileSpreadsheet, FileBadge,
+  GraduationCap, BarChart3, ArrowUpDown, Eye,
   ChevronRight, Loader2,
 } from "lucide-react";
 import {
@@ -12,12 +12,16 @@ import {
 
 import { useAuth } from "@/hooks/useAuth";
 import { useEscapeClose } from "@/hooks/useEscapeClose";
+import { TableExportMenu } from "@/app/components/export/TableExportMenu";
+import type { ExportColumn } from "@/utils/exportData";
 import {
   getStudentsAtRisk, getStudentsByStatus, getStudentsByAdvisor,
   getCompletionTime, getProductionsReport,
   type StudentsAtRiskResponse, type StudentsByStatusResponse,
   type StudentsByAdvisorResponse, type CompletionTimeResponse,
   type ProductionsReportResponse, type SituacaoRegistrada,
+  type StudentAtRiskItem, type AdvisorGroupItem, type CompletionTimeItem,
+  type ProductionByStudentItem, type ProductionByAdvisorItem,
 } from "@/api/reportsApi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -88,13 +92,9 @@ const TOOLTIP_STYLE = {
   itemStyle: { color: "var(--foreground)" },
 } as const;
 
-function showToast(msg: string, color = "#1F8A70") {
-  const el = document.createElement("div");
-  el.textContent = msg;
-  Object.assign(el.style, { position: "fixed", bottom: "24px", right: "24px", zIndex: "9999", background: color, color: "#fff", padding: "12px 20px", borderRadius: "12px", fontSize: "13px", fontWeight: "700", boxShadow: "0 8px 24px rgba(0,0,0,0.2)", opacity: "1", transition: "opacity 0.3s" });
-  document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity = "0"; }, 2000);
-  setTimeout(() => { try { document.body.removeChild(el); } catch { } }, 2300);
+/** Rótulo legível da situação inferida/registrada, como exibido na tabela. */
+function statusLabel(status: string): string {
+  return STATUS_META[status as SituacaoRegistrada]?.label ?? status;
 }
 
 function SearchBox({ value, onChange }: { value: string; onChange: (v: string) => void }) {
@@ -114,19 +114,6 @@ function FSelect({ label, value, onChange, options }: { label: string; value: st
       <select value={value} onChange={e => onChange(e.target.value)} style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "4px 8px", fontSize: 12, color: "var(--foreground)", outline: "none" }}>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
-    </div>
-  );
-}
-
-function ExportBar({ title }: { title: string }) {
-  return (
-    <div className="flex gap-2">
-      {[["PDF", "#dc2626", <FileBadge size={12} />], ["Excel", "#1F8A70", <FileSpreadsheet size={12} />], ["CSV", "#123C7A", <Download size={12} />]].map(([fmt, c, ic]) => (
-        <button key={fmt as string} onClick={() => showToast(`Exportando ${title} como ${fmt}...`, c as string)}
-          className="flex items-center gap-1.5 rounded-lg px-3 py-1.5" style={{ background: `${c}15`, color: c as string, border: `1px solid ${c}30`, fontSize: 11, fontWeight: 700 }}>
-          {ic as React.ReactNode} {fmt as string}
-        </button>
-      ))}
     </div>
   );
 }
@@ -180,6 +167,14 @@ function EmptyState({ message }: { message: string }) {
 
 // ─── Report: Alunos em Risco ──────────────────────────────────────────────────
 
+const AT_RISK_COLUMNS: ExportColumn<StudentAtRiskItem>[] = [
+  { key: "nome", label: "Aluno" },
+  { key: "orientador_nome", label: "Orientador" },
+  { key: "situacao_inferida", label: "Situação Inferida", value: s => statusLabel(s.situacao_inferida) },
+  { key: "dias_restantes_prazo", label: "Dias Restantes" },
+  { key: "razoes_risco", label: "Razões do Risco", value: s => s.razoes_risco.join(" | ") },
+];
+
 function AlunosRiscoReport({ data }: { data: StudentsAtRiskResponse }) {
   const [search, setSearch] = useState("");
   const [sortD, setSortD] = useState<SortDir>("asc");
@@ -204,7 +199,7 @@ function AlunosRiscoReport({ data }: { data: StudentsAtRiskResponse }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SearchBox value={search} onChange={setSearch} />
-        <ExportBar title="Alunos em Risco" />
+        <TableExportMenu title="Alunos em Risco" fileName="alunos-em-risco" rows={filtered} columns={AT_RISK_COLUMNS} />
       </div>
       <div className="rounded-2xl p-4" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <p style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", marginBottom: 12 }}>Dias restantes de prazo (negativo = expirado)</p>
@@ -283,11 +278,17 @@ function AlunosPorStatusReport({ data }: { data: StudentsByStatusResponse }) {
   const total = entries.reduce((s, e) => s + e.count, 0);
   const selected = entries.find(e => e.status === selStatus);
 
+  const columns: ExportColumn<(typeof entries)[number]>[] = [
+    { key: "label", label: "Situação" },
+    { key: "count", label: "Alunos" },
+    { key: "percentual", label: "Percentual (%)", value: e => (total ? Math.round((e.count / total) * 100) : 0) },
+  ];
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p style={{ fontSize: 13, color: "var(--muted-foreground)" }}>Total: <strong style={{ color: "var(--foreground)" }}>{total} alunos</strong> · Clique em um segmento para ver detalhes</p>
-        <ExportBar title="Alunos por Status" />
+        <TableExportMenu title="Alunos por Status" fileName="alunos-por-status" rows={entries} columns={columns} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div className="rounded-2xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
@@ -342,6 +343,13 @@ function AlunosPorStatusReport({ data }: { data: StudentsByStatusResponse }) {
 
 // ─── Report: Alunos por Orientador ────────────────────────────────────────────
 
+const BY_ADVISOR_COLUMNS: ExportColumn<AdvisorGroupItem>[] = [
+  { key: "advisor_nome", label: "Orientador" },
+  { key: "total_orientandos", label: "Orientandos" },
+  { key: "em_risco", label: "Em Risco" },
+  { key: "regulares", label: "Regulares" },
+];
+
 function AlunosPorOrientadorReport({ data }: { data: StudentsByAdvisorResponse }) {
   const [sortK, setSortK] = useState<"total_orientandos" | "em_risco" | "regulares">("total_orientandos");
   const [sortD, setSortD] = useState<SortDir>("desc");
@@ -359,7 +367,7 @@ function AlunosPorOrientadorReport({ data }: { data: StudentsByAdvisorResponse }
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-end gap-3 flex-wrap">
-        <ExportBar title="Alunos por Orientador" />
+        <TableExportMenu title="Alunos por Orientador" fileName="alunos-por-orientador" rows={filtered} columns={BY_ADVISOR_COLUMNS} />
       </div>
       <div className="rounded-2xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <p style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", marginBottom: 12 }}>Orientandos por Orientador</p>
@@ -403,6 +411,12 @@ function AlunosPorOrientadorReport({ data }: { data: StudentsByAdvisorResponse }
 
 // ─── Report: Tempo de Integralização ──────────────────────────────────────────
 
+const COMPLETION_COLUMNS: ExportColumn<CompletionTimeItem>[] = [
+  { key: "student_nome", label: "Aluno" },
+  { key: "meses", label: "Meses" },
+  { key: "ano_conclusao", label: "Ano de Conclusão" },
+];
+
 function TempoIntegralizacaoReport({ data }: { data: CompletionTimeResponse }) {
   const kpis = [
     { l: "Média", v: data.media_meses, c: "var(--tint-blue-text)", bg: "var(--tint-blue-bg)" },
@@ -426,7 +440,7 @@ function TempoIntegralizacaoReport({ data }: { data: CompletionTimeResponse }) {
             <p style={{ fontSize: 18, fontWeight: 800, color: "var(--foreground)" }}>{data.total_concluidos}</p>
           </div>
         </div>
-        <ExportBar title="Tempo de Integralização" />
+        <TableExportMenu title="Tempo de Integralização" fileName="tempo-de-integralizacao" rows={data.historico} columns={COMPLETION_COLUMNS} />
       </div>
       {data.historico.length === 0 ? (
         <EmptyState message="Nenhum aluno concluído com datas suficientes para o cálculo." />
@@ -474,6 +488,15 @@ function TempoIntegralizacaoReport({ data }: { data: CompletionTimeResponse }) {
 
 // ─── Report: Produção por Aluno ───────────────────────────────────────────────
 
+const NIVEIS = ["A1", "A2", "A3", "A4", "A5", "A6", "A7", "A8", "SC"] as const;
+
+const PRODUCTION_BY_STUDENT_COLUMNS: ExportColumn<ProductionByStudentItem>[] = [
+  { key: "student_nome", label: "Aluno" },
+  ...NIVEIS.map(nivel => ({ key: nivel, label: nivel, value: (s: ProductionByStudentItem) => s.por_nivel[nivel] })),
+  { key: "total", label: "Total" },
+  { key: "pontuacao_total", label: "Pontuação" },
+];
+
 function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
   const [search, setSearch] = useState("");
   const [sortK, setSortK] = useState<"total" | "pontuacao_total">("pontuacao_total");
@@ -495,7 +518,7 @@ function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <SearchBox value={search} onChange={setSearch} />
-        <ExportBar title="Produção por Aluno" />
+        <TableExportMenu title="Produção por Aluno" fileName="producao-por-aluno" rows={filtered} columns={PRODUCTION_BY_STUDENT_COLUMNS} />
       </div>
       <div className="rounded-2xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <p style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", marginBottom: 12 }}>Produções por Aluno (por nível)</p>
@@ -548,6 +571,12 @@ function ProducaoPorAlunoReport({ data }: { data: ProductionsReportResponse }) {
 
 // ─── Report: Produção por Orientador ──────────────────────────────────────────
 
+const PRODUCTION_BY_ADVISOR_COLUMNS: ExportColumn<ProductionByAdvisorItem>[] = [
+  { key: "advisor_nome", label: "Orientador" },
+  { key: "total", label: "Produções" },
+  { key: "pontuacao_media_orientandos", label: "Pontuação Média / Orientando" },
+];
+
 function ProducaoPorOrientadorReport({ data }: { data: ProductionsReportResponse }) {
   const [sortK, setSortK] = useState<"total" | "pontuacao_media_orientandos">("total");
   const [sortD, setSortD] = useState<SortDir>("desc");
@@ -565,7 +594,7 @@ function ProducaoPorOrientadorReport({ data }: { data: ProductionsReportResponse
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-end gap-3 flex-wrap">
-        <ExportBar title="Produção por Orientador" />
+        <TableExportMenu title="Produção por Orientador" fileName="producao-por-orientador" rows={filtered} columns={PRODUCTION_BY_ADVISOR_COLUMNS} />
       </div>
       <div className="rounded-2xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
         <p style={{ fontSize: 13, fontWeight: 700, color: "var(--foreground)", marginBottom: 12 }}>Produções dos orientandos por Orientador</p>
@@ -605,6 +634,18 @@ function ProducaoPorOrientadorReport({ data }: { data: ProductionsReportResponse
 
 // ─── Report: Histórico de Prorrogações (mock — fora do escopo desta issue) ──────
 
+const PRORROGACOES_COLUMNS: ExportColumn<(typeof PRORROGACOES)[number]>[] = [
+  { key: "aluno", label: "Aluno" },
+  { key: "orientador", label: "Orientador" },
+  { key: "prazoOriginal", label: "Prazo Original" },
+  { key: "novoPrazo", label: "Novo Prazo" },
+  { key: "meses", label: "Meses" },
+  { key: "status", label: "Status" },
+  { key: "motivo", label: "Motivo" },
+  { key: "protocolo", label: "Protocolo" },
+  { key: "aprovadoPor", label: "Aprovado Por" },
+];
+
 function HistoricoProrrogacoesReport() {
   const [status, setStatus] = useState("Todos");
   const [search, setSearch] = useState("");
@@ -635,7 +676,7 @@ function HistoricoProrrogacoesReport() {
           <SearchBox value={search} onChange={setSearch} />
           <FSelect label="Status" value={status} onChange={setStatus} options={["Todos", "aprovada", "pendente", "negada"]} />
         </div>
-        <ExportBar title="Histórico de Prorrogações" />
+        <TableExportMenu title="Histórico de Prorrogações" fileName="historico-de-prorrogacoes" rows={filtered} columns={PRORROGACOES_COLUMNS} />
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 rounded-2xl p-5" style={{ background: "var(--card)", border: "1px solid var(--border)" }}>
