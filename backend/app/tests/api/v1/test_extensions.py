@@ -61,13 +61,21 @@ class _FakeExtensionService:
         )
         return _response()
 
-    async def process_decision(
+    async def approve_extension(
         self, extension_id: str, payload: Any, coordinator: CurrentUser
     ) -> ExtensionResponse:
         self.calls.append(
-            ("decide", {"extension_id": extension_id, "payload": payload, "coordinator": coordinator})
+            ("approve", {"extension_id": extension_id, "payload": payload, "coordinator": coordinator})
         )
         return _response(status="aprovada")
+
+    async def reject_extension(
+        self, extension_id: str, payload: Any, coordinator: CurrentUser
+    ) -> ExtensionResponse:
+        self.calls.append(
+            ("reject", {"extension_id": extension_id, "payload": payload, "coordinator": coordinator})
+        )
+        return _response(status="rejeitada")
 
 
 def _user(role: str) -> CurrentUser:
@@ -201,36 +209,76 @@ def test_patch_review_422_parecer_curto(client: TestClient) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PATCH /extensions/{id}/approve — decisão (coordenação)
+# POST /extensions/{id}/approve — deferimento (coordenação)
 # ---------------------------------------------------------------------------
 
-def test_patch_approve_coordenacao_homologa(client: TestClient, service: _FakeExtensionService) -> None:
+def test_post_approve_coordenacao_defere(client: TestClient, service: _FakeExtensionService) -> None:
     _as("coordenacao")
 
-    response = client.patch("/api/v1/extensions/ext1/approve", json={"acao": "aprovar"})
+    response = client.post("/api/v1/extensions/ext1/approve", json={"observacao": "De acordo."})
 
     assert response.status_code == 200
     assert response.json()["status"] == "aprovada"
     name, kwargs = service.calls[0]
-    assert name == "decide"
+    assert name == "approve"
+    assert kwargs["payload"].observacao == "De acordo."
     # O router repassa o CurrentUser inteiro: o service precisa do programa_id
     # para barrar deliberação cross-programa, não só do uid.
     assert kwargs["coordinator"].uid == "uid-coordenacao"
     assert kwargs["coordinator"].programa_id == "prog"
 
 
+def test_post_approve_aceita_corpo_vazio(client: TestClient, service: _FakeExtensionService) -> None:
+    """A Spec 08 não exige corpo no deferimento; `observacao` é opcional."""
+    _as("coordenacao")
+
+    response = client.post("/api/v1/extensions/ext1/approve", json={})
+
+    assert response.status_code == 200
+    assert service.calls[0][1]["payload"].observacao is None
+
+
 @pytest.mark.parametrize("role", ["aluno", "orientador"])
-def test_patch_approve_bloqueia_papel_nao_coordenacao(client: TestClient, role: str) -> None:
+def test_post_approve_bloqueia_papel_nao_coordenacao(client: TestClient, role: str) -> None:
     _as(role)
 
-    response = client.patch("/api/v1/extensions/ext1/approve", json={"acao": "aprovar"})
+    response = client.post("/api/v1/extensions/ext1/approve", json={})
 
     assert response.status_code == 403
 
 
-def test_patch_approve_422_acao_invalida(client: TestClient) -> None:
+# ---------------------------------------------------------------------------
+# POST /extensions/{id}/reject — indeferimento (coordenação)
+# ---------------------------------------------------------------------------
+
+def test_post_reject_coordenacao_indefere(client: TestClient, service: _FakeExtensionService) -> None:
     _as("coordenacao")
 
-    response = client.patch("/api/v1/extensions/ext1/approve", json={"acao": "talvez"})
+    response = client.post(
+        "/api/v1/extensions/ext2/reject", json={"motivo": "Justificativa insuficiente."}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejeitada"
+    name, kwargs = service.calls[0]
+    assert name == "reject"
+    assert kwargs["extension_id"] == "ext2"
+    assert kwargs["payload"].motivo == "Justificativa insuficiente."
+
+
+def test_post_reject_422_sem_motivo(client: TestClient) -> None:
+    """O motivo é obrigatório no indeferimento (Spec 08)."""
+    _as("coordenacao")
+
+    response = client.post("/api/v1/extensions/ext1/reject", json={})
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("role", ["aluno", "orientador"])
+def test_post_reject_bloqueia_papel_nao_coordenacao(client: TestClient, role: str) -> None:
+    _as(role)
+
+    response = client.post("/api/v1/extensions/ext1/reject", json={"motivo": "x"})
+
+    assert response.status_code == 403
