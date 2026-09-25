@@ -6,6 +6,7 @@ import {
   CheckCircle,
   Clock,
   Info,
+  XCircle,
 } from "lucide-react";
 
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
@@ -14,6 +15,7 @@ const TIPO_MAP: Record<string, { icon: JSX.Element; color: string; bg: string; l
   progresso_task: { icon: <Info size={16} />, color: "#3b82f6", bg: "#dbeafe", label: "Progresso" },
   atividade_validada: { icon: <CheckCircle size={16} />, color: "#1F8A70", bg: "#dcfce7", label: "Validação" },
   prorrogacao_aprovada: { icon: <CheckCircle size={16} />, color: "#1F8A70", bg: "#dcfce7", label: "Prorrogação" },
+  prorrogacao_rejeitada: { icon: <XCircle size={16} />, color: "#dc2626", bg: "#fee2e2", label: "Prorrogação" },
   prazo_critico: { icon: <AlertTriangle size={16} />, color: "#dc2626", bg: "#fee2e2", label: "Prazo crítico" },
   atividade_submetida: { icon: <Clock size={16} />, color: "#D4A017", bg: "#fef9c3", label: "Submissão" },
 };

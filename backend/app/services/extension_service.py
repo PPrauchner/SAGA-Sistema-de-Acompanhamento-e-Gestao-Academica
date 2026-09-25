@@ -36,7 +36,10 @@ from backend.app.models.extension import (
     ReviewRequest,
 )
 from backend.app.repositories.advisor_repository import AdvisorRepository
-from backend.app.repositories.extension_repository import ExtensionRepository
+from backend.app.repositories.extension_repository import (
+    ExtensionRepository,
+    sort_by_created_desc,
+)
 from backend.app.repositories.program_repository import ProgramRepository
 from backend.app.repositories.student_repository import StudentRepository
 
@@ -77,11 +80,6 @@ def _to_response(data: dict, student: dict | None = None) -> ExtensionResponse:
         payload["matricula"] = student.get("matricula")
         payload["nivel"] = student.get("nivel")
     return ExtensionResponse(**payload)
-
-
-def _sort_by_created_desc(items: list[dict]) -> list[dict]:
-    """Ordena por created_at desc em memória."""
-    return sorted(items, key=lambda d: d.get("created_at") or "", reverse=True)
 
 
 class ExtensionService:
@@ -357,12 +355,12 @@ class ExtensionService:
             ]
             student_by_id = {s["id"]: s for s in students}
             exts = [
-                e for e in _sort_by_created_desc(await self._repo.list_all())
+                e for e in sort_by_created_desc(await self._repo.list_all())
                 if e.get("student_id") in student_by_id
             ]
         else:  # coordenação / adm
             student_by_id = {s["id"]: s for s in await self._students.list_all()}
-            exts = _sort_by_created_desc(await self._repo.list_all())
+            exts = sort_by_created_desc(await self._repo.list_all())
             if user.programa_id:
                 exts = [e for e in exts if e.get("programa_id") == user.programa_id]
 
