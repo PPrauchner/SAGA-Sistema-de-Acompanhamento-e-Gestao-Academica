@@ -15,6 +15,7 @@ Weaving: decorador `@check_deadlines` aplicado sobre endpoints/métodos que oper
 
 from __future__ import annotations
 
+import inspect
 from datetime import date, datetime
 from functools import wraps
 from typing import Any, Awaitable, Callable, TypeVar
@@ -111,12 +112,14 @@ async def _apply_extension_precheck(args: tuple[Any, ...], kwargs: dict[str, Any
 
 
 async def _apply_deadline_advice(
+    func: Callable[..., Awaitable[Any]],
     args: tuple[Any, ...],
     kwargs: dict[str, Any],
     result: Any,
 ) -> None:
     self = next((value for value in (*kwargs.values(), *args) if hasattr(value, "_repo")), None)
-    task_id = kwargs.get("task_id") or next((value for value in args if isinstance(value, str)), None)
+    bound = inspect.signature(func).bind_partial(*args, **kwargs)
+    task_id = bound.arguments.get("task_id")
     if self is None or task_id is None or not hasattr(self, "_repo"):
         return
     if not hasattr(self._repo, "get_task_context"):
@@ -151,7 +154,7 @@ def check_deadlines(func: F) -> F:
             await _apply_extension_precheck(args, kwargs)
         result = await func(*args, **kwargs)
         if aspect_config.DEADLINE_VALIDATION_ENABLED:
-            await _apply_deadline_advice(args, kwargs, result)
+            await _apply_deadline_advice(func, args, kwargs, result)
         return result
 
     return wrapper  # type: ignore[return-value]

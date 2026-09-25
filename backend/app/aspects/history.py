@@ -105,7 +105,7 @@ def track_history(func):
 
         result = await func(*args, **kwargs)
 
-        if previous:
+        if previous is not None:
             current = await repo.get(entity_id)
 
             snapshot = {

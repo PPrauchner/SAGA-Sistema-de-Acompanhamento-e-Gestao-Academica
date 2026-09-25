@@ -20,7 +20,7 @@ from backend.app.aspects.deadline_validation import check_deadlines
 def _spy(monkeypatch: pytest.MonkeyPatch) -> list[tuple[tuple[Any, ...], dict[str, Any], Any]]:
     chamadas: list[tuple[tuple[Any, ...], dict[str, Any], Any]] = []
 
-    async def fake_advice(args: tuple[Any, ...], kwargs: dict[str, Any], result: Any) -> None:
+    async def fake_advice(func: Any, args: tuple[Any, ...], kwargs: dict[str, Any], result: Any) -> None:
         chamadas.append((args, kwargs, result))
 
     monkeypatch.setattr(deadline_module, "_apply_deadline_advice", fake_advice)

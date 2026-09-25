@@ -56,7 +56,7 @@ class FirebaseRepository:
             _, doc_ref = db.collection(self.collection).add(data)
             return doc_ref.id
         except Exception as exc:
-            logger.error("[A05] Falha ao gravar notificação: %s", exc)
+            logger.critical("[A05] Falha ao gravar notificação: %s", exc)
             return ""
 
 

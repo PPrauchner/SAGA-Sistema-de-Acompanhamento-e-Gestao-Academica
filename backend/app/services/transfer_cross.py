@@ -15,7 +15,10 @@ from typing import Any
 from fastapi import HTTPException, status
 
 from backend.app.core.auth import CurrentUser
-from backend.app.repositories.advisor_repository import AdvisorRepository
+from backend.app.repositories.advisor_repository import (
+    AdvisorCapacityExceededError,
+    AdvisorRepository,
+)
 from backend.app.repositories.firebase_repository import FirebaseRepository
 from backend.app.repositories.student_repository import StudentRepository
 from backend.app.repositories.transfer_repository import TransferRepository
@@ -228,12 +231,6 @@ class CrossProgramTransferService:
         orientador_destino_id = request["orientador_destino_id"]
         student_id = request["student_id"]
 
-        if not await self._advisors.check_advisor_capacity(orientador_destino_id):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Orientador destino atingiu o limite de orientandos",
-            )
-
         student = await self._get_required_student(student_id)
         destination = await self._get_required_advisor(orientador_destino_id, "destino")
 
@@ -247,7 +244,15 @@ class CrossProgramTransferService:
         if coorientador_limpo:
             update_data["coorientador_id"] = None
 
-        await self._students.update(student_id, update_data)
+        try:
+            await self._advisors.transfer_student_atomic(
+                orientador_destino_id, student_id, update_data
+            )
+        except AdvisorCapacityExceededError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
 
         now = datetime.now(timezone.utc)
         await self._transfers.approve(
