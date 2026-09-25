@@ -1,0 +1,6 @@
+# Artefatos locais/por-repositório gerados dentro de .claude/.
+# Este arquivo viaja junto quando a pasta .claude/ é copiada para outro projeto —
+# por isso ele mora aqui, e não só no .gitignore da raiz.
+settings.local.json
+current-issue
+board.env

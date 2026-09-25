@@ -265,6 +265,8 @@ def test_build_extension_alert_notifica_indeferimento() -> None:
     spec = build_extension_alert(rejeitada, (), {})
 
     assert spec is not None
+    # O indeferimento tem tipo próprio: reusar prorrogacao_aprovada pintaria a negação de verde.
+    assert spec["tipo"] == "prorrogacao_rejeitada"
     assert spec["destinatario_id"] == "uid-aluno"
     assert spec["programa_id"] == "prog"
     assert "indeferida" in spec["mensagem"]

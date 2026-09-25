@@ -16,6 +16,7 @@ Referência: docs/specs/04_autenticacao.json; issues #162 (US-PA05), #195.
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
@@ -71,17 +72,19 @@ class UserService:
         Raises:
             HTTPException: 409 se o e-mail já possui conta ativa.
         """
-        if self._email_ja_tem_conta(data.email):
+        if await self._email_ja_tem_conta(data.email):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="E-mail já possui conta ativa",
             )
 
-        user_record = self._auth.create_user(email=data.email, password=data.senha)
+        user_record = await asyncio.to_thread(
+            self._auth.create_user, email=data.email, password=data.senha
+        )
         uid = user_record.uid
 
         claims = {"role": "coordenacao", "programa_id": data.programa_id}
-        self._auth.set_custom_user_claims(uid, claims)
+        await asyncio.to_thread(self._auth.set_custom_user_claims, uid, claims)
 
         agora = datetime.now(timezone.utc)
         await self._users.set(uid, {
@@ -156,10 +159,10 @@ class UserService:
             or NotificationPreferences(**doc.get("notification_preferences", {})),
         )
 
-    def _email_ja_tem_conta(self, email: str) -> bool:
+    async def _email_ja_tem_conta(self, email: str) -> bool:
         """Verifica no Firebase Auth se já existe conta para o e-mail."""
         try:
-            self._auth.get_user_by_email(email)
+            await asyncio.to_thread(self._auth.get_user_by_email, email)
         except firebase_auth.UserNotFoundError:
             return False
         return True

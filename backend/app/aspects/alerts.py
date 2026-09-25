@@ -56,7 +56,7 @@ class FirebaseRepository:
             _, doc_ref = db.collection(self.collection).add(data)
             return doc_ref.id
         except Exception as exc:
-            logger.error("[A05] Falha ao gravar notificação: %s", exc)
+            logger.critical("[A05] Falha ao gravar notificação: %s", exc)
             return ""
 
 
@@ -249,16 +249,18 @@ def build_extension_alert(result: Any, args: tuple, kwargs: dict) -> dict | None
         return None
 
     if status_value == "aprovada":
+        tipo = "prorrogacao_aprovada"
         prazo = _format_extension_date(getattr(result, "prazo_novo", None))
         mensagem = (
             "Sua solicitação de prorrogação foi deferida pela coordenação. "
             f"Novo prazo final: {prazo}."
         )
     else:
+        tipo = "prorrogacao_rejeitada"
         mensagem = "Sua solicitação de prorrogação foi indeferida pela coordenação."
 
     return {
-        "tipo": "prorrogacao_aprovada",  # único tipo de prorrogação no enum (data-model §4)
+        "tipo": tipo,
         "titulo": "Decisão sobre sua prorrogação",
         "mensagem": mensagem,
         "destinatario_id": destinatario_id,

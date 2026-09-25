@@ -99,6 +99,15 @@ _TRANSFER_CROSS_CREATE = {
     "motivo": "motivo valido",
 }
 _TRANSFER_CROSS_REJECT = {"motivo": "motivo valido"}
+_EXTENSION_CREATE = {
+    "tipo": "prazo_defesa",
+    "motivo": "motivo com mais de dez caracteres",
+    "plano_atualizado": "plano revisado",
+    "nova_data": "2027-01-01T00:00:00Z",
+}
+_EXTENSION_REVIEW = {"parecer_orientador": "parecer favoravel do orientador"}
+_EXTENSION_APPROVE: dict = {}
+_EXTENSION_REJECT = {"motivo": "motivo valido"}
 
 # (id, método, path, corpo_json, papéis_permitidos)
 # `path` já inclui o prefixo /api/v1.
@@ -174,6 +183,12 @@ _ROUTES: list[tuple[str, str, str, dict | None, tuple[str, ...]]] = [
     ("inference.get", "GET", "/api/v1/inference/x", None, ("aluno", "orientador", "coordenacao")),
     # notifications
     ("notifications.read", "PATCH", "/api/v1/notifications/x/read", None, ("aluno", "orientador", "coordenacao")),
+    # extensions (Spec 08)
+    ("extensions.create", "POST", "/api/v1/extensions", _EXTENSION_CREATE, ("aluno",)),
+    ("extensions.list", "GET", "/api/v1/extensions", None, ("aluno", "orientador", "coordenacao")),
+    ("extensions.review", "PATCH", "/api/v1/extensions/x/review", _EXTENSION_REVIEW, ("orientador",)),
+    ("extensions.approve", "POST", "/api/v1/extensions/x/approve", _EXTENSION_APPROVE, ("coordenacao",)),
+    ("extensions.reject", "POST", "/api/v1/extensions/x/reject", _EXTENSION_REJECT, ("coordenacao",)),
     # transfer_cross
     ("transfer_cross.create", "POST", "/api/v1/transfers-cross/", _TRANSFER_CROSS_CREATE, ("orientador", "coordenacao")),
     ("transfer_cross.aprovar_origem", "POST", "/api/v1/transfers-cross/x/aprovar-origem", None, ("coordenacao",)),

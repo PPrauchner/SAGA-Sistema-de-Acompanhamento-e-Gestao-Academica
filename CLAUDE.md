@@ -176,7 +176,23 @@ Documentação detalhada de cada módulo em `docs/specs/`:
 
 ---
 
+## Agent skills
+
+### Issue tracker
+
+Issues vivem no GitHub Issues do repositório, via `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Nomes canônicos (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` + `docs/adr/` na raiz. See `docs/agents/domain.md`.
+
+---
+
 ## Repositório
 
 - GitHub: `https://github.com/PPrauchner/SAGA-Sistema-de-Acompanhamento-e-Gestao-Academica`
-- Branch de trabalho atual: `Pietro`.
+- Branch de integração: `development` (trabalho em branches de tópico, via PR).

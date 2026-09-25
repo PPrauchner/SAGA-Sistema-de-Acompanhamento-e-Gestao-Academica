@@ -8,6 +8,7 @@ from fastapi import HTTPException
 
 from backend.app.core.auth import CurrentUser
 from backend.app.models.transfer import DirectTransferRequest, TransferCreateRequest
+from backend.app.repositories.advisor_repository import AdvisorCapacityExceededError
 from backend.app.services import transfer_service as transfer_module
 from backend.app.services.transfer_service import TransferService
 
@@ -57,6 +58,18 @@ class _FakeAdvisorRepository(_FakeRepo):
             and student.get("situacao_registrada") not in {"concluido", "desligado"}
         )
         return current < advisor.get("limite_orientandos", 5)
+
+    async def transfer_student_atomic(
+        self,
+        advisor_id: str,
+        student_id: str,
+        update_data: dict[str, Any],
+    ) -> None:
+        if not await self.check_advisor_capacity(advisor_id):
+            raise AdvisorCapacityExceededError(
+                "Orientador destino atingiu o limite de orientandos"
+            )
+        await _FakeStudentRepository().update(student_id, update_data)
 
 
 class _FakeTransferRepository(_FakeRepo):
